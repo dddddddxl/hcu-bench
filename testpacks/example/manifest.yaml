@@ -1,0 +1,12 @@
+version: 1
+id: example.cpu-sum
+suite: operators
+parameters:
+  size: {type: integer, default: 10000, min: 1}
+  samples: {type: integer, default: 3, min: 1}
+command: ["${python}", -u, "${pack_dir}/workload.py", "${p_size}", "${p_samples}", "${case_dir}/report.json"]
+cwd: "${case_dir}"
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/report.json"]
+artifact_limit_mb: 1

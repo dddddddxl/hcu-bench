@@ -1,0 +1,14 @@
+version: 1
+name: local-command-and-report-example
+output_dir: ../runs
+failure_policy: continue
+nodes:
+  local: {executor: local}
+tests:
+  cpu_example:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/example/manifest.yaml
+    nodes: [local]
+    params: {size: 10000, samples: 3}
+    timeout_s: 10

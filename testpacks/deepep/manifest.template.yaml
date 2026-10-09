@@ -1,0 +1,30 @@
+# Interface template, not an implemented DeepEP parser or test.
+version: 1
+id: deepep.low-latency
+suite: deepep
+parameters:
+  entry: {type: string, required: true}
+  master_addr: {type: string, required: true}
+  master_port: {type: integer, required: true, min: 1, max: 65535}
+  num_tokens: {type: integer, required: true, min: 1}
+  num_processes: {type: integer, required: true, min: 1}
+command:
+  - python3
+  - -u
+  - "${p_entry}"
+  - --node-rank
+  - "${node_rank}"
+  - --nnodes
+  - "${nnodes}"
+  - --master-addr
+  - "${p_master_addr}"
+  - --master-port
+  - "${p_master_port}"
+  - --num-tokens
+  - "${p_num_tokens}"
+  - --num-processes
+  - "${p_num_processes}"
+cwd: /YOUR_CONTAINER_WORKSPACE
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true

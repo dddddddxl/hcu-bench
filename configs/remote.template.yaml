@@ -1,0 +1,47 @@
+# Template only: replace every YOUR_* value before execution.
+version: 1
+name: remote-deepep
+output_dir: ../runs
+failure_policy: continue
+nodes:
+  node0:
+    executor: ssh
+    host: YOUR_SSH_ALIAS_OR_IP
+    user: YOUR_USER
+    python: python3
+    work_root: /YOUR_WORKSPACE/bench-runs
+    gpus: [0, 1, 2, 3]
+    env: {}
+  node1:
+    executor: ssh
+    host: YOUR_SECOND_SSH_ALIAS_OR_IP
+    user: YOUR_USER
+    python: python3
+    work_root: /YOUR_WORKSPACE/bench-runs
+    gpus: [0, 1, 2, 3]
+    env: {}
+containers:
+  image_under_test:
+    mode: managed
+    work_root: /YOUR_CONTAINER_WORKSPACE/bench-runs
+    name: "bench-${run_id}-${case_id}-${node_id}"
+    start: [bash, /YOUR_WORKSPACE/start_container.sh, "${container_name}"]
+    check: [bash, /YOUR_WORKSPACE/check_container_running.sh, "${container_name}"]
+    stop: [bash, /YOUR_WORKSPACE/stop_container.sh, "${container_name}"]
+    hook_timeout_s: 120
+    exec_prefix: [docker, exec, -i, "${container_name}", python3, -u]
+tests:
+  deepep_low_latency:
+    suite: deepep
+    adapter: command
+    pack: ../testpacks/deepep/manifest.template.yaml
+    nodes: [node0, node1]
+    container: image_under_test
+    params:
+      entry: /YOUR_CONTAINER_WORKSPACE/bench_wrapper.py
+      master_addr: YOUR_MASTER_IP
+      master_port: 12345
+      num_tokens: 128
+      num_processes: 4
+    timeout_s: 3700
+    duration_s: 3600
