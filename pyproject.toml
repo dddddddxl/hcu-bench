@@ -9,6 +9,9 @@ description = "CLI orchestration for communication, operator and end-to-end benc
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6,<7"]
 
+[project.optional-dependencies]
+native = ["psutil>=5.9,<8"]
+
 [project.scripts]
 hcu-bench = "hcu_bench.cli:main"
 

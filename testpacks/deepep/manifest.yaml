@@ -1,0 +1,45 @@
+version: 1
+id: deepep.low-latency-pressure
+suite: deepep
+parameters:
+  bench_root: {type: string, required: true}
+  test_script: {type: string, required: true}
+  master_addr: {type: string, required: true}
+  master_port: {type: integer, default: 12345, min: 1, max: 65535}
+  num_processes: {type: integer, required: true, min: 1}
+  num_tokens: {type: integer, default: 128, min: 1}
+  hidden: {type: integer, default: 7168, min: 1}
+  num_topk: {type: integer, default: 8, min: 1}
+  num_experts: {type: integer, default: 256, min: 1}
+command:
+  - python3
+  - -u
+  - "${p_bench_root}/testpacks/deepep/run.py"
+  - --test-script
+  - "${p_test_script}"
+  - --output-dir
+  - "${case_dir}"
+  - --node-rank
+  - "${node_rank}"
+  - --nnodes
+  - "${nnodes}"
+  - --master-addr
+  - "${p_master_addr}"
+  - --master-port
+  - "${p_master_port}"
+  - --num-processes
+  - "${p_num_processes}"
+  - --num-tokens
+  - "${p_num_tokens}"
+  - --hidden
+  - "${p_hidden}"
+  - --num-topk
+  - "${p_num_topk}"
+  - --num-experts
+  - "${p_num_experts}"
+cwd: "${case_dir}"
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.jsonl", "${case_dir}/native_cycle_*.log"]
+artifact_limit_mb: 100

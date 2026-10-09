@@ -136,6 +136,8 @@ def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_c
             status = inner[-1]["status"]
     if status == "completed" and proc.returncode != 0:
         status = "failed"
+    if proc.returncode == 125:
+        clean = False
     return {"status": status, "returncode": proc.returncode,
             "elapsed_s": time.monotonic() - started, "cleanup": "confirmed" if clean else "unconfirmed",
             **({"output": "\n".join(output)} if capture else {})}

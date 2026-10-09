@@ -1,0 +1,71 @@
+# Replace every YOUR_* path/host before running. No automatic image/model download.
+version: 1
+name: deepep-pressure-then-sglang-gsm8k
+output_dir: ../runs
+failure_policy: continue
+nodes:
+  node0:
+    executor: ssh
+    host: YOUR_SSH_ALIAS_OR_IP
+    user: YOUR_USER
+    python: python3
+    work_root: /YOUR_HOST_WORKSPACE/bench-runs
+    gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+containers:
+  test_image:
+    mode: managed
+    work_root: /YOUR_CONTAINER_WORKSPACE/bench-runs
+    name: "bench-${run_id}-${case_id}-${node_id}"
+    start: [bash, /YOUR_HOST_WORKSPACE/start_container.sh, "${container_name}"]
+    check: [bash, /YOUR_HOST_WORKSPACE/check_container_running.sh, "${container_name}"]
+    stop: [bash, /YOUR_HOST_WORKSPACE/stop_container.sh, "${container_name}"]
+    hook_timeout_s: 120
+    exec_prefix: [docker, exec, -i, "${container_name}", python3, -u]
+tests:
+  deepep_pressure:
+    suite: deepep
+    adapter: command
+    pack: ../testpacks/deepep/manifest.yaml
+    nodes: [node0]
+    container: test_image
+    duration_s: 600
+    timeout_s: 660
+    params:
+      bench_root: /YOUR_CONTAINER_WORKSPACE/hcu-bench
+      test_script: /YOUR_NATIVE_DEEPEP_TESTS/test_low_latency.py
+      master_addr: YOUR_MASTER_IP
+      master_port: 12345
+      num_processes: 8
+      num_tokens: 128
+      hidden: 7168
+      num_topk: 8
+      num_experts: 256
+    env:
+      ROCSHMEM_HEAP_SIZE: "4737418240"
+      ROCSHMEM_IPC_MNVL: "1"
+      ROCSHMEM_GDR_DISABLE_XDP: "1"
+      HIP_BUFFER_EXTRA_SIZE: "0"
+      NCCL_IB_DISABLE: "1"
+  sglang_gsm8k:
+    suite: e2e
+    adapter: command
+    pack: ../testpacks/sglang_accuracy/manifest.yaml
+    nodes: [node0]
+    container: test_image
+    timeout_s: 5400
+    params:
+      bench_root: /YOUR_CONTAINER_WORKSPACE/hcu-bench
+      profile: /YOUR_CONTAINER_WORKSPACE/hcu-bench/testpacks/sglang_accuracy/flash-int8-bw1100.template.json
+      model_path: /YOUR_LOCAL_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
+      data_path: /YOUR_LOCAL_DATASETS/gsm8k/test.jsonl
+      ep_config: /YOUR_CONTAINER_WORKSPACE/ep_config.json
+      num_examples: 100
+      num_shots: 5
+      num_threads: 128
+      max_tokens: 2048
+      api: chat
+      min_score: ""
+      port: 30000
+      startup_timeout: 1800

@@ -1,0 +1,57 @@
+version: 1
+id: sglang.deepseek-v4-gsm8k
+suite: e2e
+parameters:
+  bench_root: {type: string, required: true}
+  profile: {type: string, required: true}
+  model_path: {type: string, required: true}
+  data_path: {type: string, required: true}
+  ep_config: {type: string, required: true}
+  num_examples: {type: integer, default: 100, min: 0}
+  num_shots: {type: integer, default: 5, min: 0}
+  num_threads: {type: integer, default: 128, min: 1}
+  max_tokens: {type: integer, default: 2048, min: 1}
+  api: {type: string, default: chat, choices: [chat, completion]}
+  min_score: {type: string, default: ""}
+  port: {type: integer, default: 30000, min: 1, max: 65535}
+  startup_timeout: {type: number, default: 1800, min: 1}
+command:
+  - python3
+  - -u
+  - "${p_bench_root}/testpacks/sglang_accuracy/run.py"
+  - --profile
+  - "${p_profile}"
+  - --model-path
+  - "${p_model_path}"
+  - --data-path
+  - "${p_data_path}"
+  - --ep-config
+  - "${p_ep_config}"
+  - --output-dir
+  - "${case_dir}"
+  - --node-rank
+  - "${node_rank}"
+  - --nnodes
+  - "${nnodes}"
+  - --port
+  - "${p_port}"
+  - --startup-timeout
+  - "${p_startup_timeout}"
+  - --num-examples
+  - "${p_num_examples}"
+  - --num-shots
+  - "${p_num_shots}"
+  - --num-threads
+  - "${p_num_threads}"
+  - --max-tokens
+  - "${p_max_tokens}"
+  - --api
+  - "${p_api}"
+  - --min-score
+  - "${p_min_score}"
+cwd: "${case_dir}"
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/report.html", "${case_dir}/server.log"]
+artifact_limit_mb: 100

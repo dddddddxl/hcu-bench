@@ -39,6 +39,7 @@ artifact_limit_mb: 100
 - `correctness`：passed / failed / not_checked，不根据进程退出码猜测。
 - 无效 profiler 轮次输出 invalid、空 metrics 和 reason；不要伪造耗时或吞吐。
 - 原生结果存在但尚未提供解析器时，用 `result_protocol: none`、`requires_metrics: false`，只记录执行完成和原生报告，不称为性能测试通过。
+- 包装脚本不能确认本次子进程清理时，保留证据并使用保留退出码 125；框架标记 cleanup_unconfirmed，停止后续用例。
 - `artifacts` 支持文件或 glob，仅普通文件传回，软链接不收集。默认每节点每用例总限额 100 MiB，可在 manifest 修改；文件分块传输并校验 SHA256，失败保留 `.partial` 和警告。
 
 ## 容器启动预留接口

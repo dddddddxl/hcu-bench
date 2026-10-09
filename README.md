@@ -2,7 +2,9 @@
 
 一个 CLI 工具，集成 RCCL、DeepEP、Mooncake、算子和端到端测试入口。没有网页、服务端平台或数据库，核心只依赖 Python 3.10+ 和 PyYAML。
 
-初版实现框架、模拟测试和通用脚本执行。五类真实 GPU/通信测试由后续提供的测试包接入，不包含假装可用的原生测试实现。
+核心实现框架、模拟测试和通用脚本执行，不内置 Torch 等设备测试库。各部门原生测试通过独立测试包接入。
+
+已新增 [两项真实测试编排](docs/native-tests.md)：DeepEP 10 分钟低延迟压测，以及参考 HCU 0.5.12 的 DeepSeek-V4-Flash INT8 GSM8K 100 题评测。入口与部署模板已实现，HCU 实机验收待节点环境。
 
 ## 直接试用
 
@@ -89,10 +91,11 @@ src/hcu_bench/
 
 ## 初版边界与验证
 
-后台运行、状态查询、取消、计划时长、报告归档已实现。跨用例并行、断点恢复、自动分发测试代码、模型部署、原生 RCCL/DeepEP/Mooncake/xpu-perf/vLLM 解析器未接入。服务端/客户端就绪流程由接入脚本负责。
+后台运行、状态查询、取消、计划时长、报告归档已实现。DeepEP 性能日志解析和单节点 SGLang GSM8K 服务生命周期已接入；其他原生 RCCL/Mooncake/xpu-perf/vLLM 解析器、跨用例并行、断点恢复及自动分发代码/模型仍未接入。复杂 PD/多节点模型部署不在本次简单精度入口范围内。
 
 本地 Windows/Python 3.10 的测试覆盖配置、矩阵、参数、执行、取消、多 rank 协同和报告归档；SSH 命令及容器生命周期使用协议/模拟测试验证，真实 Linux SSH/Docker 和 GPU 验收仍需目标节点。
 
 ```bash
+python -m pip install -e '.[native]'
 python -m unittest discover -s tests -v
 ```
