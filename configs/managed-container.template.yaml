@@ -1,73 +1,91 @@
-# Run on a prepared Linux Docker host/control machine, not inside the test container.
-# The site-owned hook implements start/check/stop; no Docker flags are guessed here.
+# 自动建容器模式：在 Linux Docker 宿主机控制环境执行，不是在待测容器内执行。
+# 需已有 Python 3.10+、PyYAML、Docker，以及你提供的容器 start/check/stop 脚本。
+# 复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh deepep / e2e / all。
 version: 1
-name: managed-deepep-and-gsm8k
-failure_policy: continue
+name: managed-deepep-and-gsm8k    # 测试方案名称。
+failure_policy: continue         # 普通失败清理后继续；stop 可停止剩余项。
+# 区分宿主机与容器路径；启动脚本负责正确挂载，不猜设备、权限或挂载关系。
 vars:
-  host_workspace: /YOUR_HOST_WORKSPACE
-  container_workspace: /YOUR_CONTAINER_WORKSPACE
-  bench_root: /YOUR_CONTAINER_BENCH_REPO
-  container_hook: /YOUR_HOST_SCRIPTS/container.sh
-  image: YOUR_APPROVED_IMAGE
-  deepep_script: /YOUR_CONTAINER_NATIVE_TESTS/test_low_latency.py
+  host_workspace: /YOUR_HOST_WORKSPACE               # 宿主机输出目录，须可写。
+  container_workspace: /YOUR_CONTAINER_WORKSPACE     # 容器内工作目录，须可写。
+  bench_root: /YOUR_CONTAINER_BENCH_REPO              # 容器内仓库路径，启动脚本需挂载代码。
+  container_hook: /YOUR_HOST_SCRIPTS/container.sh     # 宿主机上的用户脚本，接口见下方 containers。
+  image: YOUR_APPROVED_IMAGE                         # 已确认的待测镜像，工具不自动升级。
+  deepep_script: /YOUR_CONTAINER_NATIVE_TESTS/test_low_latency.py # 同目录有 utils.py。
+  # 下列输入均为容器内路径；只跑 deepep 时可暂不填写精度输入。
   model: /YOUR_CONTAINER_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
-  dataset: /YOUR_CONTAINER_DATASETS/gsm8k.jsonl
-  profile: /YOUR_CONTAINER_CONFIGS/flash-int8.profile.json
-  ep_config: /YOUR_CONTAINER_CONFIGS/ep_config.json
-  iface: YOUR_ACTIVE_INTERFACE
-  gid: "YOUR_GID_INDEX"
-  gpus: [0, 1, 2, 3, 4, 5, 6, 7]
-  num_processes: 8
-  duration_s: 600
+  dataset: /YOUR_CONTAINER_DATASETS/gsm8k.jsonl        # 每行包含 question / answer。
+  profile: /YOUR_CONTAINER_CONFIGS/flash-int8.profile.json # 服务参数和环境变量，需填真实环境。
+  ep_config: /YOUR_CONTAINER_CONFIGS/ep_config.json    # 已有 EP JSON 配置。
+  iface: YOUR_ACTIVE_INTERFACE                       # 实际 socket 网卡；精度 profile 需对应修改。
+  gid: "YOUR_GID_INDEX"                               # 实际 RDMA GID；字符串，不照搬别的节点。
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7]                    # 实际可用卡号，启动前检查占用。
+  num_processes: 8                                   # DeepEP 每节点进程数，与卡号数量一致。
+  duration_s: 600                                    # 压测计划窗口（秒），含初始化。
 output_dir: "${vars.host_workspace}/results"
 nodes:
   node0:
-    executor: local
+    executor: local                                 # 此模板在当前宿主机执行 Docker 命令。
     gpus: "${vars.gpus}"
     env:
       HIP_VISIBLE_DEVICES: "${gpu_ids}"
 containers:
   test_image:
-    mode: managed
-    name: "bench-${run_id}-${case_id}-${node_id}"
-    work_root: "${vars.container_workspace}/workers"
+    mode: managed                                   # 每用例创建/清理自有容器，不接管现有容器。
+    name: "bench-${run_id}-${case_id}-${node_id}"     # 必须保留三个变量，避免容器名冲突。
+    work_root: "${vars.container_workspace}/workers" # 容器内执行和报告目录。
+    # 以下是 argv 列表，不是 shell 字符串；可改成你现有脚本的参数形式。
+    # start 接收 NAME IMAGE HOST_WORKSPACE CONTAINER_WORKSPACE，创建完后返回。
     start: [bash, "${vars.container_hook}", start, "${container_name}", "${vars.image}", "${vars.host_workspace}", "${vars.container_workspace}"]
+    # check：运行中返回 0，不存在/已停止返回 1，检查失败返回其他非零值。
     check: [bash, "${vars.container_hook}", check, "${container_name}"]
+    # stop：只清理本次创建的 NAME；确认清理返回 0，失败返回非零。
     stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
-    hook_timeout_s: 120
+    hook_timeout_s: 120                              # 每个容器脚本动作的故障时限（秒）。
 tests:
+  # 原生 DeepEP 压测；脚本及依赖必须已存在于容器，不由工具安装。
   deepep_pressure:
     suite: deepep
     adapter: command
-    pack: ../testpacks/deepep/manifest.yaml
+    pack: ../testpacks/deepep/manifest.yaml           # 控制端相对于本 YAML 的路径。
     nodes: [node0]
     container: test_image
     duration_s: "${vars.duration_s}"
-    timeout_s: 3600
+    timeout_s: 3600                                  # 须大于 duration_s；长压测同步增大。
     params:
       bench_root: "${vars.bench_root}"
       test_script: "${vars.deepep_script}"
-      master_addr: 127.0.0.1
-      master_port: 29450
+      master_addr: 127.0.0.1                         # 本模板单机。
+      master_port: 29450                             # 选择未占用端口，成功重启周期会递增。
       num_processes: "${vars.num_processes}"
+      num_tokens: 128                               # 每卡 token 数。
+      hidden: 7168                                  # hidden 维度。
+      num_topk: 8                                   # 每个 token 选择的 expert 数。
+      num_experts: 256                              # expert 总数，须符合原生脚本约束。
     env:
+      # 字符串值；MNVL/XDP 参数按实际硬件补充，不默认强制开启。
       ROCSHMEM_HEAP_SIZE: "4737418240"
       HIP_BUFFER_EXTRA_SIZE: "0"
       NCCL_IB_DISABLE: "1"
       NCCL_SOCKET_IFNAME: "${vars.iface}"
       GLOO_SOCKET_IFNAME: "${vars.iface}"
       ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
+  # 单节点 Flash INT8 精度测试，参考服务配方要求 BW1100 8 卡。
   sglang_gsm8k:
     suite: e2e
     adapter: command
     pack: ../testpacks/sglang_accuracy/manifest.yaml
     nodes: [node0]
     container: test_image
-    timeout_s: 5400
+    timeout_s: 5400                                  # 包含模型加载、评测和服务清理。
     params:
       bench_root: "${vars.bench_root}"
       profile: "${vars.profile}"
       model_path: "${vars.model}"
       data_path: "${vars.dataset}"
       ep_config: "${vars.ep_config}"
-      port: 30903
+      port: 30903                                   # 必须未占用，不复用他人的服务。
+      num_examples: 100                             # 实际评分题数，排除 few-shot 样例。
+      num_shots: 5                                  # 前 5 条用作提示样例。
+      max_tokens: 2048                              # 单题输出 token 上限。
+      min_score: ""                                 # 只报告分数；有明确标准后再填阈值。

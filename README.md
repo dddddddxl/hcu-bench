@@ -1,115 +1,151 @@
-# HCU Bench 0.1
+# HCU Bench
 
-一个 CLI 工具，集成 RCCL、DeepEP、Mooncake、算子和端到端测试入口。没有网页、服务端平台或数据库，核心只依赖 Python 3.10+ 和 PyYAML。
+一个 YAML 驱动的 CLI 测试工具。改配置、选 suite，自动执行测试、保存日志和汇总结果，不需要平台或网页。
 
-核心实现框架、模拟测试和通用脚本执行，不内置 Torch 等设备测试库。各部门原生测试通过独立测试包接入。
+| 模块 | 当前状态 |
+| --- | --- |
+| DeepEP | 原生低延迟压测，默认 10 分钟，输出带宽和延迟 |
+| e2e | SGLang 0.5.12 / DeepSeek-V4-Flash INT8，GSM8K 100 题、5-shot，默认只报告分数 |
+| RCCL / Mooncake / 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
 
-已新增 [两项真实测试编排](docs/native-tests.md)：DeepEP 10 分钟低延迟压测，以及参考 HCU 0.5.12 的 DeepSeek-V4-Flash INT8 GSM8K 100 题评测。已在 BW1100 单机 8 卡环境完成一次验证：达到压测窗口、精度分数 98%；具体结果不代表其他镜像或节点都已验收。
+## 获取代码
 
-## 改 YAML 就跑
+```bash
+git clone https://github.com/dddddddxl/hcu-bench.git
+cd hcu-bench
+```
 
-自己创建容器后，在容器内 Bench 仓库目录：
+可在宿主机 clone 后挂载进容器，也可在容器内 clone。下面选择一种运行方式即可。
+
+仓库直接提供以下 YAML 模板，两种容器模板已逐项添加中文注释：
+
+| 模板 | 用途 |
+| --- | --- |
+| [in-container.template.yaml](configs/in-container.template.yaml) | 在自己已创建的容器内运行，优先用这份 |
+| [managed-container.template.yaml](configs/managed-container.template.yaml) | 宿主机调用你的脚本，自动创建/清理容器 |
+| [remote.template.yaml](configs/remote.template.yaml) | 控制机通过 SSH 调度 Linux 节点 |
+| [demo.yaml](configs/demo.yaml) | 无 GPU 的模拟测试 |
+
+## 方式一：使用自己创建的容器
+
+你先按节点环境创建容器，挂载代码、原生测试、模型和数据。后面的命令在**容器内的 hcu-bench 仓库目录**执行；不需要 Docker 命令或 Docker socket。
+
+运行环境需已有 Python 3.10+、PyYAML、psutil，以及测试所需的 Torch/DeepEP 或 SGLang。工具不会自动安装软件、升级包或修改 DTK。已有这些依赖时，不必 pip 安装本仓库。
+
+### 1. 准备 YAML
 
 ```bash
 cp configs/in-container.template.yaml configs/bench.yaml
-# Fill the vars section once, then:
+```
+
+编辑 `configs/bench.yaml` 顶部 `vars`，替换你需要运行的测试中的 `YOUR_*`。所有路径使用**容器内路径**。例如：
+
+```yaml
+vars:
+  workspace: /work/bench-output
+  bench_root: /work/hcu-bench
+  deepep_script: /work/tests/test_low_latency.py
+  model: /models/DeepSeek-V4-Flash-Channel-INT8-w8a8
+  dataset: /datasets/gsm8k.jsonl
+  profile: /work/flash-int8.profile.json
+  ep_config: /work/ep_config.json
+  iface: YOUR_ACTIVE_INTERFACE
+  gid: "YOUR_GID_INDEX"
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+  num_processes: 8
+  duration_s: 600
+```
+
+这只是 `vars` 区域的示例，不要用它覆盖整个 YAML。工作目录等公共值通过 `${vars.xxx}` 引用，改一次即可；卡号和进程数要匹配实际资源。
+
+- **DeepEP**：准备与镜像 wheel 接口兼容的 `test_low_latency.py` 和同目录 `utils.py`。只选 deepep 时，精度项的输入路径可以暂不填写。
+- **精度**：准备已有模型、question/answer 格式的 GSM8K JSONL、服务 JSON profile 和 EP JSON config。服务 profile 可从 [Flash INT8 模板](testpacks/sglang_accuracy/flash-int8-bw1100.template.json)复制后修改；部署配方与 EP 配置来源见 [真实测试说明](docs/native-tests.md)。YAML 的网卡不会自动改写外部服务 profile，两处需保持一致。
+- 先确认 GPU 无其他业务占用。工具不下载模型、不转换未提供的数据、不猜网卡/GID，也不自动修补原生测试代码。
+
+`configs/bench.yaml` 被 Git 忽略，个人节点配置不会随普通 git add 提交。
+
+### 2. 检查并运行
+
+```bash
+bash bench.sh check -c configs/bench.yaml --suite deepep
+bash bench.sh deepep      # 只跑低延迟压测
+bash bench.sh e2e         # 只跑精度测试
+bash bench.sh all         # 按 YAML 顺序跑全部启用项
+```
+
+上面三个运行命令是不同选择，不需要全部执行。日志自动保存，不用手动设置 ROOT/NAME、串联 docker exec 或 tee。结束后只清理本次测试进程，**不会删除你自己创建的容器**。
+
+## 方式二：自动创建容器
+
+在具备 Python 3.10+、PyYAML 和 Docker 的 **Linux 宿主机控制环境**中，选择另一份模板：
+
+```bash
+cp configs/managed-container.template.yaml configs/bench.yaml
+```
+
+修改顶部 `vars`：镜像、宿主机/容器目录、容器内测试输入，以及你的 `container_hook` 脚本路径。模板约定脚本接口为：
+
+```text
+bash container.sh start NAME IMAGE HOST_WORKSPACE CONTAINER_WORKSPACE
+bash container.sh check NAME
+bash container.sh stop NAME
+```
+
+设备、挂载、权限及空闲检查由你的脚本明确提供。也可以修改 YAML 的 start/check/stop argv 接入现有脚本；返回码和安全约定见 [容器接口说明](docs/quick-run.md#自动创建容器)。
+
+填好后仍用同样的命令：
+
+```bash
+bash bench.sh check -c configs/bench.yaml --suite all
 bash bench.sh deepep
-bash bench.sh e2e
 bash bench.sh all
 ```
 
-工作目录、输入路径、网卡/GID、卡数和压测时长集中在 YAML 的 `vars`，日志和结果自动归档。也支持宿主机一键创建容器：使用 `managed-container.template.yaml` 并接入你的 start/check/stop 脚本。完整说明见 [简化运行](docs/quick-run.md)。
+工具按用例创建独立容器、执行、归档、清理；不接管已有同名容器。没有提供实际启动脚本时，这份模板不能直接运行。宿主机只有 Python 3.6 时，使用方式一，或通过已有控制机和 [SSH 配置](configs/remote.template.yaml)调度，不给测试镜像擅自安装软件。
 
-## 直接试用
+## 参数与后台运行
 
-Windows 安装，PowerShell 进入本目录后：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
+```bash
+bash bench.sh plan -c configs/bench.yaml --suite all
+bash bench.sh deepep,e2e
+bash bench.sh configs/another-node.yaml deepep
+bash bench.sh deepep --set vars.duration_s=1200
+bash bench.sh deepep --set tests.deepep_pressure.params.num_tokens=256
+bash bench.sh all --detach
+bash bench.sh status /work/bench-output/results/RUN_ID
+bash bench.sh stop /work/bench-output/results/RUN_ID
+bash bench.sh report /work/bench-output/results/RUN_ID
 ```
 
-当前开发机器已经安装，可直接运行：
+`--set` 只覆盖本次运行；长期参数直接改 YAML。参数矩阵用 `matrix`，重复次数用 `repeats`。压测时长须小于 `timeout_s`；模板故障时限为 3600 秒，长压测也要增加它。`check/plan` 只是静态检查，不连接节点、创建容器或启动负载。
 
-```powershell
-.\bench.cmd list
-.\bench.cmd check -c configs/demo.yaml
-.\bench.cmd plan -c configs/demo.yaml --suite deepep,mooncake
-.\bench.cmd run -c configs/demo.yaml --suite all
-.\bench.cmd run -c configs/local-command.yaml
-```
+`BENCH_PYTHON=/path/to/python bash bench.sh ...` 可选择已有解释器。默认优先仓库 `.venv/bin/python`，否则用 python3。SSH 使用密钥、ssh-agent 或 SSH config，不存密码。
 
-`demo.yaml` 跑五类模拟入口，所有数据明确标为 SIMULATED；`local-command.yaml` 实际运行一个很小的 CPU 求和示例，并拷回原生报告，用来验证外部脚本接入流程，不是算子性能基线。
+## 日志与结果
 
-Linux 安装与运行：
+每次运行生成独立 `RUN_ID`。方式一默认位于 `vars.workspace/results/RUN_ID`，方式二位于宿主机配置的输出目录；控制台会打印路径。
+
+主要产物是 `summary.txt` / `summary.json` / `metrics.csv`、`state.json`、`results.jsonl`、`logs/`、`raw/`，另有配置、命令和环境快照。日志带执行环境本地时间及偏移，原始输出和测试包声明的原生报告均保留。
+
+- 普通失败默认清理后继续下一项；`failure_policy: stop` 可改为停止。清理无法确认时，停止剩余计划。
+- 达到 `duration_s` 是计划结束，保留数据，不推断完整正确性通过；超过 `timeout_s` 是故障超时。
+- 不吞掉原生正确性断言、SIGABRT/SIGKILL 或 profiler 崩溃；空性能结果不是成功。
+- 精度默认 `min_score: ""`，只报告分数；没有明确阈值时不称为“精度达标”。DeepEP effective bandwidth 不是 RCCL busbw。
+
+## 验证与开发
+
+已在一个 BW1100 单机 8 卡环境验证：适配原生 handle 索引后，DeepEP 达到 10 分钟窗口；GSM8K 100 题得分 98%，仅报告分数。存在性能尖峰，不能推断所有镜像/节点或性能稳定性已验收。新版 Bash 入口及框架免密 SSH/managed Docker 接口仍需对应真实环境验证。
+
+本地 82 项测试通过。开发环境安装、测试及无 GPU 模拟运行：
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-hcu-bench run -c configs/demo.yaml --suite all
-```
-
-## 常用命令
-
-```bash
-hcu-bench run -c configs/demo.yaml --suite deepep
-hcu-bench run -c configs/demo.yaml --suite rccl,deepep,mooncake
-hcu-bench run -c configs/demo.yaml --suite all --detach
-hcu-bench run -c configs/demo.yaml --set tests.deepep_demo.params.samples=10
-hcu-bench status runs/RUN_ID
-hcu-bench stop runs/RUN_ID
-hcu-bench report runs/RUN_ID
-```
-
-`--set` 覆盖已有配置键，也可覆盖 manifest 声明的测试参数默认值；未知测试参数会被拒绝。值按 YAML 类型解析。批量参数写在测试项的 `matrix`，重复次数写 `repeats`；计划按配置顺序展开。`plan --json` 输出机器可读计划，`check/plan` 不连接节点、不创建容器、不执行负载。
-
-## 核心文件
-
-```text
-src/hcu_bench/
-  cli.py                  命令入口
-  config.py / models.py   配置与数据结构
-  planner.py / registry.py 参数校验、矩阵、测试包能力
-  adapters.py             mock / 外部测试脚本
-  containers.py           容器命令接口
-  executors/              Local / SSH 执行器
-  agent.py                本地、SSH、容器内的轻量执行 worker
-  runner.py               任务状态、多节点启动、失败策略
-  store.py / results.py   运行档案、标准结果
-  artifacts.py / report.py 原生报告传回、汇总
-```
-
-各类测试共用一个 command adapter；区别放在测试包 manifest，不为五个空模块复制五份执行代码。接入规范见 [测试包接口](docs/testpacks.md)。
-
-## 已确认的行为
-
-- 控制机通过 SSH 并发启动同一用例的各节点；用例之间默认串行。
-- SSH 目标是 Linux，使用密钥、ssh-agent 或 SSH config；不存密码，不关闭 host-key 校验。首次访问的主机应先人工确认 SSH 指纹。
-- 普通测试失败：清理本轮后继续下一项；`failure_policy: stop` 可改为停止。
-- `duration_s` 达到计划时长后结束压测，记为 `duration_reached`；`timeout_s` 是故障时限，记为 `timed_out`。已有数据保留，但不推断整项正确性通过。
-- 空性能结果记为 `invalid`。单条无效测量警告并跳过，原始输出保留；正确性失败不能被当作 profiler 警告跳过。
-- 分布式用例任一关键节点失败，取消该用例的其他节点。后续用例可继续；清理无法确认则停止整个剩余计划。
-- 容器支持 existing/managed。只对本次 managed 启动尝试调用 stop，不停止复用容器；已存在的同名 managed 容器拒绝接管。
-- 原生报告按 manifest 声明路径传回。缺失、超出传输限额或传输失败只警告，单独保存归档状态。
-- 不安装测试依赖，不更改 DTK、镜像、网卡、设备权限或超节点环境变量。
-
-## 日志与结果
-
-每次执行生成独立 `runs/RUN_ID`，包含配置快照、计划、环境信息、任务状态、标准结果、各节点日志、原生报告和汇总。`.log` 每行采用测试节点宿主机的本地时间，带时区偏移；控制机产生的框架警告使用控制机本地时间。`.raw.log` 保留原始内容。原生报告的大小与 SHA256 保存到 `artifacts.jsonl`。
-
-`summary.txt/summary.json/metrics.csv` 按测试、参数、节点、单位和原始统计口径分组。均值明确为“已报告数值的均值”，不把 mean 改叫 p50，不混合不同 shape，也不将 RCCL busbw 与 DeepEP effective bandwidth 当成同一指标。失败任务中的已采数据附带 case_status。
-
-资源锁只协调 Bench 启动的任务，不等于自动判断节点是否空闲。实际 GPU 绑定和业务预检由 manifest/env/测试脚本明确指定；不会猜 HIP/CUDA 的可见设备配置。
-
-## 初版边界与验证
-
-后台运行、状态查询、取消、计划时长、报告归档已实现。DeepEP 性能日志解析和单节点 SGLang GSM8K 服务生命周期已接入；其他原生 RCCL/Mooncake/xpu-perf/vLLM 解析器、跨用例并行、断点恢复及自动分发代码/模型仍未接入。复杂 PD/多节点模型部署不在本次简单精度入口范围内。
-
-本地测试覆盖配置、矩阵、参数、执行、取消、多 rank 协同和报告归档。已通过手动 SSH 创建专用容器并在其中运行控制器，完成一次真实单机 8 卡测试；框架的免密 SSHExecutor 和 managed Docker 接口仍主要由协议/模拟测试验证，不能把这次容器内运行当作这些接口的实机验收。
-
-```bash
 python -m pip install -e '.[native]'
 python -m unittest discover -s tests -v
+bash bench.sh configs/demo.yaml all
 ```
+
+开发安装不要求在待验镜像里执行。Windows 使用 `.venv\Scripts\python.exe` 和 `bench.cmd`。模拟数据明确标为 SIMULATED，不是 GPU 性能。
+
+更多内容：[简化运行](docs/quick-run.md) · [真实测试说明](docs/native-tests.md) · [同事测试包接入规范](docs/testpacks.md)。

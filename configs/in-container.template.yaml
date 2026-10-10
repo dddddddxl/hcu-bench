@@ -1,58 +1,73 @@
-# Run inside your existing container. Edit vars; no Docker access is needed.
+# 自己创建容器后使用；所有输入路径都填容器内路径，不需要 Docker socket。
+# 在仓库目录复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh deepep / e2e / all。
+# 本模板默认单机；需已有 Python 3.10+、PyYAML、psutil 和原生测试依赖。
 version: 1
-name: deepep-and-gsm8k
-failure_policy: continue
+name: deepep-and-gsm8k            # 测试方案名称，便于识别日志。
+failure_policy: continue         # 普通失败清理后继续；改为 stop 可停止剩余项。
+# 公共值只填一次；下方 ${vars.xxx} 会引用它们，不要把密码放进配置。
 vars:
-  workspace: /YOUR_WRITABLE_WORKSPACE
-  bench_root: /YOUR_BENCH_REPO
-  deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py
+  workspace: /YOUR_WRITABLE_WORKSPACE       # 可写目录；自动创建 results/RUN_ID。
+  bench_root: /YOUR_BENCH_REPO              # git clone 的仓库在容器内的绝对路径。
+  deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py  # 同目录必须有 utils.py。
+  # 下面四项只在运行 e2e / all 时需要；模型、数据及 JSON 配置须已存在。
   model: /YOUR_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
-  dataset: /YOUR_DATASETS/gsm8k.jsonl
-  profile: /YOUR_CONFIGS/flash-int8.profile.json
-  ep_config: /YOUR_CONFIGS/ep_config.json
-  iface: YOUR_ACTIVE_INTERFACE
-  gid: "YOUR_GID_INDEX"
-  gpus: [0, 1, 2, 3, 4, 5, 6, 7]
-  num_processes: 8
-  duration_s: 600
+  dataset: /YOUR_DATASETS/gsm8k.jsonl        # 每行含 question / answer 的 JSON 对象。
+  profile: /YOUR_CONFIGS/flash-int8.profile.json  # 服务 argv/env，模板在 testpacks/sglang_accuracy/。
+  ep_config: /YOUR_CONFIGS/ep_config.json    # normal_dispatch / normal_combine 配置。
+  iface: YOUR_ACTIVE_INTERFACE             # 实际 socket 网卡；精度 profile 内也要对应修改。
+  gid: "YOUR_GID_INDEX"                     # 实际 RDMA GID，保留字符串引号，不能照搬其他节点。
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7]          # 本次允许使用的卡号，先确认没有其他业务。
+  num_processes: 8                         # DeepEP 每节点进程数，应与 gpus 数量一致。
+  duration_s: 600                          # 压测计划窗口（秒），含初始化；须小于 timeout_s。
 output_dir: "${vars.workspace}/results"
 nodes:
   node0:
-    executor: local
+    executor: local                       # 当前容器内执行，不连接 SSH、不再创建容器。
     gpus: "${vars.gpus}"
     env:
       HIP_VISIBLE_DEVICES: "${gpu_ids}"
 tests:
+  # bash bench.sh deepep 选择此项；num_processes 由原生脚本 spawn，不是 torchrun 入口数。
   deepep_pressure:
     suite: deepep
     adapter: command
-    pack: ../testpacks/deepep/manifest.yaml
+    pack: ../testpacks/deepep/manifest.yaml # 相对于本 YAML；保留配置在 configs/ 下。
     nodes: [node0]
     duration_s: "${vars.duration_s}"
-    timeout_s: 3600
+    timeout_s: 3600                        # 故障时限，不是计划时长；长压测须同步增大。
     params:
       bench_root: "${vars.bench_root}"
       test_script: "${vars.deepep_script}"
-      master_addr: 127.0.0.1
-      master_port: 29450
+      master_addr: 127.0.0.1               # 本模板单机，使用回环地址。
+      master_port: 29450                   # 选择未占用端口；成功重启周期会递增端口。
       num_processes: "${vars.num_processes}"
+      num_tokens: 128                     # 每卡 token 数。
+      hidden: 7168                        # hidden 维度。
+      num_topk: 8                         # 每个 token 选择的 expert 数。
+      num_experts: 256                    # expert 总数，须满足原生脚本的整除条件。
     env:
+      # 字符串值；MNVL/XDP 等超节点参数按硬件提供，不在单机模板中强制开启。
       ROCSHMEM_HEAP_SIZE: "4737418240"
       HIP_BUFFER_EXTRA_SIZE: "0"
       NCCL_IB_DISABLE: "1"
       NCCL_SOCKET_IFNAME: "${vars.iface}"
       GLOO_SOCKET_IFNAME: "${vars.iface}"
       ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
+  # bash bench.sh e2e 选择此项；参考配方要求 BW1100 8 卡，不是任意卡数通用配方。
   sglang_gsm8k:
     suite: e2e
     adapter: command
     pack: ../testpacks/sglang_accuracy/manifest.yaml
     nodes: [node0]
-    timeout_s: 5400
+    timeout_s: 5400                        # 包含模型加载、评测及服务清理。
     params:
       bench_root: "${vars.bench_root}"
       profile: "${vars.profile}"
       model_path: "${vars.model}"
       data_path: "${vars.dataset}"
       ep_config: "${vars.ep_config}"
-      port: 30903
+      port: 30903                         # 本次服务端口，已占用就报错，不复用其他服务。
+      num_examples: 100                   # 评分题数，不包含前面的 few-shot 样例。
+      num_shots: 5                        # 前 5 条作为提示样例。
+      max_tokens: 2048                    # 单题输出 token 上限。
+      min_score: ""                       # 空字符串：只报告分数；有明确标准再填 "0.90" 等阈值。
