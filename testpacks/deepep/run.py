@@ -97,7 +97,8 @@ def preflight(args, env=None):
     for name in ("torch", "deep_ep", "psutil"):
         if importlib.util.find_spec(name) is None:
             raise RuntimeError("Target dependency is missing: " + name)
-    required = {"ROCSHMEM_HEAP_SIZE", "ROCSHMEM_IPC_MNVL", "ROCSHMEM_GDR_DISABLE_XDP", "HIP_BUFFER_EXTRA_SIZE"}
+    # MNVL/XDP settings are transport-specific, not mandatory on IPC/IB nodes.
+    required = {"ROCSHMEM_HEAP_SIZE", "HIP_BUFFER_EXTRA_SIZE"}
     if any(not env.get(name) for name in required) or env.get("DEEP_EP_NORMAL_MNVL"):
         raise ValueError("Configure low-latency ROCSHMEM/HIP env and unset DEEP_EP_NORMAL_MNVL explicitly")
     return {"native_script": str(script.resolve()), "native_script_sha256": sha256(script),

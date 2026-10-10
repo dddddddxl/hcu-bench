@@ -27,6 +27,8 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 只重启成功完成的周期。SIGKILL、SIGABRT、正确性断言或 profiler 崩溃不会自动吞掉重试；控制机取消其他节点并保留日志。包装器只对可解析但数值无效的性能行记 invalid，不修改原生 profiler 的断言。低延迟子进程明确 unset DEEP_EP_NORMAL_MNVL；其余通信变量由配置提供。
 
+预检要求显式提供 `ROCSHMEM_HEAP_SIZE` 和 `HIP_BUFFER_EXTRA_SIZE`。模板里的 `ROCSHMEM_IPC_MNVL` / `ROCSHMEM_GDR_DISABLE_XDP` 是超节点配置示例，不是所有硬件的必填项；IPC/IB 节点应依据实际镜像的后端选择配置，不能直接套用旧超节点环境。
+
 指标保留 native_rank/cycle：dispatch+combine effective bandwidth、mean/min/max latency、dispatch/combine bandwidth、send/recv latency。`(total)` 分阶段指标使用独立名称，不和普通分阶段指标混合。不把这些指标称为 RCCL busbw；停止时长也不表示整项正确性通过。
 
 原生脚本/工具 SHA256、软件版本、通信环境、每周期原始日志和 samples.jsonl 自动归档。压力日志没有识别到性能数据时不能算成功。

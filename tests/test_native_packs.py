@@ -74,6 +74,23 @@ class DeepEPParserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Experts"):
             deepep.preflight(args)
 
+    def test_ipc_environment_does_not_require_supernode_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "test_low_latency.py"
+            script.write_text("# fixture\n", encoding="utf-8")
+            script.with_name("utils.py").write_text("# fixture\n", encoding="utf-8")
+            args = deepep.parser().parse_args(["--test-script", str(script), "--output-dir", directory,
+                                              "--node-rank", "0", "--nnodes", "1",
+                                              "--master-addr", "127.0.0.1", "--num-processes", "8"])
+            env = {"ROCSHMEM_HEAP_SIZE": "4737418240", "HIP_BUFFER_EXTRA_SIZE": "0"}
+            with patch.object(deepep.importlib.util, "find_spec", return_value=object()):
+                evidence = deepep.preflight(args, env)
+                self.assertEqual(evidence["communication_env"], env)
+                with self.assertRaisesRegex(ValueError, "ROCSHMEM/HIP"):
+                    deepep.preflight(args, {"HIP_BUFFER_EXTRA_SIZE": "0"})
+                with self.assertRaisesRegex(ValueError, "DEEP_EP_NORMAL_MNVL"):
+                    deepep.preflight(args, {**env, "DEEP_EP_NORMAL_MNVL": "1"})
+
 
 class AccuracyTests(unittest.TestCase):
     def setUp(self):
