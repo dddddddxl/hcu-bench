@@ -4,7 +4,21 @@
 
 核心实现框架、模拟测试和通用脚本执行，不内置 Torch 等设备测试库。各部门原生测试通过独立测试包接入。
 
-已新增 [两项真实测试编排](docs/native-tests.md)：DeepEP 10 分钟低延迟压测，以及参考 HCU 0.5.12 的 DeepSeek-V4-Flash INT8 GSM8K 100 题评测。入口与部署模板已实现，HCU 实机验收待节点环境。
+已新增 [两项真实测试编排](docs/native-tests.md)：DeepEP 10 分钟低延迟压测，以及参考 HCU 0.5.12 的 DeepSeek-V4-Flash INT8 GSM8K 100 题评测。已在 BW1100 单机 8 卡环境完成一次验证：达到压测窗口、精度分数 98%；具体结果不代表其他镜像或节点都已验收。
+
+## 改 YAML 就跑
+
+自己创建容器后，在容器内 Bench 仓库目录：
+
+```bash
+cp configs/in-container.template.yaml configs/bench.yaml
+# Fill the vars section once, then:
+bash bench.sh deepep
+bash bench.sh e2e
+bash bench.sh all
+```
+
+工作目录、输入路径、网卡/GID、卡数和压测时长集中在 YAML 的 `vars`，日志和结果自动归档。也支持宿主机一键创建容器：使用 `managed-container.template.yaml` 并接入你的 start/check/stop 脚本。完整说明见 [简化运行](docs/quick-run.md)。
 
 ## 直接试用
 
@@ -93,7 +107,7 @@ src/hcu_bench/
 
 后台运行、状态查询、取消、计划时长、报告归档已实现。DeepEP 性能日志解析和单节点 SGLang GSM8K 服务生命周期已接入；其他原生 RCCL/Mooncake/xpu-perf/vLLM 解析器、跨用例并行、断点恢复及自动分发代码/模型仍未接入。复杂 PD/多节点模型部署不在本次简单精度入口范围内。
 
-本地 Windows/Python 3.10 的测试覆盖配置、矩阵、参数、执行、取消、多 rank 协同和报告归档；SSH 命令及容器生命周期使用协议/模拟测试验证，真实 Linux SSH/Docker 和 GPU 验收仍需目标节点。
+本地测试覆盖配置、矩阵、参数、执行、取消、多 rank 协同和报告归档。已通过手动 SSH 创建专用容器并在其中运行控制器，完成一次真实单机 8 卡测试；框架的免密 SSHExecutor 和 managed Docker 接口仍主要由协议/模拟测试验证，不能把这次容器内运行当作这些接口的实机验收。
 
 ```bash
 python -m pip install -e '.[native]'

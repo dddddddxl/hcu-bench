@@ -1,0 +1,73 @@
+# Run on a prepared Linux Docker host/control machine, not inside the test container.
+# The site-owned hook implements start/check/stop; no Docker flags are guessed here.
+version: 1
+name: managed-deepep-and-gsm8k
+failure_policy: continue
+vars:
+  host_workspace: /YOUR_HOST_WORKSPACE
+  container_workspace: /YOUR_CONTAINER_WORKSPACE
+  bench_root: /YOUR_CONTAINER_BENCH_REPO
+  container_hook: /YOUR_HOST_SCRIPTS/container.sh
+  image: YOUR_APPROVED_IMAGE
+  deepep_script: /YOUR_CONTAINER_NATIVE_TESTS/test_low_latency.py
+  model: /YOUR_CONTAINER_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
+  dataset: /YOUR_CONTAINER_DATASETS/gsm8k.jsonl
+  profile: /YOUR_CONTAINER_CONFIGS/flash-int8.profile.json
+  ep_config: /YOUR_CONTAINER_CONFIGS/ep_config.json
+  iface: YOUR_ACTIVE_INTERFACE
+  gid: "YOUR_GID_INDEX"
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+  num_processes: 8
+  duration_s: 600
+output_dir: "${vars.host_workspace}/results"
+nodes:
+  node0:
+    executor: local
+    gpus: "${vars.gpus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+containers:
+  test_image:
+    mode: managed
+    name: "bench-${run_id}-${case_id}-${node_id}"
+    work_root: "${vars.container_workspace}/workers"
+    start: [bash, "${vars.container_hook}", start, "${container_name}", "${vars.image}", "${vars.host_workspace}", "${vars.container_workspace}"]
+    check: [bash, "${vars.container_hook}", check, "${container_name}"]
+    stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
+    hook_timeout_s: 120
+tests:
+  deepep_pressure:
+    suite: deepep
+    adapter: command
+    pack: ../testpacks/deepep/manifest.yaml
+    nodes: [node0]
+    container: test_image
+    duration_s: "${vars.duration_s}"
+    timeout_s: 3600
+    params:
+      bench_root: "${vars.bench_root}"
+      test_script: "${vars.deepep_script}"
+      master_addr: 127.0.0.1
+      master_port: 29450
+      num_processes: "${vars.num_processes}"
+    env:
+      ROCSHMEM_HEAP_SIZE: "4737418240"
+      HIP_BUFFER_EXTRA_SIZE: "0"
+      NCCL_IB_DISABLE: "1"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
+      ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
+  sglang_gsm8k:
+    suite: e2e
+    adapter: command
+    pack: ../testpacks/sglang_accuracy/manifest.yaml
+    nodes: [node0]
+    container: test_image
+    timeout_s: 5400
+    params:
+      bench_root: "${vars.bench_root}"
+      profile: "${vars.profile}"
+      model_path: "${vars.model}"
+      data_path: "${vars.dataset}"
+      ep_config: "${vars.ep_config}"
+      port: 30903

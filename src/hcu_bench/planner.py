@@ -3,14 +3,14 @@ import itertools
 import json
 from pathlib import Path
 
-from .config import apply_overrides, load_document, validate_config
+from .config import apply_overrides, load_document, resolve_variables, validate_config
 from .models import Case, Plan, SUITES, require
 from .registry import get_pack, resolve_params
 
 
 def make_plan(path: str, selection: str = "all", overrides: list[str] | None = None) -> Plan:
     source = Path(path).resolve()
-    config = apply_overrides(load_document(source), overrides or [])
+    config = resolve_variables(apply_overrides(load_document(source), overrides or []))
     validate_config(config)
     selected = list(SUITES) if selection == "all" else selection.split(",")
     require(bool(selected) and all(suite in SUITES for suite in selected) and len(selected) == len(set(selected)), f"Invalid suite selection: {selection}")

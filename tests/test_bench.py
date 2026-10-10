@@ -94,6 +94,62 @@ class ConfigurationTests(Fixture):
         self.data["tests"]["demo"]["params"] = {"samples": 2}
         self.assertEqual(self.plan(overrides=["tests.demo.params.samples=8"]).cases[0].params["samples"], 8)
 
+    def test_config_variables_preserve_types_and_worker_placeholders(self):
+        self.data["vars"] = {"workspace": "scratch", "results": "${vars.workspace}/results", "gpus": [0, 2], "samples": 2}
+        self.data["output_dir"] = "${vars.results}"
+        self.data["nodes"]["local"].update(gpus="${vars.gpus}", env={"HIP_VISIBLE_DEVICES": "${gpu_ids}"})
+        self.data["tests"]["demo"]["params"] = {"samples": "${vars.samples}"}
+        plan = self.plan(overrides=["vars.workspace=other", "vars.samples=4"])
+        self.assertEqual(plan.output_dir, str(self.root / "other/results"))
+        self.assertEqual(plan.nodes["local"]["gpus"], [0, 2])
+        self.assertEqual(plan.nodes["local"]["env"]["HIP_VISIBLE_DEVICES"], "${gpu_ids}")
+        self.assertEqual(plan.cases[0].params["samples"], 4)
+        self.assertEqual(plan.resolved["vars"]["results"], "other/results")
+
+    def test_config_variables_are_expanded_in_hooks_without_shell_splitting(self):
+        self.command_pack("print('example')", requires=False)
+        self.data["vars"] = {"image": "registry/image:tag", "workspace": "/a path; literal"}
+        self.data["containers"] = {"image": {
+            "mode": "managed", "name": "bench-${run_id}-${case_id}-${node_id}", "work_root": "/bench",
+            "start": ["start", "${container_name}", "${vars.image}", "${vars.workspace}"],
+            "check": ["check", "${container_name}"], "stop": ["stop", "${container_name}"]}}
+        self.data["tests"]["demo"]["container"] = "image"
+        plan = self.plan()
+        spec = for_case(plan.cases[0]).build(plan, plan.cases[0], "local", self.root / "run")
+        self.assertEqual(spec["container"]["start"][2:], ["registry/image:tag", "/a path; literal"])
+
+    def test_config_variables_reject_unknown_cycles_and_invalid_types(self):
+        for variables in ({"a": "${vars.missing}"}, {"a": "${vars.b}", "b": "${vars.a}"},
+                          {"a": "${vars.a}"}, {"invalid-name": "x"}, {"a": [1, 2], "b": "path/${vars.a}"}):
+            with self.subTest(variables=variables), self.assertRaises(BenchError):
+                self.data["vars"] = variables
+                self.plan()
+
+    def test_config_variables_reject_malformed_references(self):
+        self.data["output_dir"] = "${vars.bad-name}"
+        with self.assertRaises(BenchError):
+            self.plan()
+
+    def test_simple_templates_build_with_different_container_modes(self):
+        for name, container in (("in-container.template.yaml", None), ("managed-container.template.yaml", "test_image")):
+            with self.subTest(name=name):
+                plan = make_plan(str(ROOT / "configs" / name))
+                self.assertEqual([case.suite for case in plan.cases], ["deepep", "e2e"])
+                self.assertTrue(all(case.container == container for case in plan.cases))
+                self.assertEqual(plan.cases[0].duration_s, 600)
+                self.assertEqual(plan.nodes["node0"]["gpus"], list(range(8)))
+                with patch("subprocess.Popen", side_effect=AssertionError("preview must not execute")):
+                    self.assertEqual(preview(plan)["case_count"], 2)
+
+    def test_variable_based_configuration_executes(self):
+        self.data["vars"] = {"samples": 1, "output": "variable-results"}
+        self.data["output_dir"] = "${vars.output}"
+        self.data["tests"]["demo"]["params"] = {"samples": "${vars.samples}"}
+        code, store, _ = self.execute()
+        self.assertEqual(code, 0)
+        self.assertEqual(store.path.parent, self.root / "variable-results")
+        self.assertEqual(len((store.path / "results.jsonl").read_text().splitlines()), 1)
+
     def test_reject_unknown_override(self):
         with self.assertRaises(BenchError):
             self.plan(overrides=["tests.demo.wrong=3"])

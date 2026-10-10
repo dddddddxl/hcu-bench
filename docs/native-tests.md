@@ -1,6 +1,8 @@
 # 两项真实测试的编排
 
-入口已经实现，但尚未在 HCU 节点验收。`configs/deepep-sglang.template.yaml` 按顺序执行：10 分钟 DeepEP 低延迟压测 → DeepSeek-V4-Flash INT8 的 GSM8K 100 题、5-shot。模板含节点/路径/网卡占位，不能直接当作生产配置运行。
+入口已在一个 BW1100 单机 8 卡环境做过验证：适配原生测试的 handle 索引后达到 10 分钟压测窗口，Flash INT8 GSM8K 100 题、5-shot 分数 98%。不代表所有节点/镜像都已验收，也不将计划终止称为完整正确性通过。简化入口见 [改 YAML 就跑](quick-run.md)。
+
+`configs/deepep-sglang.template.yaml` 按顺序执行两项测试；模板含节点/路径/网卡占位，不能直接当作生产配置运行。
 
 ```bash
 hcu-bench check -c configs/deepep-sglang.template.yaml

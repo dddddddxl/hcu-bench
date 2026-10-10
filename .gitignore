@@ -7,3 +7,4 @@ build/
 dist/
 runs/
 .pytest_cache/
+configs/bench.yaml

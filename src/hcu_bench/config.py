@@ -1,4 +1,5 @@
 import copy
+import re
 from pathlib import Path
 
 import yaml
@@ -54,8 +55,53 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
     return result
 
 
+def resolve_variables(config: dict) -> dict:
+    """Expand only vars.*, leaving worker placeholders for the execution stage."""
+    variables = config.get("vars", {})
+    require(isinstance(variables, dict), "vars must be a mapping")
+    require(all(isinstance(name, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name)
+                for name in variables), "vars names must be ASCII identifiers")
+    pattern = re.compile(r"\$\{vars\.([A-Za-z][A-Za-z0-9_]*)\}")
+    resolved, active = {}, set()
+
+    def variable(name):
+        require(name in variables, f"Unknown configuration variable: vars.{name}")
+        require(name not in active, f"Circular configuration variable: vars.{name}")
+        if name not in resolved:
+            active.add(name)
+            resolved[name] = expand(variables[name])
+            active.remove(name)
+        return copy.deepcopy(resolved[name])
+
+    def expand(value):
+        if isinstance(value, dict):
+            return {key: expand(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [expand(item) for item in value]
+        if not isinstance(value, str):
+            require(value is None or isinstance(value, (bool, int, float)), "Unsupported configuration value type")
+            return value
+        matches = list(pattern.finditer(value))
+        if len(matches) == 1 and matches[0].group() == value:
+            return variable(matches[0].group(1))
+
+        def replace(match):
+            item = variable(match.group(1))
+            require(isinstance(item, (str, int, float, bool)),
+                    f"vars.{match.group(1)} must be scalar inside a string")
+            return str(item)
+
+        result = pattern.sub(replace, value)
+        require("${vars." not in result, f"Invalid configuration variable reference: {value}")
+        return result
+
+    for name in variables:
+        variable(name)
+    return {key: copy.deepcopy(resolved) if key == "vars" else expand(value) for key, value in config.items()}
+
+
 def validate_config(data: dict) -> None:
-    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases"}, "config")
+    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases", "vars"}, "config")
     require(data.get("version") == 1, "Configuration version must be 1")
     require(isinstance(data.get("name"), str) and data["name"], "name is required")
     require(data.get("failure_policy", "continue") in ("continue", "stop"), "failure_policy must be continue or stop")
