@@ -6,7 +6,8 @@
 | --- | --- |
 | DeepEP | 原生低延迟压测，默认 10 分钟，输出带宽和延迟 |
 | e2e | SGLang 0.5.12 / DeepSeek-V4-Flash INT8，GSM8K 100 题、5-shot，默认只报告分数 |
-| RCCL / Mooncake / 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
+| Mooncake | RDMA / VRAM 原生压测包，动态端口，pair / fan-in / pairs / ring，支持显式吞吐下限 |
+| RCCL / 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
 
 ## 获取代码
 
@@ -136,7 +137,7 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 
 已在一个 BW1100 单机 8 卡环境验证：适配原生 handle 索引后，DeepEP 达到 10 分钟窗口；GSM8K 100 题得分 98%，仅报告分数。存在性能尖峰，不能推断所有镜像/节点或性能稳定性已验收。新版 Bash 入口及框架免密 SSH/managed Docker 接口仍需对应真实环境验证。
 
-本地 82 项测试通过。开发环境安装、测试及无 GPU 模拟运行：
+105 项测试在 Windows Python 3.13 与 Linux Python 3.10 开发环境验证；不代表真实 GPU 性能。开发环境安装、测试及无 GPU 模拟运行：
 
 ```bash
 python3 -m venv .venv
@@ -148,4 +149,4 @@ bash bench.sh configs/demo.yaml all
 
 开发安装不要求在待验镜像里执行。Windows 使用 `.venv\Scripts\python.exe` 和 `bench.cmd`。模拟数据明确标为 SIMULATED，不是 GPU 性能。
 
-更多内容：[简化运行](docs/quick-run.md) · [真实测试说明](docs/native-tests.md) · [同事测试包接入规范](docs/testpacks.md)。
+更多内容：[简化运行](docs/quick-run.md) · [真实测试说明](docs/native-tests.md) · [Mooncake 压测](docs/mooncake.md) · [同事测试包接入规范](docs/testpacks.md)。
