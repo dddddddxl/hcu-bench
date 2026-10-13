@@ -1,5 +1,7 @@
 # 两项真实测试的编排
 
+Mooncake 的 RDMA/VRAM 压测使用独立测试包和多节点模板，见 [Mooncake 压测](mooncake.md)。下文的两项测试及参考成绩仍指 DeepEP 和 SGLang。
+
 入口已在一个 BW1100 单机 8 卡环境做过验证：适配原生测试的 handle 索引后达到 10 分钟压测窗口，Flash INT8 GSM8K 100 题、5-shot 分数 98%。不代表所有节点/镜像都已验收，也不将计划终止称为完整正确性通过。简化入口见 [改 YAML 就跑](quick-run.md)。
 
 `configs/deepep-sglang.template.yaml` 按顺序执行两项测试；模板含节点/路径/网卡占位，不能直接当作生产配置运行。

@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 
@@ -59,6 +60,7 @@ class NativeProcess:
         self.log = Path(log_path).open("w", encoding="utf-8")
         self.stopping = threading.Event()
         self.errors = []
+        self.root_termination_actions = []
         self.owned = set()
         self.lock = threading.Lock()
         try:
@@ -121,23 +123,44 @@ class NativeProcess:
         with self.lock:
             owned = list(self.owned)
         owned.sort(key=lambda process: process == self.root)
+
+        def send(process, action):
+            # Do not claim a termination of a root that had already exited.
+            if process == self.root and self.proc.poll() is not None:
+                return
+            getattr(process, action)()
+            if process == self.root:
+                self.root_termination_actions.append(action)
+
+        def wait(children, timeout):
+            deadline = time.monotonic() + timeout
+            _, alive = self.psutil.wait_procs(children, timeout=timeout)
+            # Popen alone must reap its direct child. psutil.wait_procs(root) can
+            # consume waitpid's exit status, making a later Popen.poll report 0.
+            try:
+                self.proc.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                pass
+            return alive
+
         for process in owned:
             try:
-                process.terminate()
+                send(process, "terminate")
             except self.psutil.NoSuchProcess:
                 pass
             except self.psutil.Error as exc:
                 self.errors.append(str(exc))
-        _, alive = self.psutil.wait_procs(owned, timeout=3)
-        for process in alive:
+        children = [process for process in owned if process != self.root]
+        alive = wait(children, 3)
+        to_kill = alive + ([self.root] if self.root is not None and self.proc.poll() is None else [])
+        for process in to_kill:
             try:
-                process.kill()
+                send(process, "kill")
             except self.psutil.NoSuchProcess:
                 pass
             except self.psutil.Error as exc:
                 self.errors.append(str(exc))
-        _, alive = self.psutil.wait_procs(alive, timeout=2)
-        self.proc.poll()
+        alive = wait(alive, 2)
         self.reader.join(timeout=2)
         if not self.reader.is_alive():
             self.proc.stdout.close()
@@ -149,7 +172,7 @@ class NativeProcess:
                     live.append(process)
             except self.psutil.NoSuchProcess:
                 pass
-        if live or self.reader.is_alive() or self.errors:
+        if self.proc.poll() is None or live or self.reader.is_alive() or self.errors:
             raise CleanupError("Owned native process cleanup/output could not be confirmed")
 
 

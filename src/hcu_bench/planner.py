@@ -20,6 +20,8 @@ def make_plan(path: str, selection: str = "all", overrides: list[str] | None = N
         if not test.get("enabled", True) or test.get("suite") not in selected:
             continue
         pack = get_pack(test, source.parent)
+        require(pack.get("duration_control") != "native" or test.get("duration_s") is None,
+                f"{test_id}: native duration_control forbids framework duration_s; configure the pack's native duration parameter")
         nodes = test.get("nodes")
         require(isinstance(nodes, list) and nodes and all(isinstance(node, str) and node in config["nodes"] for node in nodes), f"{test_id}: choose known nodes")
         require(len(nodes) == len(set(nodes)), f"{test_id}: duplicate nodes")

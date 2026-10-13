@@ -1,0 +1,59 @@
+# Two-node RDMA/VRAM pressure; replace paths, addresses, GPU IDs and active NICs.
+# The same shared_dir content must be visible inside both containers (e.g. NFS).
+version: 1
+name: mooncake-rdma-vram
+failure_policy: stop
+vars:
+  bench_root: /YOUR_SHARED_HOME/hcu-bench
+  workspace: /YOUR_SHARED_HOME/mooncake-validation
+  image_container: YOUR_OWN_PREPARED_CONTAINER
+  addresses: YOUR_TARGET_IPV4,YOUR_INITIATOR_IPV4
+  duration: 180
+output_dir: ../runs
+nodes:
+  target:
+    executor: ssh
+    host: YOUR_TARGET_SSH_ALIAS
+    python: python3
+    work_root: "${vars.workspace}/host/target"
+    gpus: [0]                        # Physical IDs allowed for this test, not a universal recipe.
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      MC_TE_FILTERS: YOUR_ACTIVE_RDMA_NIC
+  initiator:
+    executor: ssh
+    host: YOUR_INITIATOR_SSH_ALIAS
+    python: python3
+    work_root: "${vars.workspace}/host/initiator"
+    gpus: [0]
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      MC_TE_FILTERS: YOUR_ACTIVE_RDMA_NIC
+containers:
+  native:
+    mode: existing                  # Does not create, stop or modify your prepared container.
+    name: "${vars.image_container}"
+    work_root: "${vars.workspace}/container"
+    check:
+      - python3
+      - -c
+      - "import subprocess,sys; p=subprocess.run(['docker','inspect','--format','{{.State.Running}}',sys.argv[1]],stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True); sys.exit(2 if p.returncode else 0 if p.stdout.strip()=='true' else 1)"
+      - "${container_name}"
+    exec_prefix: [docker, exec, -i, "${container_name}", python3, -u]
+tests:
+  transfer_pair:
+    suite: mooncake
+    adapter: command
+    pack: ../testpacks/mooncake/manifest.yaml
+    nodes: [target, initiator]        # Addresses above must follow precisely this order.
+    container: native
+    timeout_s: 600                   # Includes startup, native duration, rendezvous and cleanup.
+    # Do not set framework duration_s: native --duration must finish and print metrics.
+    params:
+      bench_root: "${vars.bench_root}"
+      shared_dir: "${vars.workspace}/rendezvous"
+      addresses: "${vars.addresses}"
+      topology: pair
+      duration: "${vars.duration}"
+      gpu_id: 0                     # Visible logical index; -1 explicitly uses all visible GPUs.
+      min_bandwidth_gbps: ""        # Report only until a node-specific threshold is agreed.
