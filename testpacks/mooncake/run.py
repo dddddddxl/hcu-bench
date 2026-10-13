@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -99,6 +100,10 @@ def validate_args(args):
             raise ValueError(name + " must be positive and finite")
     if args.gpu_id < -1 or args.block_size > args.buffer_size:
         raise ValueError("Invalid GPU index or block_size exceeds buffer_size")
+    required_buffer = args.block_size * args.batch_size * args.threads
+    if args.buffer_size < required_buffer:
+        raise ValueError(f"buffer_size must be >= block_size * batch_size * threads = {required_buffer} bytes; "
+                         "refusing native buffer auto-expansion")
     threshold_for(args.min_bandwidth_gbps)
     return addresses, routes
 
@@ -180,6 +185,29 @@ def native_command(args, role, address, segment=None):
     if segment is not None:
         command.append("--segment_id=" + segment)
     return command
+
+
+def stop_target(process, output):
+    """Confirm that a passive target stopped because of our requested shutdown."""
+    before = process.proc.poll()
+    try:
+        process.close()
+    finally:
+        after = process.proc.poll()
+        actions = list(process.root_termination_actions)
+        write_json(output / "target_exit.json", {"before_shutdown_returncode": before, "returncode": after,
+                   "owned_termination_actions": actions})
+    allowed = {0}
+    if os.name == "nt":
+        if actions:
+            allowed.add(int(signal.SIGTERM))  # psutil's Windows TerminateProcess status.
+    else:
+        if "terminate" in actions:
+            allowed.add(-signal.SIGTERM)
+        if "kill" in actions:
+            allowed.add(-signal.SIGKILL)
+    if before is not None or not actions or after not in allowed:
+        raise RuntimeError(f"Native target shutdown failed: before={before}, exit={after}, owned_actions={actions}")
 
 
 class Rendezvous:
@@ -352,8 +380,13 @@ def run(args):
                             args.startup_timeout + args.duration + args.completion_grace, health)
             completed_process = target
             target = None
-            completed_process.close()
+            stop_target(completed_process, output)
             health()
+            rendezvous.publish("target_done", args.node_rank, status="completed")
+        # Initiator throughput alone does not prove the target survived teardown.
+        # All ranks must observe successful target cleanup before claiming completion.
+        rendezvous.wait(lambda: all(rendezvous.read("target_done", rank) for rank in set(routes.values())),
+                        args.startup_timeout + args.completion_grace, health)
         if args.node_rank not in routes:
             emit({"measurement_status": "skipped", "correctness": "not_checked", "metrics": [], "role": "target",
                   "reason": "Passive target coordination completed; throughput is measured by initiators"})

@@ -48,7 +48,7 @@ exec docker exec -i YOUR_OWN_CONTAINER python3 "$@"
 2. 启动本节点所需的 target；轮询它本次日志里的 `listening on IP:port`。endpoint 通过原子 JSON 发布；不写死或复用上次端口。
 3. initiator 等待自己 target 的 endpoint，启动 native 压测。默认 `duration=180` 秒，使用原生 `--duration`，得到完整的最终结果后才能结束。
 4. 每个 initiator 必须退出 0、产生恰好一条有效 `Test completed`、完成请求的测量时间窗。缺失/重复结果、非正或非有限值、native ERROR/FATAL、错误退出和超时均失败。
-5. initiator 清理确认后发布 done；target 等待所有打向它的 initiator 完成后停止。环形节点同时拥有两种角色。任何失败/取消都只清理本次 owned 进程；清理无法确认返回 125，框架停止后续用例。
+5. initiator 清理确认后发布 done；target 等待所有打向它的 initiator 完成后停止。收尾记录主动 terminate/kill 和前后退出码；提前退出、SIGSEGV/SIGABRT 等异常退出均失败。所有节点还需等待全部 target 收尾确认，才报告 completed，避免 initiator 已完成但 target 收尾崩溃仍被计为通过。环形节点同时拥有两种角色。任何失败/取消都只清理本次 owned 进程；清理无法确认返回 125，框架停止后续用例。
 
 **不要设置框架 `duration_s`。** 本 manifest 声明 `duration_control: native`，planner 会拒绝该组合，防止在最终吞吐输出前按时间强制结束却被当作完成。native `duration` 只算传输窗口，不含启动、注册和清理；`startup_timeout` 限制 join/endpoint 等待，`duration + completion_grace` 限制 initiator 总等待。外层 `timeout_s` 应更大，例如 180 秒测量使用 600 秒外层故障时限，长压测需同步调大。
 
@@ -61,7 +61,7 @@ exec docker exec -i YOUR_OWN_CONTAINER python3 "$@"
 | `topology` | pair；target 在前、initiator 在后，恰好两节点 |
 | `duration` | 180 秒，native initiator 测量窗口 |
 | `gpu_id` | 0，显式可见卡中的逻辑编号；-1 使用全部可见卡 |
-| `buffer_size` | 1 GiB，分配语义由记录的 native 版本决定；多卡/环形需另核显存余量 |
+| `buffer_size` | 1 GiB，必须 ≥ `block_size × batch_size × threads`；多卡/环形需另核显存余量 |
 | `threads / batch_size / block_size` | 12 / 128 / 65536 字节 |
 | `operation` | read，可选 write |
 | `startup_timeout / completion_grace` | 90 / 120 秒 |
@@ -69,6 +69,8 @@ exec docker exec -i YOUR_OWN_CONTAINER python3 "$@"
 | `min_bandwidth_gbps` | 空，只报告；填字符串数值后逐 initiator 判断 decimal GB/s 下限 |
 
 多拓扑均复用同一 manifest：
+
+不足的 buffer 会在预检/原生进程启动前被拒绝，不允许 native 静默扩大后仍按配置值出报告。默认 `65536 × 128 × 12 = 100663296` 字节（96 MiB），恰好等于该值可以运行。此下限来自 [Mooncake v0.3.13 原生检查](https://github.com/kvcache-ai/Mooncake/blob/v0.3.13/mooncake-transfer-engine/example/transfer_engine_bench.cpp#L832-L842)，target 和 initiator 都采用它；buffer 参数并不包含驱动、注册或其他内存开销。
 
 - `fan_in`：rank 0 为 target，其余 rank 同时打向它。
 - `pairs`：节点数量必须为偶数，rank 1→0、3→2 等独立配对同时运行。
@@ -83,6 +85,6 @@ initiator 上报 native `transfer_throughput`（保留 GB/s 或 GiB/s）、`tran
 
 passive target 不产生吞吐指标，上报 skipped coordination 记录；本包因此 `requires_metrics: false`，但包装器自身对所有 initiator 严格要求最终结果。每个 initiator 的吞吐独立保存，多对一不自动求和或把不同时间窗口当作一个聚合测试。
 
-框架保存 `summary.txt/json`、`metrics.csv`、`results.jsonl`；`raw/` 收集各节点的 `environment.json`、`commands.json`、`target_endpoint.json`、`measurement.json`、`summary.json`、`cleanup.json`、`error.json` 和 target/initiator 原始日志。环境包含完整包版本、二进制/包装器 SHA256、可见设备、NIC 状态和参数，便于复现。
+框架保存 `summary.txt/json`、`metrics.csv`、`results.jsonl`；`raw/` 收集各节点的 `environment.json`、`commands.json`、`target_endpoint.json`、`target_exit.json`、`measurement.json`、`summary.json`、`cleanup.json`、`error.json` 和 target/initiator 原始日志。环境包含完整包版本、二进制/包装器 SHA256、可见设备、NIC 状态和参数，便于复现。
 
 只有所有参与节点成功完成且清理确认，整项才完成。仍需根据本集群实际卡数、NIC 速率、块大小和协议建立基线；单卡单 NIC 的结果不能使用八卡八 NIC 历史阈值解释。

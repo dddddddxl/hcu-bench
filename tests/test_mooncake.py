@@ -15,7 +15,8 @@ import yaml
 from hcu_bench.cli import preview
 from hcu_bench.planner import make_plan
 from hcu_bench.models import BenchError
-from testpacks.native_common import CleanupError
+from testpacks.native_common import CleanupError, NativeProcess
+from types import SimpleNamespace
 from testpacks.mooncake import run as mooncake
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,60 @@ class MooncakeContracts(unittest.TestCase):
         self.assertIn("--use_vram=true", command)
         self.assertIn("--duration=1", command)
         self.assertNotIn("--segment_id=", mooncake.native_command(args, "target", "10.20.1.1"))
+
+    def test_buffer_minimum_and_exact_boundary(self):
+        required = 65536 * 128 * 12
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for size in (65536, required - 1):
+                with self.subTest(size=size), self.assertRaisesRegex(ValueError, "100663296"):
+                    mooncake.validate_args(args_for(root, buffer_size=size))
+            mooncake.validate_args(args_for(root, buffer_size=required))
+            mooncake.validate_args(args_for(root, buffer_size=required + 1))
+
+    def test_undersized_buffer_rejected_before_preflight_or_native_launch(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(mooncake, "preflight") as preflight, \
+             patch.object(mooncake, "NativeProcess") as process:
+            with self.assertRaises(ValueError):
+                mooncake.run(args_for(Path(directory), buffer_size=65536))
+            preflight.assert_not_called()
+            process.assert_not_called()
+
+    def test_native_close_preserves_actual_root_exit_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with contextlib.redirect_stdout(io.StringIO()):
+                process = NativeProcess([sys.executable, "-c", "import sys; sys.exit(7)"],
+                                        directory, os.environ.copy(), root / "native.log")
+                process.reader.join(timeout=3)  # EOF proves native exit without reaping its status.
+                self.assertFalse(process.reader.is_alive())
+                process.close()
+            self.assertEqual(process.proc.returncode, 7)
+
+    def test_target_shutdown_accepts_only_owned_termination_outcomes(self):
+        cases = [(None, 0, ["terminate"], True), (None, -11, ["terminate"], False),
+                 (None, -6, ["terminate"], False), (None, 7, ["terminate"], False),
+                 (0, 0, [], False), (-11, -11, [], False), (None, 0, [], False)]
+        if os.name == "nt":
+            cases.extend([(None, 15, ["terminate"], True), (None, 1, ["terminate"], False)])
+        else:
+            cases.extend([(None, -15, ["terminate"], True), (None, -9, ["terminate", "kill"], True),
+                          (None, -9, ["terminate"], False)])
+        for before, after, actions, allowed in cases:
+            with self.subTest(before=before, after=after, actions=actions), tempfile.TemporaryDirectory() as directory:
+                process = SimpleNamespace(root_termination_actions=[], proc=SimpleNamespace(returncode=before))
+                process.proc.poll = lambda: process.proc.returncode
+                def close():
+                    process.proc.returncode = after
+                    process.root_termination_actions = actions
+                process.close = close
+                if allowed:
+                    mooncake.stop_target(process, Path(directory))
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "target"):
+                        mooncake.stop_target(process, Path(directory))
+                record = json.loads((Path(directory) / "target_exit.json").read_text())
+                self.assertEqual(record["returncode"], after)
 
     def test_manifest_and_template_plan(self):
         plan = make_plan(str(ROOT / "configs/mooncake.template.yaml"), "mooncake")
@@ -168,6 +223,10 @@ from pathlib import Path
 flags = dict(value[2:].split('=',1) for value in sys.argv[1:] if value.startswith('--') and '=' in value)
 Path(flags['mode']+'.pid').write_text(str(os.getpid()))
 if flags['mode']=='target':
+    if os.name=='posix' and os.environ.get('TEST_MOONCAKE_CASE')=='crash_shutdown':
+        import signal,resource
+        resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+        signal.signal(signal.SIGTERM,lambda *unused: os.kill(os.getpid(),signal.SIGSEGV))
     port=43100+int(flags['local_server_name'].rsplit('.',1)[1])
     print('Transfer Engine RPC using P2P handshake, listening on '+flags['local_server_name']+':'+str(port),flush=True)
     while True: time.sleep(0.1)
@@ -187,13 +246,19 @@ else:
 
 class MooncakeNativeLifecycle(unittest.TestCase):
     """CPU substitute exercises real process ownership/rendezvous, not RDMA performance."""
-    def execute(self, root, count=2, topology="pair", **overrides):
+    def execute(self, root, count=2, topology="pair", target_shutdown_code=None, **overrides):
         native = root / "fake_native.py"
         native.write_text(FAKE_NATIVE, encoding="utf-8")
         original = mooncake.native_command
         args = [args_for(root, rank, count, topology, **overrides) for rank in range(count)]
         evidence = {"binary": sys.executable, "packages": {"mooncake-transfer-engine": "0.3.13.post1+test"}}
         emitted = []
+        original_close = NativeProcess.close
+
+        def close(process):
+            original_close(process)
+            if target_shutdown_code is not None and process.log.name.endswith("target.log"):
+                process.proc.returncode = target_shutdown_code
 
         def call(value):
             try:
@@ -202,6 +267,7 @@ class MooncakeNativeLifecycle(unittest.TestCase):
                 return exc
 
         with patch.object(mooncake, "preflight", return_value=evidence), \
+             patch.object(NativeProcess, "close", close), \
              patch.object(mooncake, "cancellation", side_effect=threading.Event), \
              patch.object(mooncake, "emit", side_effect=emitted.append), \
              patch.object(mooncake, "native_command", side_effect=lambda *values: [sys.executable, str(native), *original(*values)[1:]]), \
@@ -227,6 +293,29 @@ class MooncakeNativeLifecycle(unittest.TestCase):
             self.assertEqual(measured[0]["performance_judgement"], "report_only")
             self.assertEqual(measured[0]["correctness"], "not_checked")
             self.assertTrue(any(row["measurement_status"] == "skipped" and not row["metrics"] for row in emitted))
+            self.assert_clean(root)
+
+    def test_target_crash_during_shutdown_fails_both_nodes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results, emitted = self.execute(root, target_shutdown_code=-11)
+            self.assertTrue(all(isinstance(result, Exception) for result in results), results)
+            for summary in root.glob("node-*/summary.json"):
+                self.assertNotEqual(json.loads(summary.read_text())["status"], "completed")
+            self.assertEqual(json.loads((root / "node-0/target_exit.json").read_text())["returncode"], -11)
+            self.assert_clean(root)
+
+    @unittest.skipUnless(os.name == "posix", "Real SIGSEGV signal semantics require POSIX")
+    def test_real_target_sigsegv_on_termination_fails_both_nodes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"TEST_MOONCAKE_CASE": "crash_shutdown"}):
+            root = Path(directory)
+            results, emitted = self.execute(root)
+            self.assertTrue(all(isinstance(result, Exception) for result in results), results)
+            record = json.loads((root / "node-0/target_exit.json").read_text())
+            self.assertEqual(record["returncode"], -11)
+            self.assertEqual(record["owned_termination_actions"], ["terminate"])
+            self.assertFalse((root / "node-0/summary.json").exists())
+            self.assertFalse((root / "node-1/summary.json").exists())
             self.assert_clean(root)
 
     def test_ring_stops_both_roles_on_every_node(self):

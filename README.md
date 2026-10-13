@@ -137,7 +137,7 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 
 已在一个 BW1100 单机 8 卡环境验证：适配原生 handle 索引后，DeepEP 达到 10 分钟窗口；GSM8K 100 题得分 98%，仅报告分数。存在性能尖峰，不能推断所有镜像/节点或性能稳定性已验收。新版 Bash 入口及框架免密 SSH/managed Docker 接口仍需对应真实环境验证。
 
-105 项测试在 Windows Python 3.13 与 Linux Python 3.10 开发环境验证；不代表真实 GPU 性能。开发环境安装、测试及无 GPU 模拟运行：
+111 项测试在 Linux Python 3.10 全部通过；Windows Python 3.13 通过 110 项，跳过 1 项仅 POSIX 支持的真实 SIGSEGV 用例。它们不代表真实 GPU 性能。开发环境安装、测试及无 GPU 模拟运行：
 
 ```bash
 python3 -m venv .venv
