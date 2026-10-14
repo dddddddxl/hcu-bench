@@ -7,7 +7,8 @@
 | DeepEP | 原生低延迟压测，默认 10 分钟，输出带宽和延迟 |
 | e2e | SGLang 0.5.12 / DeepSeek-V4-Flash INT8，GSM8K 100 题、5-shot，默认只报告分数 |
 | Mooncake | RDMA / VRAM 原生压测包，动态端口，pair / fan-in / pairs / ring，支持显式吞吐下限 |
-| RCCL / 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
+| RCCL | 原调度入口仍为模拟用例；新增独立 [wheel 试点](experimental/wheel-pilot/README.md)，接入外部单机 AllReduce 结果 |
+| 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
 
 ## 获取代码
 

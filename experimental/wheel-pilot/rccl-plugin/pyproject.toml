@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hcubench-communication-rccl"
+version = "0.1.0a3"
+description = "External rccl-tests AllReduce evidence adapter; no MPI runner"
+requires-python = ">=3.10"
+dependencies = ["hcubench-core==0.1.0a3"]
+
+[project.entry-points."hcubench.plugins"]
+"communication.rccl_allreduce" = "hcubench_communication_rccl:RcclAllReduce"
+
+[tool.setuptools.packages.find]
+where = ["src"]
