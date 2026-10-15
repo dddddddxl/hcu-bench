@@ -8,6 +8,7 @@
 | e2e | SGLang 0.5.12 / DeepSeek-V4-Flash INT8，GSM8K 100 题、5-shot，默认只报告分数 |
 | Mooncake | RDMA / VRAM 原生压测包，动态端口，pair / fan-in / pairs / ring，支持显式吞吐下限 |
 | RCCL | 原生单机 MPI AllReduce 已接入统一入口，输出各消息大小的延迟、algbw、busbw；保留独立 wheel 试点 |
+| PCIe | 单机五类 CPU/GPU 拷贝路径，默认 512 MiB；分别记录 Avg BW、Peak BW，统一入口待真实节点验证 |
 | 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
 
 ## 获取代码
@@ -26,6 +27,7 @@ cd hcu-bench
 | [in-container.template.yaml](configs/in-container.template.yaml) | 在自己已创建的容器内运行，优先用这份 |
 | [managed-container.template.yaml](configs/managed-container.template.yaml) | 宿主机调用你的脚本，自动创建/清理容器 |
 | [remote.template.yaml](configs/remote.template.yaml) | 控制机通过 SSH 调度 Linux 节点 |
+| [pcie.template.yaml](configs/pcie.template.yaml) | 只测 PCIe 带宽，无需准备模型和通信测试包 |
 | [demo.yaml](configs/demo.yaml) | 无 GPU 的模拟测试 |
 
 ## 方式一：使用自己创建的容器
@@ -48,6 +50,9 @@ vars:
   bench_root: /work/hcu-bench
   rccl_binary: /work/rccl-tests/build/all_reduce_perf
   rccl_ranks: 8
+  pcie_binary: /opt/dtk/bin/rocm-bandwidth-test
+  pcie_cpu_devices: "YOUR_CPU_DEVICE_IDS"
+  pcie_gpu_devices: "YOUR_GPU_DEVICE_IDS"
   deepep_script: /work/tests/test_low_latency.py
   model: /models/DeepSeek-V4-Flash-Channel-INT8-w8a8
   dataset: /datasets/gsm8k.jsonl
@@ -63,6 +68,7 @@ vars:
 这只是 `vars` 区域的示例，不要用它覆盖整个 YAML。工作目录等公共值通过 `${vars.xxx}` 引用，改一次即可；卡号和进程数要匹配实际资源。
 
 - **RCCL**：准备 MPI 版本的 `all_reduce_perf`（当前解析契约为 rccl-tests `ae3e635` 输出格式）和已有 Open MPI `mpirun`，`rccl_ranks` 必须与 `gpus` 数量相同。不会自动编译、安装或替换镜像库。参数及结果见 [RCCL 说明](docs/rccl.md)。
+- **PCIe**：使用镜像中已有的 `rocm-bandwidth-test`，先执行 `-e`，将 CPU/GPU Device ID 填入 YAML。它与 HCU 卡号不是同一套编号，须按 PCI 地址/UUID 核对；不自动安装工具或改频率。见 [PCIe 说明](docs/pcie.md)。
 - **DeepEP**：准备与镜像 wheel 接口兼容的 `test_low_latency.py` 和同目录 `utils.py`。只选 deepep 时，RCCL 和精度项的输入路径可以暂不填写。
 - **精度**：准备已有模型、question/answer 格式的 GSM8K JSONL、服务 JSON profile 和 EP JSON config。服务 profile 可从 [Flash INT8 模板](testpacks/sglang_accuracy/flash-int8-bw1100.template.json)复制后修改；部署配方与 EP 配置来源见 [真实测试说明](docs/native-tests.md)。YAML 的网卡不会自动改写外部服务 profile，两处需保持一致。
 - 先确认 GPU 无其他业务占用。工具不下载模型、不转换未提供的数据、不猜网卡/GID，也不自动修补原生测试代码。
@@ -74,6 +80,7 @@ vars:
 ```bash
 bash bench.sh check -c configs/bench.yaml --suite deepep
 bash bench.sh rccl        # 只跑真实单机 AllReduce
+bash bench.sh pcie        # 只跑五类 PCIe 带宽路径
 bash bench.sh deepep      # 只跑低延迟压测
 bash bench.sh e2e         # 只跑精度测试
 bash bench.sh all         # 按 YAML 顺序跑全部启用项
@@ -81,7 +88,7 @@ bash bench.sh all         # 按 YAML 顺序跑全部启用项
 
 上面的运行命令是不同选择，不需要全部执行。**日常只需 `bash bench.sh all`**：脚本已内置默认配置路径 `configs/bench.yaml`，不必在命令行指定；也保留 `bash bench.sh configs/bench.yaml all`。默认路径按脚本所在仓库解析，不受当前目录影响。
 
-新模板按 RCCL → DeepEP → GSM8K 顺序串行执行。`all` 指 YAML 中全部启用项，不会自动加入未配置的 Mooncake 或用模拟算子凑数；Mooncake 双机条件准备好后，将 [Mooncake 模板](configs/mooncake.template.yaml) 中相关节点和测试项合并进自己的 YAML。旧的 `configs/bench.yaml` 不会被覆盖，需手动补入模板里的 `rccl_binary`、`rccl_ranks` 和 `rccl_allreduce` 测试块。
+新模板按 RCCL → PCIe → DeepEP → GSM8K 顺序串行执行。`all` 指 YAML 中全部启用项，不会自动加入未配置的 Mooncake 或用模拟算子凑数；Mooncake 双机条件准备好后，将 [Mooncake 模板](configs/mooncake.template.yaml) 中相关节点和测试项合并进自己的 YAML。旧的 `configs/bench.yaml` 不会被覆盖，新增模块需从模板补入对应 vars 和测试块；暂不测的项设置 `enabled: false`。
 
 日志自动保存，不用手动设置 ROOT/NAME、串联 docker exec 或 tee。结束后只清理本次测试进程，**不会删除你自己创建的容器**。
 
@@ -146,7 +153,7 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 
 已在一个 BW1100 单机 8 卡环境验证：适配原生 handle 索引后，DeepEP 达到 10 分钟窗口；GSM8K 100 题得分 98%，仅报告分数。存在性能尖峰，不能推断所有镜像/节点或性能稳定性已验收。新版 Bash 入口及框架免密 SSH/managed Docker 接口仍需对应真实环境验证。
 
-本次集成回归共 120 项：本地 Windows Python 3.10 通过 118 项，跳过 2 项 POSIX 专用测试（SIGSEGV 与原生 Bash 入口）；仓库 CI 覆盖 Linux / Windows。回归包含 RCCL 正常/失败/取消/清理、配置选择与模板，不代表真实 GPU 性能。RCCL 原生二进制此前已在单机双卡验证；本次新统一入口因测试节点正在运行 CI，未重跑 GPU 负载。开发环境安装、测试及无 GPU 模拟运行：
+回归覆盖原生结果解析、失败/取消/清理、配置选择和模板；Windows 跳过 POSIX 专用测试，仓库 CI 覆盖 Linux / Windows。本地回归不代表真实 GPU 性能。RCCL 原生二进制此前已在单机双卡验证；PCIe 参考已有 2.6.0 日志接入，但新统一入口尚未跑真实 GPU。开发环境安装、测试及无 GPU 模拟运行：
 
 ```bash
 python3 -m venv .venv
@@ -158,4 +165,4 @@ bash bench.sh configs/demo.yaml all
 
 开发安装不要求在待验镜像里执行。Windows 使用 `.venv\Scripts\python.exe` 和 `bench.cmd`。模拟数据明确标为 SIMULATED，不是 GPU 性能。
 
-更多内容：[简化运行](docs/quick-run.md) · [真实测试说明](docs/native-tests.md) · [Mooncake 压测](docs/mooncake.md) · [同事测试包接入规范](docs/testpacks.md)。
+更多内容：[简化运行](docs/quick-run.md) · [PCIe 带宽](docs/pcie.md) · [真实测试说明](docs/native-tests.md) · [Mooncake 压测](docs/mooncake.md) · [同事测试包接入规范](docs/testpacks.md)。

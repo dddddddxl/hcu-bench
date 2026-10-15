@@ -1,0 +1,40 @@
+version: 1
+id: pcie.bandwidth
+suite: pcie
+duration_control: native
+max_nodes: 1
+parameters:
+  bench_root: {type: string, required: true}
+  binary: {type: string, default: /opt/dtk/bin/rocm-bandwidth-test}
+  cpu_devices: {type: string, required: true}
+  gpu_devices: {type: string, required: true}
+  size_mib: {type: integer, default: 512, min: 1, max: 4096}
+  iters: {type: integer, default: 20, min: 1, max: 10000}
+command:
+  - python3
+  - -u
+  - "${p_bench_root}/testpacks/pcie/run.py"
+  - --binary
+  - "${p_binary}"
+  - --cpu-devices
+  - "${p_cpu_devices}"
+  - --gpu-devices
+  - "${p_gpu_devices}"
+  - --size-mib
+  - "${p_size_mib}"
+  - --iters
+  - "${p_iters}"
+  - --gpu-ids
+  - "${gpu_ids}"
+  - --nnodes
+  - "${nnodes}"
+  - --node-rank
+  - "${node_rank}"
+  - --output-dir
+  - "${case_dir}"
+cwd: "${case_dir}"
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv"]
+artifact_limit_mb: 100

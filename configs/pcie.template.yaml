@@ -1,0 +1,35 @@
+# 只测 PCIe：复制为 configs/bench.yaml，填好路径和编号后 bash bench.sh pcie。
+# 也可以直接 bash bench.sh configs/pcie.template.yaml pcie。
+version: 1
+name: pcie-bandwidth
+failure_policy: continue
+vars:
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  bench_root: /YOUR_BENCH_REPO
+  binary: /opt/dtk/bin/rocm-bandwidth-test
+  # 编号必须来自当前容器中 binary -e 输出，不能直接套用示例。
+  cpu_devices: "YOUR_CPU_DEVICE_IDS"       # 如 "0,1"，CPU 内存代理。
+  gpu_devices: "YOUR_GPU_DEVICE_IDS"       # 如 "2,3,4,5,6,7,8,9"，原生 Device ID。
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7]         # Bench 资源卡号，与 gpu_devices 逐项对应。
+output_dir: "${vars.workspace}/results"
+nodes:
+  node0:
+    executor: local
+    gpus: "${vars.gpus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+tests:
+  pcie_bandwidth:
+    suite: pcie
+    adapter: command
+    pack: ../testpacks/pcie/manifest.yaml
+    nodes: [node0]
+    timeout_s: 1800                       # 整个用例的故障时限，不是计划时长。
+    repeats: 1                           # 独立轮数；如需重复性统计改成 3。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.binary}"
+      cpu_devices: "${vars.cpu_devices}"
+      gpu_devices: "${vars.gpu_devices}"
+      size_mib: 512                      # MiB，一次拷贝的缓冲区大小。
+      iters: 20                          # 设置原生 ROCM_BW_ITER_CNT。

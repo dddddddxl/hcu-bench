@@ -1,5 +1,5 @@
 # 自己创建容器后使用；所有输入路径都填容器内路径，不需要 Docker socket。
-# 在仓库目录复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh rccl / deepep / e2e / all。
+# 在仓库目录复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh rccl / pcie / deepep / e2e / all。
 # 本模板默认单机；需已有 Python 3.10+、PyYAML、psutil 和原生测试依赖。
 version: 1
 name: rccl-deepep-and-gsm8k       # 测试方案名称，便于识别日志。
@@ -10,6 +10,9 @@ vars:
   bench_root: /YOUR_BENCH_REPO              # git clone 的仓库在容器内的绝对路径。
   rccl_binary: /YOUR_RCCL_TESTS/build/all_reduce_perf # 已编译的 MPI 版本；不自动下载/编译或换库。
   rccl_ranks: 8                            # 一进程一卡，必须等于下方 gpus 数量。
+  pcie_binary: /opt/dtk/bin/rocm-bandwidth-test # 镜像已有工具，不自动安装。
+  pcie_cpu_devices: "YOUR_CPU_DEVICE_IDS"   # 容器内运行该工具 -e 后填写，例如 "0,1"。
+  pcie_gpu_devices: "YOUR_GPU_DEVICE_IDS"   # 例如 "2,3,4,5,6,7,8,9"；不是 HCU 卡号，须与 gpus 对应。
   deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py  # 同目录必须有 utils.py。
   # 下面四项只在运行 e2e / all 时需要；模型、数据及 JSON 配置须已存在。
   model: /YOUR_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
@@ -47,6 +50,21 @@ tests:
       datatype: half                     # half / float / double；归约操作目前为 sum。
       warmup_iters: 20
       iters: 50                          # 每个消息大小的测量迭代数。
+  # 五类 PCIe 路径，固定大小逐对测试；不做正确性/长期压测，不使用 duration_s。
+  pcie_bandwidth:
+    suite: pcie
+    adapter: command
+    pack: ../testpacks/pcie/manifest.yaml
+    nodes: [node0]
+    timeout_s: 1800                       # 整个路径扫描的故障时限；不是压测时长。
+    repeats: 1                           # 改成 3 可独立运行三轮，各轮单独归档。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.pcie_binary}"
+      cpu_devices: "${vars.pcie_cpu_devices}"
+      gpu_devices: "${vars.pcie_gpu_devices}"
+      size_mib: 512                      # 单次拷贝大小，MiB；同时记录 Avg BW 和 Peak BW。
+      iters: 20                          # 原生 ROCM_BW_ITER_CNT；不改频率或软件包。
   # bash bench.sh deepep 选择此项；num_processes 由原生脚本 spawn，不是 torchrun 入口数。
   deepep_pressure:
     suite: deepep

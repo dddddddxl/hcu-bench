@@ -1,6 +1,6 @@
 # 自动建容器模式：在 Linux Docker 宿主机控制环境执行，不是在待测容器内执行。
 # 需已有 Python 3.10+、PyYAML、Docker，以及你提供的容器 start/check/stop 脚本。
-# 复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh rccl / deepep / e2e / all。
+# 复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh rccl / pcie / deepep / e2e / all。
 version: 1
 name: managed-rccl-deepep-and-gsm8k # 测试方案名称。
 failure_policy: continue         # 普通失败清理后继续；stop 可停止剩余项。
@@ -11,6 +11,9 @@ vars:
   bench_root: /YOUR_CONTAINER_BENCH_REPO              # 容器内仓库路径，启动脚本需挂载代码。
   rccl_binary: /YOUR_CONTAINER_RCCL_TESTS/build/all_reduce_perf # 已编译的 MPI 版本，启动脚本需挂载。
   rccl_ranks: 8                                      # 一进程一卡，须等于 gpus 数量。
+  pcie_binary: /opt/dtk/bin/rocm-bandwidth-test         # 容器内已有工具路径。
+  pcie_cpu_devices: "YOUR_CPU_DEVICE_IDS"             # 在相同容器/可见性环境执行 -e 后填写。
+  pcie_gpu_devices: "YOUR_GPU_DEVICE_IDS"             # 工具 Device ID，须与下方 gpus 实际对应。
   container_hook: /YOUR_HOST_SCRIPTS/container.sh     # 宿主机上的用户脚本，接口见下方 containers。
   image: YOUR_APPROVED_IMAGE                         # 已确认的待测镜像，工具不自动升级。
   deepep_script: /YOUR_CONTAINER_NATIVE_TESTS/test_low_latency.py # 同目录有 utils.py。
@@ -63,6 +66,21 @@ tests:
       datatype: half                               # half / float / double，操作默认为 sum。
       warmup_iters: 20
       iters: 50                                    # 每个消息大小的测量迭代数。
+  pcie_bandwidth:
+    suite: pcie
+    adapter: command
+    pack: ../testpacks/pcie/manifest.yaml
+    nodes: [node0]
+    container: test_image
+    timeout_s: 1800                                  # 整个路径扫描的故障时限。
+    repeats: 1                                      # 需要三轮独立复测时改成 3。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.pcie_binary}"
+      cpu_devices: "${vars.pcie_cpu_devices}"
+      gpu_devices: "${vars.pcie_gpu_devices}"
+      size_mib: 512                                 # MiB，不使用全矩阵默认大小。
+      iters: 20                                     # ROCM_BW_ITER_CNT，不做独立数据校验。
   # 原生 DeepEP 压测；脚本及依赖必须已存在于容器，不由工具安装。
   deepep_pressure:
     suite: deepep

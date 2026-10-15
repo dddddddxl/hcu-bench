@@ -3,7 +3,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-SUITES = ("rccl", "deepep", "mooncake", "operators", "e2e")
+SUITES = ("rccl", "pcie", "deepep", "mooncake", "operators", "e2e")
 ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,79}$")
 
 

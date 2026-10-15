@@ -18,12 +18,13 @@ cp configs/in-container.template.yaml configs/bench.yaml
 
 ```bash
 bash bench.sh deepep              # 只跑低延迟压测
+bash bench.sh pcie                # 只跑五类 PCIe 带宽路径
 bash bench.sh e2e                 # 只跑精度测试
 bash bench.sh all                 # 按 YAML 顺序跑全部启用项
 bash bench.sh deepep,e2e          # 选择多个 suite
 ```
 
-suite 顺序仍按 YAML，而不是逗号参数顺序。当前真实模块为 deepep/e2e，其他 suite 需先接入测试包。
+suite 顺序仍按 YAML，而不是逗号参数顺序。综合容器模板包含 RCCL、PCIe、DeepEP、e2e；Mooncake 见单独的双机模板。PCIe 需先核对原生工具的 Device ID，配置和结果说明见 [PCIe 带宽测试](pcie.md)。
 
 退出测试会保留用户自己的容器，只清理本次测试的进程。所有输出归档到 `vars.workspace/results/RUN_ID`，控制台会打印具体目录。
 
