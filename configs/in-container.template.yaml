@@ -1,13 +1,15 @@
 # 自己创建容器后使用；所有输入路径都填容器内路径，不需要 Docker socket。
-# 在仓库目录复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh deepep / e2e / all。
+# 在仓库目录复制为 configs/bench.yaml，修改 vars，然后 bash bench.sh rccl / deepep / e2e / all。
 # 本模板默认单机；需已有 Python 3.10+、PyYAML、psutil 和原生测试依赖。
 version: 1
-name: deepep-and-gsm8k            # 测试方案名称，便于识别日志。
+name: rccl-deepep-and-gsm8k       # 测试方案名称，便于识别日志。
 failure_policy: continue         # 普通失败清理后继续；改为 stop 可停止剩余项。
 # 公共值只填一次；下方 ${vars.xxx} 会引用它们，不要把密码放进配置。
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE       # 可写目录；自动创建 results/RUN_ID。
   bench_root: /YOUR_BENCH_REPO              # git clone 的仓库在容器内的绝对路径。
+  rccl_binary: /YOUR_RCCL_TESTS/build/all_reduce_perf # 已编译的 MPI 版本；不自动下载/编译或换库。
+  rccl_ranks: 8                            # 一进程一卡，必须等于下方 gpus 数量。
   deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py  # 同目录必须有 utils.py。
   # 下面四项只在运行 e2e / all 时需要；模型、数据及 JSON 配置须已存在。
   model: /YOUR_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
@@ -27,6 +29,24 @@ nodes:
     env:
       HIP_VISIBLE_DEVICES: "${gpu_ids}"
 tests:
+  # all 按顺序串行执行；某项暂不测可在该项下加 enabled: false。
+  # RCCL 单机 AllReduce，固定迭代完成后校验；不能配置 duration_s。
+  rccl_allreduce:
+    suite: rccl
+    adapter: command
+    pack: ../testpacks/rccl/manifest.yaml
+    nodes: [node0]
+    timeout_s: 600                         # 故障时限，超时不算正确性通过。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.rccl_binary}"
+      ranks: "${vars.rccl_ranks}"
+      min_bytes: 8192                     # 8 KiB，单位字节。
+      max_bytes: 67108864                 # 64 MiB，必须落在倍增序列上。
+      step_factor: 2
+      datatype: half                     # half / float / double；归约操作目前为 sum。
+      warmup_iters: 20
+      iters: 50                          # 每个消息大小的测量迭代数。
   # bash bench.sh deepep 选择此项；num_processes 由原生脚本 spawn，不是 torchrun 入口数。
   deepep_pressure:
     suite: deepep

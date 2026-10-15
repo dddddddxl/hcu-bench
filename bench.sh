@@ -18,10 +18,16 @@ case "${1:-}" in
         ;;
 esac
 
+# Default node configuration; no config argument is needed for `bash bench.sh all`.
 CONFIG="$HERE/configs/bench.yaml"
 if [[ "${1:-}" == *.yaml || "${1:-}" == *.yml ]]; then
     CONFIG=$1
     shift
+fi
+if [[ ! -f "$CONFIG" ]]; then
+    echo "Config not found: $CONFIG" >&2
+    echo "First copy configs/in-container.template.yaml (or managed-container.template.yaml) to configs/bench.yaml and edit it for your node." >&2
+    exit 2
 fi
 SUITE=${1:-all}
 if (( $# )); then shift; fi

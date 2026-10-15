@@ -7,7 +7,7 @@
 | DeepEP | 原生低延迟压测，默认 10 分钟，输出带宽和延迟 |
 | e2e | SGLang 0.5.12 / DeepSeek-V4-Flash INT8，GSM8K 100 题、5-shot，默认只报告分数 |
 | Mooncake | RDMA / VRAM 原生压测包，动态端口，pair / fan-in / pairs / ring，支持显式吞吐下限 |
-| RCCL | 原调度入口仍为模拟用例；新增独立 [wheel 试点](experimental/wheel-pilot/README.md)，接入外部单机 AllReduce 结果 |
+| RCCL | 原生单机 MPI AllReduce 已接入统一入口，输出各消息大小的延迟、algbw、busbw；保留独立 wheel 试点 |
 | 算子 | 框架入口和模拟用例已预留，真实测试包待接入 |
 
 ## 获取代码
@@ -46,6 +46,8 @@ cp configs/in-container.template.yaml configs/bench.yaml
 vars:
   workspace: /work/bench-output
   bench_root: /work/hcu-bench
+  rccl_binary: /work/rccl-tests/build/all_reduce_perf
+  rccl_ranks: 8
   deepep_script: /work/tests/test_low_latency.py
   model: /models/DeepSeek-V4-Flash-Channel-INT8-w8a8
   dataset: /datasets/gsm8k.jsonl
@@ -60,7 +62,8 @@ vars:
 
 这只是 `vars` 区域的示例，不要用它覆盖整个 YAML。工作目录等公共值通过 `${vars.xxx}` 引用，改一次即可；卡号和进程数要匹配实际资源。
 
-- **DeepEP**：准备与镜像 wheel 接口兼容的 `test_low_latency.py` 和同目录 `utils.py`。只选 deepep 时，精度项的输入路径可以暂不填写。
+- **RCCL**：准备 MPI 版本的 `all_reduce_perf`（当前解析契约为 rccl-tests `ae3e635` 输出格式）和已有 Open MPI `mpirun`，`rccl_ranks` 必须与 `gpus` 数量相同。不会自动编译、安装或替换镜像库。参数及结果见 [RCCL 说明](docs/rccl.md)。
+- **DeepEP**：准备与镜像 wheel 接口兼容的 `test_low_latency.py` 和同目录 `utils.py`。只选 deepep 时，RCCL 和精度项的输入路径可以暂不填写。
 - **精度**：准备已有模型、question/answer 格式的 GSM8K JSONL、服务 JSON profile 和 EP JSON config。服务 profile 可从 [Flash INT8 模板](testpacks/sglang_accuracy/flash-int8-bw1100.template.json)复制后修改；部署配方与 EP 配置来源见 [真实测试说明](docs/native-tests.md)。YAML 的网卡不会自动改写外部服务 profile，两处需保持一致。
 - 先确认 GPU 无其他业务占用。工具不下载模型、不转换未提供的数据、不猜网卡/GID，也不自动修补原生测试代码。
 
@@ -70,12 +73,17 @@ vars:
 
 ```bash
 bash bench.sh check -c configs/bench.yaml --suite deepep
+bash bench.sh rccl        # 只跑真实单机 AllReduce
 bash bench.sh deepep      # 只跑低延迟压测
 bash bench.sh e2e         # 只跑精度测试
 bash bench.sh all         # 按 YAML 顺序跑全部启用项
 ```
 
-上面三个运行命令是不同选择，不需要全部执行。日志自动保存，不用手动设置 ROOT/NAME、串联 docker exec 或 tee。结束后只清理本次测试进程，**不会删除你自己创建的容器**。
+上面的运行命令是不同选择，不需要全部执行。**日常只需 `bash bench.sh all`**：脚本已内置默认配置路径 `configs/bench.yaml`，不必在命令行指定；也保留 `bash bench.sh configs/bench.yaml all`。默认路径按脚本所在仓库解析，不受当前目录影响。
+
+新模板按 RCCL → DeepEP → GSM8K 顺序串行执行。`all` 指 YAML 中全部启用项，不会自动加入未配置的 Mooncake 或用模拟算子凑数；Mooncake 双机条件准备好后，将 [Mooncake 模板](configs/mooncake.template.yaml) 中相关节点和测试项合并进自己的 YAML。旧的 `configs/bench.yaml` 不会被覆盖，需手动补入模板里的 `rccl_binary`、`rccl_ranks` 和 `rccl_allreduce` 测试块。
+
+日志自动保存，不用手动设置 ROOT/NAME、串联 docker exec 或 tee。结束后只清理本次测试进程，**不会删除你自己创建的容器**。
 
 ## 方式二：自动创建容器
 
@@ -138,7 +146,7 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 
 已在一个 BW1100 单机 8 卡环境验证：适配原生 handle 索引后，DeepEP 达到 10 分钟窗口；GSM8K 100 题得分 98%，仅报告分数。存在性能尖峰，不能推断所有镜像/节点或性能稳定性已验收。新版 Bash 入口及框架免密 SSH/managed Docker 接口仍需对应真实环境验证。
 
-111 项测试在 Linux Python 3.10 全部通过；Windows Python 3.13 通过 110 项，跳过 1 项仅 POSIX 支持的真实 SIGSEGV 用例。它们不代表真实 GPU 性能。开发环境安装、测试及无 GPU 模拟运行：
+本次集成回归共 120 项：本地 Windows Python 3.10 通过 118 项，跳过 2 项 POSIX 专用测试（SIGSEGV 与原生 Bash 入口）；仓库 CI 覆盖 Linux / Windows。回归包含 RCCL 正常/失败/取消/清理、配置选择与模板，不代表真实 GPU 性能。RCCL 原生二进制此前已在单机双卡验证；本次新统一入口因测试节点正在运行 CI，未重跑 GPU 负载。开发环境安装、测试及无 GPU 模拟运行：
 
 ```bash
 python3 -m venv .venv

@@ -1,0 +1,53 @@
+version: 1
+id: rccl.allreduce
+suite: rccl
+# Complete the finite native benchmark; timeout is a failure, not a pressure window.
+duration_control: native
+max_nodes: 1
+parameters:
+  bench_root: {type: string, required: true}
+  binary: {type: string, required: true}
+  ranks: {type: integer, default: 8, min: 2, max: 8}
+  min_bytes: {type: integer, default: 8192, min: 8, max: 1073741824}
+  max_bytes: {type: integer, default: 67108864, min: 8, max: 1073741824}
+  step_factor: {type: integer, default: 2, min: 2, max: 16}
+  datatype: {type: string, default: half, choices: [half, float, double]}
+  operation: {type: string, default: sum, choices: [sum]}
+  warmup_iters: {type: integer, default: 20, min: 1, max: 10000}
+  iters: {type: integer, default: 50, min: 1, max: 100000}
+command:
+  - python3
+  - -u
+  - "${p_bench_root}/testpacks/rccl/run.py"
+  - --binary
+  - "${p_binary}"
+  - --ranks
+  - "${p_ranks}"
+  - --min-bytes
+  - "${p_min_bytes}"
+  - --max-bytes
+  - "${p_max_bytes}"
+  - --step-factor
+  - "${p_step_factor}"
+  - --datatype
+  - "${p_datatype}"
+  - --operation
+  - "${p_operation}"
+  - --warmup-iters
+  - "${p_warmup_iters}"
+  - --iters
+  - "${p_iters}"
+  - --gpu-ids
+  - "${gpu_ids}"
+  - --node-rank
+  - "${node_rank}"
+  - --nnodes
+  - "${nnodes}"
+  - --output-dir
+  - "${case_dir}"
+cwd: "${case_dir}"
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/measurements.csv"]
+artifact_limit_mb: 100

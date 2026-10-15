@@ -26,7 +26,7 @@ def get_pack(test: dict, base: Path) -> dict:
     require(isinstance(test.get("pack"), str), "command adapter requires a test-pack manifest path")
     pack_path = (base / test["pack"]).resolve()
     pack = load_document(pack_path)
-    keys(pack, {"version", "id", "suite", "parameters", "command", "cwd", "env", "result_protocol", "requires_metrics", "artifacts", "artifact_limit_mb", "duration_control"}, "test pack")
+    keys(pack, {"version", "id", "suite", "parameters", "command", "cwd", "env", "result_protocol", "requires_metrics", "artifacts", "artifact_limit_mb", "duration_control", "max_nodes"}, "test pack")
     require(pack.get("version") == 1 and pack.get("suite") == test["suite"], "Test-pack version or suite mismatch")
     require(isinstance(pack.get("id"), str) and bool(pack["id"]), "Test-pack id is required")
     argv(pack.get("command"), "test-pack command")
@@ -37,6 +37,8 @@ def get_pack(test: dict, base: Path) -> dict:
     require(pack.get("duration_control", "framework") in ("framework", "native"), "duration_control must be framework or native")
     require(isinstance(pack.get("env", {}), dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in pack.get("env", {}).items()), "Test-pack env values must be strings")
     pack["manifest_path"] = str(pack_path)
+    if "max_nodes" in pack:
+        require(type(pack["max_nodes"]) is int and pack["max_nodes"] >= 1, "max_nodes must be a positive integer")
     artifacts = pack.get("artifacts", [])
     require(isinstance(artifacts, list) and all(isinstance(path, str) and path for path in artifacts), "artifacts must be a list of declared path/glob strings")
     positive(pack.get("artifact_limit_mb", 100), "artifact_limit_mb")

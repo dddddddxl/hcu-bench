@@ -25,6 +25,7 @@ def make_plan(path: str, selection: str = "all", overrides: list[str] | None = N
         nodes = test.get("nodes")
         require(isinstance(nodes, list) and nodes and all(isinstance(node, str) and node in config["nodes"] for node in nodes), f"{test_id}: choose known nodes")
         require(len(nodes) == len(set(nodes)), f"{test_id}: duplicate nodes")
+        require(len(nodes) <= pack.get("max_nodes", len(nodes)), f"{test_id}: test pack supports at most {pack.get('max_nodes')} node(s)")
         if test["adapter"] == "mock":
             require(all(config["nodes"][node]["executor"] == "local" for node in nodes), "mock runs only on local nodes; it does not represent remote hardware")
         container = test.get("container")
