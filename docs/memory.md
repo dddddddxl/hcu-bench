@@ -1,6 +1,6 @@
 # 显存带宽测试
 
-`memory` 调用已有的 **dcu-hipbenchmark main-staging-1.0 / hcu-stream**，执行 `run_pattern.sh peak zd1`、`peak zd2` 对应的 24 项用例。它测的是单卡显存、缓存和 LDS 带宽，不是 PCIe，也不是多卡通信带宽。
+`memory` 使用仓库内的 **dcu-hipbenchmark main-staging-1.0 / hcu-stream**，执行 `run_pattern.sh peak zd1`、`peak zd2` 对应的 24 项用例。它测的是单卡显存、缓存和 LDS 带宽，不是 PCIe，也不是多卡通信带宽。
 
 ## 准备与运行
 
@@ -10,7 +10,7 @@
 cp configs/memory.template.yaml configs/bench.yaml
 ```
 
-改 YAML 中的工作目录、仓库路径、`memory_binary` 和 `gpus`，然后：
+改 YAML 中的工作目录、仓库路径和 `hcus`，`memory_binary: auto` 保持默认，然后：
 
 ```bash
 bash bench.sh check -c configs/bench.yaml --suite memory
@@ -19,11 +19,11 @@ bash bench.sh memory
 
 `check` 只检查配置，不会检查远端二进制、占卡或启动负载。运行前自行确认所选卡空闲、编译架构与设备匹配。Python 3.10+、PyYAML、psutil 及原生运行库须已有，不会自动安装。
 
-综合容器模板已加入 memory，填写 `memory_binary`、`memory_gpus` 后，`bash bench.sh all` 会按 YAML 顺序一起运行。旧配置不会被覆盖，需补入这两个变量和 `memory_bandwidth` 测试块；暂不测可设置 `enabled: false`。SSH 和自动创建容器仍使用现有接口，输入路径必须在执行环境内可见。
+综合容器模板已加入 memory，填写 `memory_binary`、`memory_hcus` 后，`bash bench.sh all` 会按 YAML 顺序一起运行。旧配置不会被覆盖，需补入这两个变量和 `memory_bandwidth` 测试块；暂不测可设置 `enabled: false`。SSH 和自动创建容器仍使用现有接口，输入路径必须在执行环境内可见。
 
 ### 尚未编译时
 
-原生源码由使用者准备，仓库不分发该压缩包或二进制。YY / gfx92a 已验证的编译方式是在原生源码根目录执行：
+源码已放在 `vendor/hcu-stream`，首次运行自动编译到 `build.cache_dir`，无需手动执行 make。YY / gfx92a 使用下面的编译配方，仅供核对：
 
 ```bash
 export ROCM_PATH=/opt/dtk
@@ -31,7 +31,7 @@ make -B HIPCC=/opt/dtk/bin/aicc \
   OFFLOAD_ARCH=--offload-arch=gfx92a TARGET_NUM=9210
 ```
 
-YY85 这次环境中，默认 `hipcc` 指向的 DCC 不识别部分指令，改用镜像已有 AICC 后原源码编译通过。这里是该环境的已验证配方，不代表其他卡型也应使用 gfx92a/9210。工具不会自动编译、换库或改频率；将编译得到的 **`hcu-stream`** 路径填入 YAML 即可。
+YY85 此前默认 `hipcc` 指向的 DCC 不识别部分指令，使用镜像已有 AICC 后原源码编译通过。自动准备默认使用 AICC，并将 gfx92a 对应的数字宏设为 9210；其他架构不会沿用该值。不换库、不改频率。需要复用现成工具时，可将 `memory_binary` 从 `auto` 改为绝对路径。
 
 gfx938 在现有 DTK 26.04 镜像上的试编译尚未通过，分别遇到 AICC 指令操作数和 HIPCC 内建函数接口错误；当前不能宣称已支持该组合。不要只替换架构编号就沿用 gfx92a 的二进制或配方，需要原生测试包提供兼容实现。
 
@@ -39,7 +39,7 @@ gfx938 在现有 DTK 26.04 镜像上的试编译尚未通过，分别遇到 AICC
 
 | 参数 | 默认值 | 含义 |
 | --- | --- | --- |
-| `nodes.node0.gpus` | 模板 `[0]` | 允许使用的卡号，先确认空闲 |
+| `nodes.node0.hcus` | 模板 `[0]` | 允许使用的卡号，先确认空闲 |
 | `params.devices` | `""` | 空字符串测上述全部卡；`"1,3"` 只测其中两张，不能超出分配范围 |
 | `params.presets` | `both` | 两组共 24 项；也可单选 `zd1` / `zd2` |
 | `params.model_mhz` | `1400` | 传入原生 `MODEL` 的频率换算参数，不是锁频命令 |
@@ -76,4 +76,4 @@ gfx938 在现有 DTK 26.04 镜像上的试编译尚未通过，分别遇到 AICC
 
 非零退出、帮助文本、空输出、多个数值、NaN/Inf 或错误信息都不会算作有效结果。当前扫描失败后保留已完成用例的数据，整体记失败；清理确认后由方案的 `failure_policy` 决定是否继续其他 suite，清理失败则停止剩余计划。
 
-原生 24 项此前已在 YY85 单卡跑通。新统一入口的本地测试使用合成子进程验证编排、解析和失败处理，不能代替真实 GPU 复测。
+原生 24 项此前已在 YY85 单卡跑通。新统一入口的本地测试使用合成子进程验证编排、解析和失败处理，不能代替真实 HCU 复测。

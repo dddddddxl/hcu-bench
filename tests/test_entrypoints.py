@@ -50,7 +50,7 @@ class PublicTemplateTests(unittest.TestCase):
     def test_multi_model_template_keeps_models_and_profiles_separate(self):
         plan = make_plan(str(ROOT / "configs/e2e-multi-model.template.yaml"), "e2e")
         self.assertEqual([c.test_id for c in plan.cases], ["model_a_gsm8k", "model_b_gsm8k"])
-        for field in ("model_path", "profile", "ep_config", "port"):
+        for field in ("model_path", "serving", "port"):
             self.assertNotEqual(plan.cases[0].params[field], plan.cases[1].params[field])
         self.assertTrue(all(c.nodes == ["node0"] and c.params["min_score"] == "" for c in plan.cases))
 

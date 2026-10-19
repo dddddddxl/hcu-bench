@@ -8,31 +8,44 @@ failure_policy: continue         # 普通失败清理后继续；改为 stop 可
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE       # 可写目录；自动创建 results/RUN_ID。
   bench_root: /YOUR_BENCH_REPO              # git clone 的仓库在容器内的绝对路径。
-  rccl_binary: /YOUR_RCCL_TESTS/build/all_reduce_perf # 已编译的 MPI 版本；不自动下载/编译或换库。
-  rccl_ranks: 8                            # 一进程一卡，必须等于下方 gpus 数量。
-  pcie_binary: /opt/dtk/bin/rocm-bandwidth-test # 镜像已有工具，不自动安装。
+  rccl_binary: auto                        # 首次编译仓库源码；已有工具也可填绝对路径。
+  rccl_ranks: 8                            # 一进程一卡，必须等于下方 hcus 数量。
+  pcie_binary: auto                        # 固定 2.6.0 原生接口，首次自动编译。
   pcie_cpu_devices: "YOUR_CPU_DEVICE_IDS"   # 容器内运行该工具 -e 后填写，例如 "0,1"。
-  pcie_gpu_devices: "YOUR_GPU_DEVICE_IDS"   # 例如 "2,3,4,5,6,7,8,9"；不是 HCU 卡号，须与 gpus 对应。
-  memory_binary: /YOUR_DCU_HIPBENCHMARK/hcu-stream # 已编译的 main-staging-1.0，不自动编译。
-  memory_gpus: "0"                         # 显存带宽单独选卡，必须属于下方 gpus；"0,1" 会逐卡串行。
-  deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py  # 同目录必须有 utils.py。
-  # 下面四项只在运行 e2e / all 时需要；模型、数据及 JSON 配置须已存在。
+  pcie_hcu_devices: "YOUR_HCU_DEVICE_IDS"   # 例如 "2,3,4,5,6,7,8,9"；不是 HCU 卡号，须与 hcus 对应。
+  memory_binary: auto                      # 使用仓库内 main-staging-1.0 源码。
+  memory_hcus: "0"                         # 显存带宽单独选卡，必须属于下方 hcus；"0,1" 会逐卡串行。
+  deepep_script: auto                      # 仓库内 11 字段 handle 的 daily 测试；须匹配镜像 DeepEP。
+  # e2e 默认附带 GSM8K 和 Flash INT8 / BW1100 8 卡配方；只填写模型和通信环境。
   model: /YOUR_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
-  dataset: /YOUR_DATASETS/gsm8k.jsonl        # 每行含 question / answer 的 JSON 对象。
-  profile: /YOUR_CONFIGS/flash-int8.profile.json  # 服务 argv/env，模板在 testpacks/sglang_accuracy/。
-  ep_config: /YOUR_CONFIGS/ep_config.json    # normal_dispatch / normal_combine 配置。
-  iface: YOUR_ACTIVE_INTERFACE             # 实际 socket 网卡；精度 profile 内也要对应修改。
+  dataset: auto                           # 内置 GSM8K test.jsonl；也可填本地 JSONL 路径。
+  profile: auto                           # 启动参数可直接在下方 params.serving 中修改。
+  ep_config: auto                         # 内置 normal_dispatch / normal_combine 参考配置。
+  iface: YOUR_ACTIVE_INTERFACE             # 实际 socket 网卡。
+  ib_hca: YOUR_ACTIVE_IB_HCA_LIST           # e2e NCCL_IB_HCA；如 mlx5_0，不照抄别的节点。
   gid: "YOUR_GID_INDEX"                     # 实际 RDMA GID，保留字符串引号，不能照搬其他节点。
-  gpus: [0, 1, 2, 3, 4, 5, 6, 7]          # 本次允许使用的卡号，先确认没有其他业务。
-  num_processes: 8                         # DeepEP 每节点进程数，应与 gpus 数量一致。
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]          # 本次允许使用的卡号，先确认没有其他业务。
+  num_processes: 8                         # DeepEP 每节点进程数，应与 hcus 数量一致。
   duration_s: 600                          # 压测计划窗口（秒），含初始化；须小于 timeout_s。
+build:                                    # 仅首次编译/缓存失效时使用，不修改镜像软件。
+  dtk_root: /opt/dtk
+  mpi_home: /opt/mpi                       # RCCL 使用镜像中的 Open MPI。
+  arch: auto                              # rocminfo 唯一架构；也可填 gfx92a/gfx938。
+  # arch_num: 9210                        # gfx92a 自动映射到 9210；其他特殊架构可显式填写。
+  # compiler: /opt/dtk/bin/aicc            # memory 默认 AICC；RCCL 默认 hipcc。
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2
+  timeout_s: 3600                         # 编译及双机准备等待时限，不占测试的 timeout_s。
 output_dir: "${vars.workspace}/results"
 nodes:
   node0:
     executor: local                       # 当前容器内执行，不连接 SSH、不再创建容器。
-    gpus: "${vars.gpus}"
+    hcus: "${vars.hcus}"
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+      NCCL_IB_HCA: "${vars.ib_hca}"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
 tests:
   # all 按顺序串行执行；某项暂不测可在该项下加 enabled: false。
   # RCCL 单机 AllReduce，固定迭代完成后校验；不能配置 duration_s。
@@ -64,7 +77,7 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.pcie_binary}"
       cpu_devices: "${vars.pcie_cpu_devices}"
-      gpu_devices: "${vars.pcie_gpu_devices}"
+      hcu_devices: "${vars.pcie_hcu_devices}"
       size_mib: 512                      # 单次拷贝大小，MiB；同时记录 Avg BW 和 Peak BW。
       iters: 20                          # 原生 ROCM_BW_ITER_CNT；不改频率或软件包。
   # 单卡显存/缓存/LDS 带宽，每张指定卡执行 zd1+zd2；和 PCIe 拷贝带宽分开。
@@ -78,7 +91,7 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       binary: "${vars.memory_binary}"
-      devices: "${vars.memory_gpus}"
+      devices: "${vars.memory_hcus}"
       presets: both                      # both=24 项；也可选 zd1 或 zd2。
       model_mhz: 1400                    # 原脚本 MODEL 换算参数，不是实际锁频。
       array_size: 104857600              # 原生默认元素数，不是字节；部分用例不使用它。
@@ -121,6 +134,11 @@ tests:
       model_path: "${vars.model}"
       data_path: "${vars.dataset}"
       ep_config: "${vars.ep_config}"
+      serving:                           # 只写需要覆盖的项；完整命令用 server_argv 列表。
+        env:
+          NCCL_IB_HCA: "${vars.ib_hca}"
+          NCCL_SOCKET_IFNAME: "${vars.iface}"
+          GLOO_SOCKET_IFNAME: "${vars.iface}"
       port: 30903                         # 本次服务端口，已占用就报错，不复用其他服务。
       num_examples: 100                   # 评分题数，不包含前面的 few-shot 样例。
       num_shots: 5                        # 前 5 条作为提示样例。

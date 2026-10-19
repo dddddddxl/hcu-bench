@@ -29,7 +29,8 @@ def context_for(plan, case, node_id, run_dir):
             "host_case_dir": host_case_dir,
             "run_dir": str(run_dir), "gpu_ids": ",".join(str(gpu) for gpu in node.get("gpus", [])),
             "python": node.get("python", sys.executable if node["executor"] == "local" else "python3"),
-            "lock_root": root, **{"p_" + key: value for key, value in case.params.items()}}
+            "lock_root": root, **{"p_" + key: json.dumps(value) if isinstance(value, dict) else value for key, value in case.params.items()}}
+    result["hcu_ids"] = result["gpu_ids"]
     if node["executor"] == "local" and not case.container and "manifest_path" in case.pack:
         result["pack_dir"] = str(Path(case.pack["manifest_path"]).parent)
     return result
@@ -52,12 +53,20 @@ class CommandAdapter:
                 "simulated": False, "wrapped": False}
         spec.update(artifacts=[render(path, context) for path in case.pack.get("artifacts", [])],
                     artifact_limit_mb=case.pack.get("artifact_limit_mb", 100), display={"argv": command, "cwd": cwd, "env": env})
+        if "prepare" in case.pack:
+            spec["prepare"] = render_argv(case.pack["prepare"], context)
+            spec["prepare_timeout_s"] = plan.resolved.get("build", {}).get("timeout_s", 3600)
+            env["HCU_BENCH_BUILD_CONFIG"] = json.dumps(plan.resolved.get("build", {}))
+            spec["display"]["prepare"] = spec["prepare"]
         if case.container:
             container = HookContainerLauncher().build(plan.containers[case.container], context, spec)
+            # Preparation runs only in the inner environment, before its workload timer.
+            preparation_budget = spec.pop("prepare_timeout_s", 0)
+            spec.pop("prepare", None)
             spec.update(argv=container.pop("argv"), cwd=context["host_case_dir"], env={}, wrapped=True,
                         duration_s=None, container=container, artifacts=[])
             # The inner worker owns the workload deadline; host allows its shutdown grace period.
-            spec["timeout_s"] += 15
+            spec["timeout_s"] += preparation_budget + 15
         return spec
 
 

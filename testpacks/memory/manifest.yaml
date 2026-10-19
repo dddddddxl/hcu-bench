@@ -5,11 +5,12 @@ duration_control: native
 max_nodes: 1
 parameters:
   bench_root: {type: string, required: true}
-  binary: {type: string, required: true, description: "Prebuilt main-staging-1.0 hcu-stream executable"}
-  devices: {type: string, default: "", description: "Comma-separated subset of nodes.gpus; empty uses all assigned GPUs serially"}
+  binary: {type: string, default: auto, description: "auto builds bundled main-staging-1.0; an explicit executable is also accepted"}
+  devices: {type: string, default: "", description: "Comma-separated subset of nodes.hcus; empty uses all assigned HCUs serially"}
   presets: {type: string, default: both, choices: [both, zd1, zd2]}
   model_mhz: {type: integer, default: 1400, min: 2, max: 10000, description: "MODEL cycle-to-bandwidth conversion input, not a hardware clock setting"}
   array_size: {type: integer, default: 104857600, min: 1, max: 2147483647, description: "Native --arraysize element count; not bytes and not used by every kernel"}
+prepare: [python3, -u, "${p_bench_root}/testpacks/prepare.py", memory, --binary, "${p_binary}", --output-dir, "${case_dir}"]
 command:
   - python3
   - -u
@@ -24,8 +25,8 @@ command:
   - ${p_model_mhz}
   - --array-size
   - ${p_array_size}
-  - --gpu-ids
-  - ${gpu_ids}
+  - --hcu-ids
+  - ${hcu_ids}
   - --nnodes
   - ${nnodes}
   - --node-rank

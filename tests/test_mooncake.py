@@ -250,7 +250,10 @@ class MooncakeNativeLifecycle(unittest.TestCase):
         native = root / "fake_native.py"
         native.write_text(FAKE_NATIVE, encoding="utf-8")
         original = mooncake.native_command
-        args = [args_for(root, rank, count, topology, **overrides) for rank in range(count)]
+        # Process startup on a busy Windows host can exceed two seconds. Keep
+        # explicit timeout scenarios below, without shortening normal lifecycle tests.
+        budgets = {"startup_timeout": 10, "completion_grace": 5, **overrides}
+        args = [args_for(root, rank, count, topology, **budgets) for rank in range(count)]
         evidence = {"binary": sys.executable, "packages": {"mooncake-transfer-engine": "0.3.13.post1+test"}}
         emitted = []
         original_close = NativeProcess.close
@@ -300,6 +303,7 @@ class MooncakeNativeLifecycle(unittest.TestCase):
             root = Path(directory)
             results, emitted = self.execute(root, target_shutdown_code=-11)
             self.assertTrue(all(isinstance(result, Exception) for result in results), results)
+            self.assertTrue((root / "node-0/target_exit.json").is_file(), repr(results))
             for summary in root.glob("node-*/summary.json"):
                 self.assertNotEqual(json.loads(summary.read_text())["status"], "completed")
             self.assertEqual(json.loads((root / "node-0/target_exit.json").read_text())["returncode"], -11)

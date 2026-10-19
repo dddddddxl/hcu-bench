@@ -19,13 +19,13 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 ## 部署准备
 
 - 控制机按 README 安装 Bench；目标镜像需要现有 Torch/DeepEP 或 SGLang，以及 `psutil`，用于按进程身份清理本次子进程。Bench 的 `[native]` 是可选依赖，不会由框架自动安装。
-- 将同一提交的 `testpacks/` 及相关文件放入各目标的 `bench_root`。初版仍不自动分发代码；容器启动脚本负责挂载，宿主机与容器目录分别配置。
-- 提供容器 start/check/stop 脚本或切换 existing。确认 GPU 空闲、设备绑定、共享内存、memlock、驱动、网卡和 GID；工具不会猜实际网卡、拓扑或清理其他服务。
+- 将同一提交的完整仓库放入各目标的 `bench_root`，或通过共享目录挂载。原生测试源码、GSM8K、默认 profile/EP 配置已内置，不需要再获取其他测试仓库。
+- 提供容器 start/check/stop 脚本或切换 existing。确认 HCU 空闲、设备绑定、共享内存、memlock、驱动、网卡和 GID；工具不会猜实际网卡、拓扑或清理其他服务。
 - 示例的 8 卡与 INT8 参数来自 BW1100 配方，不代表任意节点都能使用。若是 BW1000/其他硬件，先按节点环境确认配方，不能只改卡数。
 
 ## DeepEP 低延迟压测
 
-原生入口由 `test_script` 指定，保留其 sibling `utils.py`，包装器不复制或改动原生测试。启动方式保持 `torchrun --nproc-per-node=1`，再由原生脚本 `--num-processes` 在每节点 spawn GPU workers；实际 GPU world size 为节点数 × num_processes，不能把 torchrun worker 数再次设为卡数。
+`test_script: auto` 使用 `vendor/deepep-tests` 内的脚本和 `utils.py`，已包含此前验证的 11 项 handle 接口及索引适配，不删除正确性断言。也可指定外部脚本；运行时不自动修改脚本来迁就不匹配的 wheel。启动方式保持 `torchrun --nproc-per-node=1`，再由原生脚本 `--num-processes` 在每节点 spawn HCU workers；实际 HCU world size 为节点数 × num_processes，不能把 torchrun worker 数再次设为卡数。
 
 默认 600 秒由 Bench `duration_s` 控制。原生 `--pressure-test` 如果提前成功结束，包装器重新启动；每次完成周期使用 `master_port + cycle`，避免连接上一周期的 TCP store，网络需允许这个端口范围。所有节点必须使用相同配置和原生代码，并由控制机同时启动。多机只扩展此测试的 nodes；精度测试仍只启动一个服务节点。
 
@@ -39,7 +39,7 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 ## SGLang GSM8K
 
-服务启动 argv/env 放在独立 JSON profile 中；目前只有 Flash INT8、SGLang 0.5.12、BW1100 8 卡参考模板。模型必须已经在本地，不自动拉取远端代码或权重；配方的 trust-remote-code 由你确认模型来源后使用。网卡 YOUR_* 必须替换。
+`profile: auto` 使用仓库自带的 Flash INT8、SGLang 0.5.12、BW1100 8 卡配方，数据集和 EP 配置也可保持 `auto`。启动 argv/env 可直接在 YAML 的 `params.serving` 覆盖，也兼容外部 JSON profile。模型必须已经在本地，不自动拉取权重；配方的 trust-remote-code 由你确认模型来源后使用。实际网卡必须在 YAML 配好。
 
 包装器检查模型 config、DeepEP config、数据格式、SGLang 0.5.12 版本和原生评测接口。参考配方要求显式绑定 8 张卡、容器内 memlock 为 unlimited，不满足时先报错，不擅自改宿主机权限。端口已占用就报错，不复用或杀掉现有服务。只启动自己的前台服务，等待 `/health`，运行评测，然后清理自己的子进程；服务退出/全空响应/样本不足都是执行失败，不伪装成精度结果。
 
@@ -57,4 +57,4 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 参考提交固定用于解释接口，不代表目标镜像一定包含同一套评测实现。实际评测源码哈希单独记录；若接口缺失或版本不符，明确失败，不偷偷升级镜像。
 
-本地测试包含标准结果解析、原生子进程树、服务就绪/占用端口/失败清理，以及 CPU 替身的压测和评测入口联调；替身数据不代表真实 GPU 性能或模型精度。完整测试需在开发环境安装可选 `[native]` 依赖，测试不会安装 Torch 或 SGLang。
+本地测试包含标准结果解析、原生子进程树、服务就绪/占用端口/失败清理，以及 CPU 替身的压测和评测入口联调；替身数据不代表真实 HCU 性能或模型精度。完整测试需在开发环境安装可选 `[native]` 依赖，测试不会安装 Torch 或 SGLang。

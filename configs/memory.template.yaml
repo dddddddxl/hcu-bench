@@ -6,15 +6,21 @@ failure_policy: continue
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE
   bench_root: /YOUR_BENCH_REPO
-  memory_binary: /YOUR_DCU_HIPBENCHMARK/hcu-stream # 已编译的 main-staging-1.0；不自动编译或安装。
-  gpus: [0]                     # 先确认空闲；多个卡号时逐卡串行，不是多卡聚合带宽。
+  memory_binary: auto            # 仓库源码首次自动编译；不安装或升级镜像依赖。
+  hcus: [0]                     # 先确认空闲；多个卡号时逐卡串行，不是多卡聚合带宽。
+build:
+  dtk_root: /opt/dtk
+  arch: auto                     # 月英 gfx92a 自动映射数值宏 9210。
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2
+  timeout_s: 3600
 output_dir: "${vars.workspace}/results"
 nodes:
   node0:
     executor: local
-    gpus: "${vars.gpus}"
+    hcus: "${vars.hcus}"
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
 tests:
   memory_bandwidth:
     suite: memory
@@ -27,6 +33,6 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.memory_binary}"
       presets: both             # both=zd1(15项)+zd2(9项)；也可只填 zd1 或 zd2。
-      devices: ""               # 空字符串测 nodes.gpus 全部；或填其中的子集，例如 "1,3"。
+      devices: ""               # 空字符串测 nodes.hcus 全部；或填其中的子集，例如 "1,3"。
       model_mhz: 1400            # 原 zd1 的 MODEL 换算参数，不是锁频！统一对比口径再改为 1280 等。
       array_size: 104857600      # 原生默认 10240*10240 个元素，不是 MiB；部分用例不使用此参数。

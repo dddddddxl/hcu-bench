@@ -20,6 +20,6 @@ The pack now rejects undersized configurations before preflight/native startup. 
 
 - Windows / Python 3.13: 111 tests collected, 110 passed, one real POSIX signal test skipped.
 - Zhengzhou Linux image / Python 3.10: all 111 tests passed in a separate --init container, including real SIGSEGV teardown and the existing DeepEP/SGLang lifecycle tests.
-- A standalone native Mooncake target was started on the authorised BW150 node, with physical GPU 3, logical GPU 0, ACTIVE mlx5_0, a 256 MiB buffer and the same 0.3.13 distribution/image recorded on 2026-10-12. RDMA setup and VRAM allocation succeeded. Our terminate action produced root exit -15; the new stop_target check accepted it and archived target_exit.json. This is a native teardown check, not a throughput measurement.
+- A standalone native Mooncake target was started on the authorised BW150 node, with physical HCU 3, logical HCU 0, ACTIVE mlx5_0, a 256 MiB buffer and the same 0.3.13 distribution/image recorded on 2026-10-12. RDMA setup and VRAM allocation succeeded. Our terminate action produced root exit -15; the new stop_target check accepted it and archived target_exit.json. This is a native teardown check, not a throughput measurement.
 - The second node's SSH connection timed out during this revision, so the full two-node throughput run was not repeated. The 2026-10-12 throughput record remains the earlier hardware evidence.
 - Only containers created for this review run were stopped; logs/source remain in a separate review task directory. Previous validation artifacts were preserved.

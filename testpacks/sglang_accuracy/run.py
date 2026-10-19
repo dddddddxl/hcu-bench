@@ -25,10 +25,12 @@ SGLANG_REFERENCE = "6c946e92fa4ec1755c8a2a8f8800bd2e6795213e"
 
 def parser():
     cli = argparse.ArgumentParser(description="SGLang 0.5.12 GSM8K accuracy smoke test")
-    cli.add_argument("--profile", required=True)
+    cli.add_argument("--profile", default="auto")
+    cli.add_argument("--serving-json", default="{}")
+    cli.add_argument("--ep-settings-json", default="{}")
     cli.add_argument("--model-path", required=True)
-    cli.add_argument("--data-path", required=True)
-    cli.add_argument("--ep-config", required=True)
+    cli.add_argument("--data-path", default="auto")
+    cli.add_argument("--ep-config", default="auto")
     cli.add_argument("--output-dir", required=True)
     cli.add_argument("--node-rank", type=int, default=0)
     cli.add_argument("--nnodes", type=int, default=1)
@@ -88,19 +90,59 @@ def profile_for(args):
         child_env.pop(key, None)
     if any("YOUR_" in value for value in rendered + list(env.values())):
         raise ValueError("Serving profile still contains YOUR_* environment/path placeholders")
-    expected_gpus = profile.get("visible_gpus")
+    expected_gpus = profile.get("visible_hcus", profile.get("visible_gpus"))
     if expected_gpus is not None:
         if not isinstance(expected_gpus, int) or isinstance(expected_gpus, bool) or expected_gpus < 1:
-            raise ValueError("Profile visible_gpus must be a positive integer")
+            raise ValueError("Profile visible_hcus must be a positive integer")
         visible = child_env.get("HIP_VISIBLE_DEVICES", "").split(",")
         if any(not item.strip() for item in visible) or len(visible) != expected_gpus:
-            raise ValueError("Explicit HIP_VISIBLE_DEVICES must match the recipe's GPU count")
+            raise ValueError("Explicit HIP_VISIBLE_DEVICES must match the recipe's HCU count")
     if profile.get("require_memlock_unlimited", False):
         import resource
 
         if resource.getrlimit(resource.RLIMIT_MEMLOCK)[0] != resource.RLIM_INFINITY:
             raise ValueError("Recipe requires unlimited memlock; provide it through the container/start hook")
     return profile, rendered, child_env
+
+
+def materialize_inputs(args, output):
+    """Resolve bundled defaults and YAML overrides into auditable per-case files."""
+    bundled = Path(__file__).resolve().parent
+    if args.data_path == "auto":
+        args.data_path = str(bundled.parents[1] / "vendor/gsm8k/test.jsonl")
+    ep = json.loads(getattr(args, "ep_settings_json", "{}"))
+    if not isinstance(ep, dict):
+        raise ValueError("ep_settings must be an object")
+    if ep:
+        if args.ep_config != "auto":
+            raise ValueError("Choose ep_settings or an external ep_config, not both")
+        target = output / "ep_config.json"
+        write_json(target, ep)
+        args.ep_config = str(target)
+    elif args.ep_config == "auto":
+        args.ep_config = str(bundled / "ep_config.flash-int8.json")
+    overrides = json.loads(getattr(args, "serving_json", "{}"))
+    allowed = {"server_argv", "env", "visible_hcus", "unset_env", "require_memlock_unlimited", "name"}
+    if not isinstance(overrides, dict) or set(overrides) - allowed:
+        raise ValueError("Unknown serving override; use server_argv/env/visible_hcus/unset_env/require_memlock_unlimited/name")
+    if args.profile == "auto" or overrides:
+        base = bundled / "flash-int8-bw1100.template.json" if args.profile == "auto" else Path(args.profile)
+        profile = json.loads(base.read_text(encoding="utf-8-sig"))
+        if "env" in overrides:
+            if not isinstance(overrides["env"], dict):
+                raise ValueError("serving.env must be an object")
+            profile["env"] = {**profile.get("env", {}), **overrides["env"]}
+        profile.update({key: value for key, value in overrides.items() if key != "env"})
+        # Network values are supplied by YAML node/test env, never guessed from a sample.
+        if args.profile == "auto":
+            for key in ("NCCL_IB_HCA", "NCCL_SOCKET_IFNAME", "GLOO_SOCKET_IFNAME"):
+                if "YOUR_" in profile["env"].get(key, ""):
+                    if not os.environ.get(key) or "YOUR_" in os.environ[key]:
+                        raise ValueError("Configure " + key + " in YAML env or serving.env")
+                    profile["env"][key] = os.environ[key]
+        target = output / "serving-profile.json"
+        write_json(target, profile)
+        args.profile = str(target)
 
 
 def preflight(args):
@@ -216,6 +258,7 @@ def normalize_result(result, latency, args, evidence):
 def run(args):
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    materialize_inputs(args, output)
     profile, command, env = profile_for(args)
     evidence = preflight(args)
     evidence["communication_env"] = {key: value for key, value in env.items() if key.startswith(("ROCSHMEM_", "NCCL_", "GLOO_", "HIP_"))}

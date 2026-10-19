@@ -101,7 +101,15 @@ def resolve_variables(config: dict) -> dict:
 
 
 def validate_config(data: dict) -> None:
-    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases", "vars"}, "config")
+    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases", "vars", "build"}, "config")
+    build = data.get("build", {})
+    keys(build, {"dtk_root", "mpi_home", "arch", "arch_num", "compiler", "cache_dir", "jobs", "timeout_s"}, "build")
+    for key in ("dtk_root", "mpi_home", "arch", "compiler", "cache_dir"):
+        require(isinstance(build.get(key, ""), str), f"build.{key} must be a string")
+    for key in ("jobs", "arch_num"):
+        if key in build:
+            require(type(build[key]) is int and build[key] > 0, f"build.{key} must be a positive integer")
+    positive(build.get("timeout_s", 3600), "build.timeout_s")
     require(data.get("version") == 1, "Configuration version must be 1")
     require(isinstance(data.get("name"), str) and data["name"], "name is required")
     require(data.get("failure_policy", "continue") in ("continue", "stop"), "failure_policy must be continue or stop")
@@ -113,11 +121,14 @@ def validate_config(data: dict) -> None:
     require(isinstance(maximum, int) and not isinstance(maximum, bool) and maximum > 0, "max_cases must be a positive integer")
     for name, node in data["nodes"].items():
         require(bool(ID_PATTERN.fullmatch(name)), f"Invalid node ID: {name}")
-        keys(node, {"executor", "host", "user", "port", "identity_file", "python", "work_root", "gpus", "env", "connect_timeout_s"}, f"node {name}")
+        keys(node, {"executor", "host", "user", "port", "identity_file", "python", "work_root", "gpus", "hcus", "env", "connect_timeout_s"}, f"node {name}")
+        require(not ("hcus" in node and "gpus" in node), f"{name}: use hcus, not both hcus and legacy gpus")
+        if "hcus" in node:
+            node["gpus"] = node.pop("hcus")
         require(node.get("executor") in ("local", "ssh"), f"{name}: executor must be local or ssh")
         gpus = node.get("gpus", [])
-        require(isinstance(gpus, list) and all(isinstance(gpu, (int, str)) and not isinstance(gpu, bool) for gpu in gpus), f"{name}: gpus must be a list")
-        require(len({str(gpu) for gpu in gpus}) == len(gpus), f"{name}: duplicate GPUs")
+        require(isinstance(gpus, list) and all(isinstance(gpu, (int, str)) and not isinstance(gpu, bool) for gpu in gpus), f"{name}: hcus must be a list")
+        require(len({str(gpu) for gpu in gpus}) == len(gpus), f"{name}: duplicate HCUs")
         env = node.get("env", {})
         require(isinstance(env, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()), f"{name}: env values must be strings")
         if node["executor"] == "ssh":

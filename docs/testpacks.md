@@ -23,11 +23,15 @@ artifact_limit_mb: 100
 
 可选 `max_nodes: 1` 等正整数限制测试包支持的节点数量，超出时在编排阶段报错。RCCL 使用 `max_nodes: 1` 和 `duration_control: native`，只在完整单机迭代结束后校验结果。
 
+可选 `prepare: [程序, 参数, ...]` 在同一目标环境、同一资源锁下先运行，使用独立的 `build.timeout_s`，不消耗正式测试窗口。非零退出、超时、取消或清理不明均不启动 `command`；日志和声明的产物仍归档。内置包以此调用 `testpacks/prepare.py` 编译源码，不允许准备阶段输出性能指标。
+
+参数类型支持 integer、number、string、boolean、object。object 以 JSON 字符串替换 `${p_参数名}`，由目标包装器校验内部字段。`parameter_aliases: {旧名称: 新名称}` 可保留配置兼容，不能同时提供新旧名称。
+
 可选 suite 为 `rccl/pcie/memory/deepep/mooncake/operators/e2e`。`command` 必须是 argv 数组；需要 shell 时显式写 `[bash, -lc, '...']`，优先直接指向脚本。参数必须声明类型和支持范围，未知参数不透传。
 
-可用模板变量：`run_id/case_id/test_id/node_id/node_rank/nnodes/case_dir/host_case_dir/run_dir/gpu_ids/python` 以及 `p_参数名`。本地非容器测试还可用 `pack_dir`。`${run_dir}` 是控制机路径，`${host_case_dir}` 是目标宿主机目录；使用容器时 `${case_dir}` 是容器内目录，否则与宿主机目录相同。`${python}` 为宿主机解释器配置，容器内解释器应在测试入口命令中明确填写。Shell 原生 `$VAR` 需写成 `$$VAR`，避免被模板处理。
+可用模板变量：`run_id/case_id/test_id/node_id/node_rank/nnodes/case_dir/host_case_dir/run_dir/hcu_ids/python` 以及 `p_参数名`。本地非容器测试还可用 `pack_dir`。`${run_dir}` 是控制机路径，`${host_case_dir}` 是目标宿主机目录；使用容器时 `${case_dir}` 是容器内目录，否则与宿主机目录相同。`${python}` 为宿主机解释器配置，容器内解释器应在测试入口命令中明确填写。Shell 原生 `$VAR` 需写成 `$$VAR`，避免被模板处理。
 
-输出文件建议落在 `${case_dir}`，避免不同运行覆盖同一个报告。`${gpu_ids}` 不会自动绑定设备；按实际测试工具设置 env 或设备参数。算子数据集路径可作为普通 string 参数，不将百万行 CSV 展开成框架参数矩阵。
+输出文件建议落在 `${case_dir}`，避免不同运行覆盖同一个报告。`${hcu_ids}` 不会自动绑定设备；按实际测试工具设置 env 或设备参数。算子数据集路径可作为普通 string 参数，不将百万行 CSV 展开成框架参数矩阵。
 
 ## 标准结果
 

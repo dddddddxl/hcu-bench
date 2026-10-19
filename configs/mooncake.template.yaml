@@ -1,4 +1,4 @@
-# Two-node RDMA/VRAM pressure; replace paths, addresses, GPU IDs and active NICs.
+# Two-node RDMA/VRAM pressure; replace paths, addresses, HCU IDs and active NICs.
 # The same shared_dir content must be visible inside both containers (e.g. NFS).
 version: 1
 name: mooncake-rdma-vram
@@ -16,18 +16,18 @@ nodes:
     host: YOUR_TARGET_SSH_ALIAS
     python: python3
     work_root: "${vars.workspace}/host/target"
-    gpus: [0]                        # Physical IDs allowed for this test, not a universal recipe.
+    hcus: [0]                        # Physical IDs allowed for this test, not a universal recipe.
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
       MC_TE_FILTERS: YOUR_ACTIVE_RDMA_NIC
   initiator:
     executor: ssh
     host: YOUR_INITIATOR_SSH_ALIAS
     python: python3
     work_root: "${vars.workspace}/host/initiator"
-    gpus: [0]
+    hcus: [0]
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
       MC_TE_FILTERS: YOUR_ACTIVE_RDMA_NIC
 containers:
   native:
@@ -55,5 +55,5 @@ tests:
       addresses: "${vars.addresses}"
       topology: pair
       duration: "${vars.duration}"
-      gpu_id: 0                     # Visible logical index; -1 explicitly uses all visible GPUs.
+      hcu_id: 0                     # Visible logical index; -1 explicitly uses all visible HCU.
       min_bandwidth_gbps: ""        # Report only until a node-specific threshold is agreed.

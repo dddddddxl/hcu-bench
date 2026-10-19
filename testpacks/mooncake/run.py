@@ -16,7 +16,7 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from testpacks.native_common import CleanupError, NativeProcess, cancellation, cleanup_failure, emit, sha256, versions, write_json
+from testpacks.native_common import CleanupError, NativeProcess, cancellation, cleanup_failure, emit, sha256, versions, write_json, prepared_binary
 
 ENDPOINT = re.compile(r"listening on\s+([0-9.]+):(\d+)\b")
 COMPLETION = re.compile(r"Test completed:\s*duration\s+([^,\s]+),\s*batch count\s+(\d+),\s*throughput\s+([^\s]+)\s+(GiB/s|GB/s)\b")
@@ -37,7 +37,7 @@ def parser():
     cli.add_argument("--duration", type=int, default=180, help="Native initiator measurement seconds")
     cli.add_argument("--startup-timeout", type=float, default=90)
     cli.add_argument("--completion-grace", type=float, default=120)
-    cli.add_argument("--gpu-id", type=int, default=0, help="Visible GPU index; -1 explicitly uses all visible GPUs")
+    cli.add_argument("--hcu-id", "--gpu-id", dest="gpu_id", type=int, default=0, help="Visible HCU index; -1 explicitly uses all visible HCUs")
     cli.add_argument("--buffer-size", type=int, default=1073741824)
     cli.add_argument("--threads", type=int, default=12)
     cli.add_argument("--batch-size", type=int, default=128)
@@ -99,7 +99,7 @@ def validate_args(args):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(name + " must be positive and finite")
     if args.gpu_id < -1 or args.block_size > args.buffer_size:
-        raise ValueError("Invalid GPU index or block_size exceeds buffer_size")
+        raise ValueError("Invalid HCU index or block_size exceeds buffer_size")
     required_buffer = args.block_size * args.batch_size * args.threads
     if args.buffer_size < required_buffer:
         raise ValueError(f"buffer_size must be >= block_size * batch_size * threads = {required_buffer} bytes; "
@@ -128,6 +128,10 @@ def preflight(args):
         raise RuntimeError("Target dependency psutil is missing")
     import psutil
     packages = versions(["mooncake-transfer-engine", "psutil"])
+    prepared = getattr(args, "prepared", {})
+    if prepared.get("source") == "bundled":
+        # The native executable is built from the pinned source, not the installed wheel.
+        packages["mooncake-transfer-engine"] = prepared["source_version"]
     version = packages["mooncake-transfer-engine"]
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version or "")
     if not match or tuple(map(int, match.groups())) < (0, 3, 12):
@@ -146,9 +150,9 @@ def preflight(args):
         raise ValueError("Native binary lacks the required RDMA/VRAM flags: " + ",".join(sorted(required - supported)))
     visible = os.environ.get("HIP_VISIBLE_DEVICES", "").split(",")
     if any(not re.fullmatch(r"\d+", item) for item in visible) or len(set(visible)) != len(visible):
-        raise ValueError("Set explicit, distinct HIP_VISIBLE_DEVICES for the allowed physical GPUs")
+        raise ValueError("Set explicit, distinct HIP_VISIBLE_DEVICES for the allowed physical HCUs")
     if args.gpu_id >= len(visible):
-        raise ValueError("gpu_id is outside the explicitly visible GPUs")
+        raise ValueError("hcu_id is outside the explicitly visible HCUs")
     nics = os.environ.get("MC_TE_FILTERS", "").split(",")
     if any(not re.fullmatch(r"[A-Za-z0-9_.-]+", nic) for nic in nics) or len(set(nics)) != len(nics):
         raise ValueError("Set explicit distinct RDMA NIC names in MC_TE_FILTERS")
@@ -267,6 +271,7 @@ def run(args):
     addresses, routes = validate_args(args)
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    prepared_binary(args)
     evidence = preflight(args)
     write_json(output / "environment.json", evidence)
     if args.check_only:

@@ -1,12 +1,12 @@
 # Mooncake RDMA / VRAM 压测
 
-本测试包调用已有的 `transfer_engine_bench`，测试 GPU 显存 buffer 间的 RDMA read/write 吞吐，不启动模型。默认只报告性能；数值正确性始终为 `not_checked`。不将 Mooncake 吞吐称为 RCCL busbw，也不套用其他集群的 130 GB/s 作为默认标准。
+本测试包调用 `transfer_engine_bench`，测试 HCU 显存 buffer 间的 RDMA read/write 吞吐，不启动模型。`binary: auto` 首次从仓库内的 Hygon Mooncake 源码编译，pybind11/yalantinglibs 源码也已内置，不联网拉取。默认只报告性能；数值正确性始终为 `not_checked`。不将 Mooncake 吞吐称为 RCCL busbw，也不套用其他集群的 130 GB/s 作为默认标准。
 
 ## 准备条件
 
-- 所有目标节点使用 Mooncake transfer-engine **0.3.12+ 的同一完整 distribution 版本**。本包不支持旧 0.3.10 P2PHANDSHAKE 路径，不自动升级或安装依赖。
-- 已有 Python 3.10+、psutil、支持 GPU VRAM 的 `transfer_engine_bench`，以及可用的 DCU/DTK/RDMA 环境。预检会读取 native help 检查所需 flags。
-- 每节点显式配置可用的 `HIP_VISIBLE_DEVICES`、`MC_TE_FILTERS` 和 peer 可达的 IPv4；NIC 必须 ACTIVE / LINK_UP。运行前自行确认选中的 GPU/NIC 未被业务占用，包不会重置设备或停止其他用户进程。
+- `auto` 使用固定源码提交，所有节点必须使用同一份仓库；显式指定外部二进制时仍要求 **0.3.12+ 的同一完整 distribution 版本**。不支持旧 0.3.10 P2PHANDSHAKE 路径，不自动升级或安装依赖。
+- 已有 Python 3.10+、psutil、CMake、C++20 编译器以及 DTK、RDMA、numa、gflags、glog、jsoncpp、yaml-cpp 开发库和 Python 头文件。预检会读取 native help 检查所需 flags。编译在缓存目录完成，不安装到镜像；各节点都准备好后才进入压测。
+- 每节点显式配置可用的 `HIP_VISIBLE_DEVICES`、`MC_TE_FILTERS` 和 peer 可达的 IPv4；NIC 必须 ACTIVE / LINK_UP。运行前自行确认选中的 HCU/NIC 未被业务占用，包不会重置设备或停止其他用户进程。
 - 每节点都有同一提交的仓库。`shared_dir` 必须是所有节点/容器能读写**同一份内容**的共享目录，例如 NFS；仅填写相同路径但内容不共享不能工作。
 - 容器需提供 DCU、RDMA 设备、足够 memlock 和 peer 可达网络；设备、挂载和权限由你现有的创建脚本配置。
 
@@ -31,7 +31,7 @@ HIP_VISIBLE_DEVICES=0 MC_TE_FILTERS=mlx5_0 python3 testpacks/mooncake/run.py \
   --addresses 10.0.0.1,10.0.0.2 --check-only
 ```
 
-替换真实地址、路径和 GPU/NIC。此命令只读取环境、保存预检证据，不启动 native 负载或创建 rendezvous。IP 可达性、实际显存注册和握手仍需真实运行验证。
+替换真实地址、路径和 HCU/NIC。此命令只读取环境、保存预检证据，不启动 native 负载或创建 rendezvous。IP 可达性、实际显存注册和握手仍需真实运行验证。
 
 宿主机 Python 过旧时，也可让 SSH executor 的 `nodes.<node>.python` 指向一个已有自有容器的解释器入口脚本：
 
@@ -52,7 +52,7 @@ exec docker exec -i YOUR_OWN_CONTAINER python3 "$@"
 
 **不要设置框架 `duration_s`。** 本 manifest 声明 `duration_control: native`，planner 会拒绝该组合，防止在最终吞吐输出前按时间强制结束却被当作完成。native `duration` 只算传输窗口，不含启动、注册和清理；`startup_timeout` 限制 join/endpoint 等待，`duration + completion_grace` 限制 initiator 总等待。外层 `timeout_s` 应更大，例如 180 秒测量使用 600 秒外层故障时限，长压测需同步调大。
 
-不会按进程名称执行 pkill。预检发现本容器命名空间内已有 native benchmark 时会拒绝启动；跨用户/容器资源协调仍依赖节点管理和共享 Bench 锁。共享 NFS 上各节点的 host `work_root` 应不同，避免独立节点的相同 GPU 编号争用同一个锁文件。
+不会按进程名称执行 pkill。预检发现本容器命名空间内已有 native benchmark 时会拒绝启动；跨用户/容器资源协调仍依赖节点管理和共享 Bench 锁。共享 NFS 上各节点的 host `work_root` 应不同，避免独立节点的相同 HCU 编号争用同一个锁文件。
 
 ## 参数与拓扑
 
@@ -60,7 +60,7 @@ exec docker exec -i YOUR_OWN_CONTAINER python3 "$@"
 | --- | --- |
 | `topology` | pair；target 在前、initiator 在后，恰好两节点 |
 | `duration` | 180 秒，native initiator 测量窗口 |
-| `gpu_id` | 0，显式可见卡中的逻辑编号；-1 使用全部可见卡 |
+| `hcu_id` | 0，显式可见卡中的逻辑编号；-1 使用全部可见卡 |
 | `buffer_size` | 1 GiB，必须 ≥ `block_size × batch_size × threads`；多卡/环形需另核显存余量 |
 | `threads / batch_size / block_size` | 12 / 128 / 65536 字节 |
 | `operation` | read，可选 write |

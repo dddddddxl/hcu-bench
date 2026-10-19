@@ -5,7 +5,7 @@ import time
 
 def main():
     params = json.loads(sys.argv[1])
-    print("MOCK ONLY: these values are not GPU/network benchmark measurements.", flush=True)
+    print("MOCK ONLY: these values are not HCU/network benchmark measurements.", flush=True)
     for index in range(params["samples"]):
         time.sleep(params["delay_s"])
         if not params["empty"]:

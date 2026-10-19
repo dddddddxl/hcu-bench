@@ -1,2 +1,5 @@
 bench.sh text eol=lf
+vendor/** text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
 experimental/wheel-pilot/** text eol=lf

@@ -1,6 +1,6 @@
 # Zhengzhou Mooncake validation — 2026-10-12
 
-The new pack was exercised through the real hcu-bench SSH executor on two BW150 nodes. Each node used one explicitly selected idle GPU and one ACTIVE/LINK_UP `mlx5_0` NIC rated at 200 Gb/s. This is single-GPU/single-NIC validation, not the original handbook's eight-GPU/eight-NIC reference topology.
+The new pack was exercised through the real hcu-bench SSH executor on two BW150 nodes. Each node used one explicitly selected idle HCU and one ACTIVE/LINK_UP `mlx5_0` NIC rated at 200 Gb/s. This is single-HCU/single-NIC validation, not the original handbook's eight-HCU/eight-NIC reference topology.
 
 ## Environment
 
@@ -15,7 +15,7 @@ The new pack was exercised through the real hcu-bench SSH executor on two BW150 
 
 ## Actual measurements and expected outcomes
 
-All tests used P2PHANDSHAKE, automatic discovery restricted by `MC_TE_FILTERS=mlx5_0`, logical GPU 0, 12 submission threads, batch size 128 and block size 65,536 bytes. Short tests used a 256 MiB buffer; the 180-second test used 1 GiB. Values are the native final aggregate throughput, not per-iteration percentiles.
+All tests used P2PHANDSHAKE, automatic discovery restricted by `MC_TE_FILTERS=mlx5_0`, logical HCU 0, 12 submission threads, batch size 128 and block size 65,536 bytes. Short tests used a 256 MiB buffer; the 180-second test used 1 GiB. Values are the native final aggregate throughput, not per-iteration percentiles.
 
 | Run ID | Topology / operation | Native window | Throughput | Outcome |
 | --- | --- | --- | --- | --- |
@@ -38,4 +38,4 @@ The target endpoint was read from each newly started native target's logs; the p
 
 ## Coverage limits
 
-Two-node pair, two-node ring, read/write and explicit throughput gates were tested on hardware. Four-node fan-in, disjoint pairs, four-node ring and all six pair combinations are implemented/tested with CPU substitutes but were not validated on four physical nodes in this run. Other GPUs had existing workloads; this is not a claim of an exclusive whole-node/NIC environment or a complete long-term stability assessment. No model inference, payload correctness or RCCL validation is claimed.
+Two-node pair, two-node ring, read/write and explicit throughput gates were tested on hardware. Four-node fan-in, disjoint pairs, four-node ring and all six pair combinations are implemented/tested with CPU substitutes but were not validated on four physical nodes in this run. Other HCU had existing workloads; this is not a claim of an exclusive whole-node/NIC environment or a complete long-term stability assessment. No model inference, payload correctness or RCCL validation is claimed.

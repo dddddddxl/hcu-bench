@@ -26,10 +26,12 @@ def get_pack(test: dict, base: Path) -> dict:
     require(isinstance(test.get("pack"), str), "command adapter requires a test-pack manifest path")
     pack_path = (base / test["pack"]).resolve()
     pack = load_document(pack_path)
-    keys(pack, {"version", "id", "suite", "parameters", "command", "cwd", "env", "result_protocol", "requires_metrics", "artifacts", "artifact_limit_mb", "duration_control", "max_nodes"}, "test pack")
+    keys(pack, {"version", "id", "suite", "parameters", "parameter_aliases", "command", "prepare", "cwd", "env", "result_protocol", "requires_metrics", "artifacts", "artifact_limit_mb", "duration_control", "max_nodes"}, "test pack")
     require(pack.get("version") == 1 and pack.get("suite") == test["suite"], "Test-pack version or suite mismatch")
     require(isinstance(pack.get("id"), str) and bool(pack["id"]), "Test-pack id is required")
     argv(pack.get("command"), "test-pack command")
+    if "prepare" in pack:
+        argv(pack["prepare"], "test-pack prepare")
     require(isinstance(pack.get("cwd"), str), "Test-pack cwd is required; use ${case_dir} for a scratch directory")
     require(pack.get("result_protocol") in ("bench-jsonl-v1", "none"), "Unsupported result_protocol")
     require(isinstance(pack.get("requires_metrics"), bool), "Test-pack requires_metrics must be explicitly true or false")
@@ -48,9 +50,19 @@ def get_pack(test: dict, base: Path) -> dict:
 def resolve_params(pack: dict, supplied: dict) -> dict:
     schema = pack.get("parameters", {})
     require(isinstance(schema, dict), "Test-pack parameters must be a mapping")
+    supplied = dict(supplied)
+    aliases = pack.get("parameter_aliases", {})
+    require(isinstance(aliases, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in aliases.items()),
+            "parameter_aliases must map string names to string names")
+    for old, new in aliases.items():
+        require(old not in schema and old != new, f"Alias shadows a declared parameter: {old}")
+        require(new in schema, f"Alias target is not a declared parameter: {new}")
+        if old in supplied:
+            require(new not in supplied, f"Use {new}, not both {new} and legacy {old}")
+            supplied[new] = supplied.pop(old)
     require(not set(supplied) - set(schema), f"Unsupported test parameters: {sorted(set(supplied) - set(schema))}")
     result = {}
-    types = {"integer": int, "number": (int, float), "string": str, "boolean": bool}
+    types = {"integer": int, "number": (int, float), "string": str, "boolean": bool, "object": dict}
     for name, definition in schema.items():
         require(isinstance(name, str) and name.isidentifier(), f"Invalid parameter name: {name}")
         keys(definition, {"type", "default", "required", "min", "max", "choices", "description"}, f"parameter {name}")

@@ -46,9 +46,9 @@ def preview(plan):
 def dispatch(args):
     if args.action == "list":
         descriptions = {
-            "rccl": "native: single-node MPI AllReduce (2-8 GPUs)",
-            "pcie": "native: single-node CPU/GPU copy bandwidth (five path types)",
-            "memory": "native: single-GPU memory/cache/LDS bandwidth (zd1/zd2, serial GPUs)",
+            "rccl": "native: single-node MPI AllReduce (2-8 HCUs)",
+            "pcie": "native: single-node CPU/HCU copy bandwidth (five path types)",
+            "memory": "native: single-HCU memory/cache/LDS bandwidth (zd1/zd2, serial HCUs)",
             "deepep": "native: low-latency pressure (single/multiple nodes)",
             "mooncake": "native: RDMA/VRAM pressure (multiple nodes, shared directory required)",
             "operators": "extension slot: no bundled native operator tests",

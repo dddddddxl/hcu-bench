@@ -43,6 +43,21 @@ def versions(names):
     return result
 
 
+def prepared_binary(args):
+    """Resolve only a completed preparation record; direct explicit paths stay supported."""
+    path = Path(args.output_dir) / "prepared.json"
+    if args.binary != "auto":
+        return
+    if not path.is_file():
+        raise ValueError("binary=auto requires the bench.sh preparation stage")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if sha256(record["binary"]) != record["binary_sha256"]:
+        raise ValueError("Prepared binary checksum changed")
+    args.binary = record["binary"]
+    args.prepared = record
+    os.environ.update(record.get("env", {}))
+
+
 def cancellation():
     stopped = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):

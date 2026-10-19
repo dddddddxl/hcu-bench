@@ -4,7 +4,7 @@
 
 ## 自己创建容器
 
-把 Bench 仓库和原生测试/模型/数据挂进你自己创建的容器，在容器里使用现有 Python 3.10+、PyYAML 和测试依赖。工具不安装软件，不改 DTK；容器内不需要 Docker 命令或 Docker socket。
+把完整 Bench 仓库和本地模型挂进自己创建的容器，在容器里使用现有 Python 3.10+、PyYAML、编译器及运行库。原生测试源码和 GSM8K 已随仓库提供，首次自动编译，不安装软件包、不改 DTK；容器内不需要 Docker 命令或 Docker socket。
 
 内置原生包装器还需要 psutil。各 suite 的输入要求和功能范围见 [README](../README.md)，参数、混合节点及多模型示例见 [配置说明](configuration.md)。
 
@@ -14,7 +14,7 @@
 cp configs/in-container.template.yaml configs/bench.yaml
 ```
 
-修改 `configs/bench.yaml` 顶部 `vars`：可写工作目录、容器内 Bench 路径、原生脚本、模型、数据、服务 profile、EP 配置、实际网卡/GID、卡号、压测时长。其余字段引用 `${vars.xxx}`，无需反复填写同一路径。`configs/bench.yaml` 被 Git 忽略，不提交节点私有配置。
+修改 `configs/bench.yaml` 顶部 `vars`：可写工作目录、容器内 Bench 路径、模型、实际网卡/GID、卡号和压测时长。工具、脚本、数据、profile、EP 路径可保持 `auto`，启动参数可在 YAML 的 `serving` 修改。`configs/bench.yaml` 被 Git 忽略，不提交节点私有配置。
 
 随后在容器里执行：
 
@@ -88,10 +88,10 @@ check/plan 只做静态检查，不连节点或启动工作负载。原生依赖
 
 `BENCH_PYTHON=/path/to/python bash bench.sh ...` 可选择已有解释器。默认优先仓库 `.venv/bin/python`，否则使用 python3；入口会检查版本和 PyYAML，不运行 pip。
 
-`vars` 只做显式配置引用：全值 `${vars.gpus}` 保留列表/数字类型；字符串中的 `${vars.workspace}` 拼接路径；支持引用其他 vars，未知变量及循环引用报错。不会展开 shell 环境变量或执行命令。`${gpu_ids}`、`${run_id}` 等原有运行时变量仍由 worker 阶段处理。
+`vars` 只做显式配置引用：全值 `${vars.hcus}` 保留列表/数字类型；字符串中的 `${vars.workspace}` 拼接路径；支持引用其他 vars，未知变量及循环引用报错。不会展开 shell 环境变量或执行命令。`${hcu_ids}`、`${run_id}` 等原有运行时变量仍由 worker 阶段处理。
 
 ## 不会隐藏的准备条件
 
-模型/数据/原生脚本必须已存在；GSM8K 仍需 question/answer JSONL，服务参数仍在 JSON profile 中，EP config 为已有 JSON。工具不下载模型、安装依赖、改动原生脚本或自动适配 wheel 接口。修改 YAML 的网卡不会自动改写外部服务 profile，两处必须对应同一实际环境。
+模型权重和匹配的框架运行库必须已存在。源码在目标环境自动编译，缺少编译器或开发库会报告准备失败，不下载模型、不安装依赖、不自动猜测 wheel 接口。内置 profile 的网卡取 YAML 配置；外部 JSON 中写死的环境需用 `serving.env` 显式覆盖。
 
-原生断言、SIGABRT/SIGKILL、空结果都会如实记录；达到压测时长是计划结束，不推断完整正确性通过。GPU 锁不代表其他业务空闲，启动前的业务占用检查仍需人工或你的启动脚本负责。
+原生断言、SIGABRT/SIGKILL、空结果都会如实记录；达到压测时长是计划结束，不推断完整正确性通过。HCU 锁不代表其他业务空闲，启动前的业务占用检查仍需人工或你的启动脚本负责。

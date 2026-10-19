@@ -3,7 +3,7 @@ id: deepep.low-latency-pressure
 suite: deepep
 parameters:
   bench_root: {type: string, required: true}
-  test_script: {type: string, required: true}
+  test_script: {type: string, default: auto}
   master_addr: {type: string, required: true}
   master_port: {type: integer, default: 12345, min: 1, max: 65535}
   num_processes: {type: integer, required: true, min: 1}

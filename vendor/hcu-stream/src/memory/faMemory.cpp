@@ -1,0 +1,85 @@
+#include "faMemory.hpp"
+#include "testcase.hpp"
+
+faMemory::faMemory(Output *output, Device *device, bool clean, int lds,
+                   int height, int width)
+    : MemoryBandwidth({"fa"}, /*wave*/ 4, /*crop*/ 1, output, device,
+                      /*lds_size*/ lds, clean, 0, false, false) {
+  this->h = height;
+  this->w = width;
+}
+
+void faMemory::runAll() {
+  std::vector<int> _height = {4096, 8192};
+  int _width = 128;
+
+  // std::cout << "\nwidth: " << width << std::endl;
+  for (int i = 0; i < _height.size(); i++) {
+    run_fabenchmark(_height[i], _width);
+  }
+}
+void faMemory::run() {
+  run_fabenchmark(h, w);
+}
+
+
+void faMemory::getList() {
+  std::cout << std::left << std::setw(30) << "faMemory case" << std::endl;
+  std::cout << std::left << std::setw(30) << "Usage: ./run fa" << std::endl;
+  std::cout << "----------------------" << std::endl;
+}
+
+void faMemory::print() { output->print_record(); }
+void faMemory::run_fabenchmark(int height, int width) {
+  int THREADS_PER_BLOCK = wave * 64;
+  int *inArray;
+  uint64_t MEM_ARRAY_SIZE = width * height;
+  inArray = new int[MEM_ARRAY_SIZE]; // 1.0GB
+
+  int *inArray_g;
+  HIP_ASSERT(hipMalloc((void **)&inArray_g, MEM_ARRAY_SIZE * sizeof(int)));
+  HIP_ASSERT(hipMemcpy(inArray_g, inArray, MEM_ARRAY_SIZE * sizeof(int),
+                       hipMemcpyHostToDevice));
+
+  uint64_t data = MEM_ARRAY_SIZE * sizeof(int);
+  std::chrono::high_resolution_clock::time_point t1, t2;
+  std::chrono::duration<double, std::ratio<1, 1>> duration;
+  double t = 0.0;
+  double peak_bw = 0.0, avg_bw = 0.0, avg_lat = 0.0;
+#if HIP_ARCH >= 936
+  // warm up
+  for (int i = 0; i < 20; ++i) {
+    hipLaunchKernelGGL(faTest, dim3(MEM_ARRAY_SIZE / THREADS_PER_BLOCK),
+                       dim3(THREADS_PER_BLOCK), 4 * 1024, 0, inArray_g, height,
+                       width);
+    HIP_ASSERT(hipDeviceSynchronize());
+  }
+  for (int i = 0; i < LAUNCH_TIMES; ++i) {
+    t1 = std::chrono::high_resolution_clock::now();
+    hipLaunchKernelGGL(faTest, dim3(MEM_ARRAY_SIZE / THREADS_PER_BLOCK),
+                       dim3(THREADS_PER_BLOCK), lds * 1024, 0, inArray_g, height,
+                       width);
+    HIP_ASSERT(hipDeviceSynchronize());
+    t2 = std::chrono::high_resolution_clock::now();
+    duration = t2 - t1;
+    t = duration.count();
+    if (i == 0) {
+      continue;
+    } // ignore the first launch
+    double bw = (double)data * pow(10.0, -9.0) / t;
+    // std::cout << i << " : " << bw << std::endl;
+    avg_lat += t;
+    avg_bw += bw;
+    peak_bw = std::max(peak_bw, bw);
+  }
+#endif
+  delete[] inArray;
+  HIP_ASSERT(hipFree(inArray_g));
+  if (use_clean) {
+    std::cout << avg_bw / (LAUNCH_TIMES - 1) << std::endl;
+  } else {
+    output->add_record(to_string(height) + "x" + to_string(width), wave,
+                       data * pow(10.0, -6.0), avg_bw / (LAUNCH_TIMES - 1),
+                       avg_lat * 1e3 / (LAUNCH_TIMES - 1), getBWtheory(), 4, device->device_index);
+  }
+}

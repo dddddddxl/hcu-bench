@@ -1,4 +1,4 @@
-"""Serial single-GPU bandwidth presets from dcu-hipbenchmark main-staging-1.0."""
+"""Serial single-HCU bandwidth presets from dcu-hipbenchmark main-staging-1.0."""
 import argparse
 import csv
 from datetime import datetime
@@ -9,7 +9,7 @@ import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json
+from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json, prepared_binary
 
 # (native case, wave count, LDS argument in KiB); preserve the two upstream tables.
 PRESETS = {
@@ -34,10 +34,10 @@ FIELDS = ("gpu_id", "preset", "test", "category", "wave", "lds_arg_kib", "array_
 
 def ids(text):
     if not re.fullmatch(r"[0-9]+(?:,[0-9]+)*", text):
-        raise ValueError("GPU IDs must be comma-separated nonnegative integers")
+        raise ValueError("HCU IDs must be comma-separated nonnegative integers")
     values = list(map(int, text.split(",")))
     if len(set(values)) != len(values):
-        raise ValueError("Duplicate GPU IDs")
+        raise ValueError("Duplicate HCU IDs")
     return values
 
 
@@ -47,16 +47,16 @@ def validate(args, env):
     reserved = ids(args.gpu_ids)
     selected = ids(args.devices) if args.devices else reserved
     if not set(selected) <= set(reserved):
-        raise ValueError("devices must be a subset of nodes.gpus")
+        raise ValueError("devices must be a subset of nodes.hcus")
     if args.presets not in ("both", *PRESETS):
         raise ValueError("presets must be both, zd1 or zd2")
     if not 2 <= args.model_mhz <= 10000 or not 1 <= args.array_size <= 2147483647:
         raise ValueError("Invalid MODEL MHz or array element count")
     if env.get("HIP_VISIBLE_DEVICES") not in (None, "", args.gpu_ids):
-        raise ValueError("HIP_VISIBLE_DEVICES conflicts with nodes.gpus")
+        raise ValueError("HIP_VISIBLE_DEVICES conflicts with nodes.hcus")
     for key in ("ROCR_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES", "GPU_DEVICE_ORDINAL"):
         if env.get(key):
-            raise ValueError(f"Remove conflicting GPU mask {key}; use nodes.gpus/devices")
+            raise ValueError(f"Remove conflicting HCU mask {key}; use nodes.hcus/devices")
     if env.get("MODEL") not in (None, "", str(args.model_mhz)):
         raise ValueError("MODEL conflicts with model_mhz; configure it in YAML")
     return selected, list(PRESETS) if args.presets == "both" else [args.presets]
@@ -124,11 +124,12 @@ def run(args, stopped):
     out.mkdir(parents=True, exist_ok=True)
     rows, execution = [], []
     try:
+        prepared_binary(args)
         env = dict(os.environ)
         devices, presets = validate(args, env)
         binary = Path(args.binary).resolve()
         if not binary.is_file() or not os.access(binary, os.X_OK):
-            raise ValueError("Supply an existing hcu-stream executable; no automatic compilation or installation")
+            raise ValueError("hcu-stream executable missing; use binary=auto through bench.sh to build it")
         env["MODEL"] = str(args.model_mhz)
         expected = len(devices) * sum(len(PRESETS[p]) for p in presets)
         write_json(out / "plan.json", {"params": vars(args), "devices": devices, "presets": presets,
@@ -170,7 +171,7 @@ def run(args, stopped):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
-    parser.add_argument("--gpu-ids", required=True)
+    parser.add_argument("--hcu-ids", "--gpu-ids", dest="gpu_ids", required=True)
     parser.add_argument("--devices", default="")
     parser.add_argument("--presets", default="both", choices=("both", *PRESETS))
     parser.add_argument("--model-mhz", type=int, default=1400)

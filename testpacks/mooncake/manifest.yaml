@@ -1,16 +1,17 @@
 version: 1
 id: mooncake.rdma-vram-pressure
 suite: mooncake
+parameter_aliases: {gpu_id: hcu_id}
 parameters:
   bench_root: {type: string, required: true}
   shared_dir: {type: string, required: true}
   addresses: {type: string, required: true}
-  binary: {type: string, default: transfer_engine_bench}
+  binary: {type: string, default: auto}
   topology: {type: string, default: pair, choices: [pair, fan_in, pairs, ring]}
   duration: {type: integer, default: 180, min: 1}
   startup_timeout: {type: number, default: 90, min: 1}
   completion_grace: {type: number, default: 120, min: 1}
-  gpu_id: {type: integer, default: 0, min: -1}
+  hcu_id: {type: integer, default: 0, min: -1}
   buffer_size: {type: integer, default: 1073741824, min: 1}
   threads: {type: integer, default: 12, min: 1}
   batch_size: {type: integer, default: 128, min: 1}
@@ -18,6 +19,7 @@ parameters:
   operation: {type: string, default: read, choices: [read, write]}
   expected_version: {type: string, default: ""}
   min_bandwidth_gbps: {type: string, default: ""}
+prepare: [python3, -u, "${p_bench_root}/testpacks/prepare.py", mooncake, --binary, "${p_binary}", --output-dir, "${case_dir}", --rendezvous, "${p_shared_dir}/.prepare/${run_id}/${case_id}", --node-rank, "${node_rank}", --nnodes, "${nnodes}"]
 command:
   - python3
   - -u
@@ -46,8 +48,8 @@ command:
   - "${p_startup_timeout}"
   - --completion-grace
   - "${p_completion_grace}"
-  - --gpu-id
-  - "${p_gpu_id}"
+  - --hcu-id
+  - "${p_hcu_id}"
   - --buffer-size
   - "${p_buffer_size}"
   - --threads
@@ -69,5 +71,5 @@ duration_control: native
 # Passive targets emit coordination only. The wrapper requires a final measurement
 # and exit 0 for every initiator, and propagates missing/invalid data as failure.
 requires_metrics: false
-artifacts: ["${case_dir}/*.json", "${case_dir}/target.log", "${case_dir}/initiator.log"]
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log"]
 artifact_limit_mb: 100

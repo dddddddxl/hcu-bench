@@ -11,7 +11,7 @@
 ## Design decisions
 
 - Support pair, fan-in, disjoint pairs and ring. Six cross-check pairs can be configured as six two-node tests; no implicit node discovery.
-- Require explicit per-node IPs, selected NICs, GPU visibility and a shared coordination directory. Ports come from each newly launched target's log.
+- Require explicit per-node IPs, selected NICs, HCU visibility and a shared coordination directory. Ports come from each newly launched target's log.
 - Use native initiator duration, startup and completion deadlines plus an outer framework timeout. Do not set framework duration_s, which could terminate before final metrics/cleanup.
 - Require a positive finite final throughput, positive batch count and a completed requested measurement window. Preserve reported units; do not reinterpret GiB/s as GB/s.
 - Optional min_bandwidth_gbps is explicit and applies to each initiator, with a separate performance_judgement; correctness remains not_checked. Historical 130 GB/s from a different cluster is not a universal default.

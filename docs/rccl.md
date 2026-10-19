@@ -15,10 +15,10 @@ bash bench.sh all        # 与 YAML 中其余启用项串行执行
 ## 前提与参数
 
 - 当前支持单节点、2–8 卡 AllReduce sum，每个 MPI 进程一线程一卡；不是多机或 AllToAll。
-- `gpus` 明确列出本次空闲卡号，`ranks` 必须等于其数量；不另叠加 ROCR/CUDA 可见卡掩码。
+- `hcus` 明确列出本次空闲卡号，`ranks` 必须等于其数量；不另叠加 ROCR/CUDA 可见卡掩码。
 - 镜像须已有 Python 3.10+、psutil、Open MPI、DTK/RCCL；控制端还需 PyYAML。
-- `binary` 指向已编译的 MPI 版本 `all_reduce_perf`，解析契约为 rccl-tests `ae3e635`。
-  缺少二进制时先用对应镜像已有工具链编译；工具不自动下载或升级 DTK/RCCL。
+- `binary: auto` 使用仓库内 rccl-tests `ae3e635`，首次自动编译 MPI 版 `all_reduce_perf`，之后复用缓存。
+  也可显式指定已有二进制。构建使用镜像已有 make、hipcc、Open MPI 和 DTK/RCCL，不下载或升级库。
 - 模板默认 half、8 KiB 到 64 MiB、倍增 2、预热 20 次、测量 50 次；可直接改 YAML。
   `max_bytes` 必须落在倍增序列上。完整有限轮次测试不接受 `duration_s`；超时由 `timeout_s` 控制并记为失败。
 - MPI 显式使用 `--host localhost`，不会继承集群分配去其他节点启动进程。

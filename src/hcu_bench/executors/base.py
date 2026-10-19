@@ -95,7 +95,7 @@ class AgentExecutor:
             started = time.monotonic()
             sent_cancel = False
             hook_budget = 5 * spec.get("container", {}).get("hook_timeout_s", 0) if spec.get("container") else 0
-            hard_limit = spec["timeout_s"] + hook_budget + self.node.get("connect_timeout_s", 10) + 30 + (120 if spec.get("artifacts") or spec.get("wrapped") else 0)
+            hard_limit = spec["timeout_s"] + spec.get("prepare_timeout_s", 0) + hook_budget + self.node.get("connect_timeout_s", 10) + 30 + (120 if spec.get("artifacts") or spec.get("wrapped") else 0)
             while process.poll() is None:
                 if cancelled() and not sent_cancel:
                     try:

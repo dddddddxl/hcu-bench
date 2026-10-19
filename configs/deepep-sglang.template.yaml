@@ -6,6 +6,7 @@ failure_policy: continue
 vars:
   iface: YOUR_ACTIVE_INTERFACE
   gid: "YOUR_GID_INDEX"
+  ib_hca: YOUR_ACTIVE_IB_HCA_LIST
 nodes:
   node0:
     executor: ssh
@@ -13,9 +14,12 @@ nodes:
     user: YOUR_USER
     python: python3
     work_root: /YOUR_HOST_WORKSPACE/bench-runs
-    gpus: [0, 1, 2, 3, 4, 5, 6, 7]
+    hcus: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+      NCCL_IB_HCA: "${vars.ib_hca}"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
 containers:
   test_image:
     mode: managed
@@ -37,7 +41,7 @@ tests:
     timeout_s: 660
     params:
       bench_root: /YOUR_CONTAINER_WORKSPACE/hcu-bench
-      test_script: /YOUR_NATIVE_DEEPEP_TESTS/test_low_latency.py
+      test_script: auto
       master_addr: YOUR_MASTER_IP
       master_port: 12345
       num_processes: 8
@@ -62,10 +66,10 @@ tests:
     timeout_s: 5400
     params:
       bench_root: /YOUR_CONTAINER_WORKSPACE/hcu-bench
-      profile: /YOUR_CONTAINER_WORKSPACE/hcu-bench/testpacks/sglang_accuracy/flash-int8-bw1100.template.json
+      profile: auto
       model_path: /YOUR_LOCAL_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
-      data_path: /YOUR_LOCAL_DATASETS/gsm8k/test.jsonl
-      ep_config: /YOUR_CONTAINER_WORKSPACE/ep_config.json
+      data_path: auto
+      ep_config: auto
       num_examples: 100
       num_shots: 5
       num_threads: 128

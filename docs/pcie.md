@@ -1,6 +1,6 @@
 # PCIe 带宽测试
 
-使用镜像中已有的 `rocm-bandwidth-test`，单机逐对运行五类路径：CPU→GPU、GPU→CPU、GPU→GPU、CPU↔GPU、GPU↔GPU。默认每次拷贝 512 MiB，原生迭代参数 `ROCM_BW_ITER_CNT=20`，同时记录 Avg BW 和 Peak BW。不安装工具、不编译、不改 DTK 或频率。
+使用仓库内的 `rocm-bandwidth-test` 源码，首次自动编译，单机逐对运行五类路径：CPU→HCU、HCU→CPU、HCU→HCU、CPU↔HCU、HCU↔HCU。默认每次拷贝 512 MiB，原生迭代参数 `ROCM_BW_ITER_CNT=20`，同时记录 Avg BW 和 Peak BW。`binary: auto` 使用构建缓存；也支持指定已有工具。不改 DTK 或频率。
 
 ## 配置和运行
 
@@ -22,9 +22,9 @@ hy-smi
 hy-smi --showpids
 ```
 
-`cpu_devices` / `gpu_devices` 是原生工具 Device ID，以逗号分隔的字符串填写。`nodes.gpus` 是 Bench 资源卡号，两者不是同一套编号。例如 1.85 上 HCU0～7 对应 Device 2～9，但其他节点不一定如此。必须根据 PCI 地址/UUID 核对映射，确保选中设备都是本次允许使用的卡。程序校验编号存在、CPU/GPU 类型和数量，不猜测 HCU 编号到 HSA 内存代理的映射；`HIP_VISIBLE_DEVICES` 不能代替原生工具的路径选择。存在 ROCR/CUDA 二次可见性掩码时会拒绝执行，须重新核对编号。
+`cpu_devices` / `hcu_devices` 是原生工具 Device ID，以逗号分隔的字符串填写。`nodes.hcus` 是 Bench 资源卡号，两者不是同一套编号。例如 1.85 上 HCU0～7 对应 Device 2～9，但其他节点不一定如此。必须根据 PCI 地址/UUID 核对映射，确保选中设备都是本次允许使用的卡。程序校验编号存在、CPU/HCU 类型和数量，不猜测 HCU 编号到 HSA 内存代理的映射；`HIP_VISIBLE_DEVICES` 不能代替原生工具的路径选择。存在 ROCR/CUDA 二次可见性掩码时会拒绝执行，须重新核对编号。
 
-默认至少选择两张 GPU，以便覆盖五类路径。有其他业务时先协调，不以瞬时利用率 0 判定空闲。Bench 资源锁只协调本工具，不能阻止其他用户启动负载。
+默认至少选择两张 HCU，以便覆盖五类路径。有其他业务时先协调，不以瞬时利用率 0 判定空闲。Bench 资源锁只协调本工具，不能阻止其他用户启动负载。
 
 可修改的参数：
 
@@ -32,7 +32,7 @@ hy-smi --showpids
 | --- | --- |
 | `binary` | 已有原生工具的绝对路径 |
 | `cpu_devices` | CPU 内存代理 Device ID，例如 `"0,1"` |
-| `gpu_devices` | GPU Device ID，例如 `"2,3"`；须对应 `nodes.gpus` |
+| `hcu_devices` | HCU Device ID，例如 `"2,3"`；须对应 `nodes.hcus` |
 | `size_mib` | 单次拷贝大小，默认 512 MiB，范围 1～4096 |
 | `iters` | 原生内部迭代参数，默认 20 |
 | `repeats` | 测试块的独立重复次数，默认 1，可改成 3 |
@@ -43,7 +43,7 @@ bash bench.sh pcie --set tests.pcie_bandwidth.params.size_mib=64
 bash bench.sh pcie --set tests.pcie_bandwidth.repeats=3
 ```
 
-本包不接受 `duration_s`。每轮串行遍历全部配置路径，CPU/GPU 单向正反分别测，GPU 单向覆盖有序对，双向覆盖无序对。2 个 CPU 代理、8 张 GPU 共 132 条命令，不包含 GPU 自拷贝，也不是八卡同时拷贝的并发总吞吐测试。
+本包不接受 `duration_s`。每轮串行遍历全部配置路径，CPU/HCU 单向正反分别测，HCU 单向覆盖有序对，双向覆盖无序对。2 个 CPU 代理、8 张 HCU 共 132 条命令，不包含 HCU 自拷贝，也不是八卡同时拷贝的并发总吞吐测试。
 
 ## 原生命令和结果
 
@@ -68,4 +68,4 @@ rocm-bandwidth-test -b SRC,DST -m 512
 
 ## 验证范围
 
-解析与命令规则参考 1.85 节点的 2.6.0 原生日志，并有合成进程测试覆盖。新接入的统一 PCIe suite 仍需真实节点跑一轮；本地回归不代表 GPU 实测通过。
+解析与命令规则参考 1.85 节点的 2.6.0 原生日志，并有合成进程测试覆盖。新接入的统一 PCIe suite 仍需真实节点跑一轮；本地回归不代表 HCU 实测通过。

@@ -3,7 +3,7 @@
   "name": "deepseek-v4-flash-channel-int8-bw1100-8x-sglang-0.5.12",
   "reference": "https://github.com/HYGON-AI/inference-cookbook-das/blob/89cc09d13325a5fdb420c8e52c1148f902f3c6ae/docs/model-deployment/sglang/deepseek-v4.md",
   "notes": "BW1100 8-card reference only. Confirm hardware, model, NICs and image before running. No DTK or package installation.",
-  "visible_gpus": 8,
+  "visible_hcus": 8,
   "require_memlock_unlimited": true,
   "server_argv": [
     "sglang", "serve", "--trust-remote-code", "--model-path", "${model_path}",

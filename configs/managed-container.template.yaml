@@ -9,33 +9,44 @@ vars:
   host_workspace: /YOUR_HOST_WORKSPACE               # 宿主机输出目录，须可写。
   container_workspace: /YOUR_CONTAINER_WORKSPACE     # 容器内工作目录，须可写。
   bench_root: /YOUR_CONTAINER_BENCH_REPO              # 容器内仓库路径，启动脚本需挂载代码。
-  rccl_binary: /YOUR_CONTAINER_RCCL_TESTS/build/all_reduce_perf # 已编译的 MPI 版本，启动脚本需挂载。
-  rccl_ranks: 8                                      # 一进程一卡，须等于 gpus 数量。
-  pcie_binary: /opt/dtk/bin/rocm-bandwidth-test         # 容器内已有工具路径。
+  rccl_binary: auto                                  # 容器内首次编译仓库源码。
+  rccl_ranks: 8                                      # 一进程一卡，须等于 hcus 数量。
+  pcie_binary: auto                                  # 也可填容器内已有工具绝对路径。
   pcie_cpu_devices: "YOUR_CPU_DEVICE_IDS"             # 在相同容器/可见性环境执行 -e 后填写。
-  pcie_gpu_devices: "YOUR_GPU_DEVICE_IDS"             # 工具 Device ID，须与下方 gpus 实际对应。
-  memory_binary: /YOUR_CONTAINER_DCU_HIPBENCHMARK/hcu-stream # 已编译的 main-staging-1.0，启动脚本需挂载。
-  memory_gpus: "0"                                   # 必须属于下方 gpus；"0,1" 会逐卡串行。
+  pcie_hcu_devices: "YOUR_HCU_DEVICE_IDS"             # 工具 Device ID，须与下方 hcus 实际对应。
+  memory_binary: auto                                # 使用随仓库提供的源码。
+  memory_hcus: "0"                                   # 必须属于下方 hcus；"0,1" 会逐卡串行。
   container_hook: /YOUR_HOST_SCRIPTS/container.sh     # 宿主机上的用户脚本，接口见下方 containers。
   image: YOUR_APPROVED_IMAGE                         # 已确认的待测镜像，工具不自动升级。
-  deepep_script: /YOUR_CONTAINER_NATIVE_TESTS/test_low_latency.py # 同目录有 utils.py。
+  deepep_script: auto                                # 内置 daily 11 字段 handle 测试。
   # 下列输入均为容器内路径；只跑 deepep 时可暂不填写精度输入。
   model: /YOUR_CONTAINER_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
-  dataset: /YOUR_CONTAINER_DATASETS/gsm8k.jsonl        # 每行包含 question / answer。
-  profile: /YOUR_CONTAINER_CONFIGS/flash-int8.profile.json # 服务参数和环境变量，需填真实环境。
-  ep_config: /YOUR_CONTAINER_CONFIGS/ep_config.json    # 已有 EP JSON 配置。
-  iface: YOUR_ACTIVE_INTERFACE                       # 实际 socket 网卡；精度 profile 需对应修改。
+  dataset: auto                                      # 内置 GSM8K test.jsonl。
+  profile: auto                                      # 内置 Flash INT8 / BW1100 8 卡配方。
+  ep_config: auto                                    # 内置 EP 参考配置。
+  iface: YOUR_ACTIVE_INTERFACE                       # 实际 socket 网卡。
+  ib_hca: YOUR_ACTIVE_IB_HCA_LIST                     # e2e 的实际 RDMA HCA 列表。
   gid: "YOUR_GID_INDEX"                               # 实际 RDMA GID；字符串，不照搬别的节点。
-  gpus: [0, 1, 2, 3, 4, 5, 6, 7]                    # 实际可用卡号，启动前检查占用。
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]                    # 实际可用卡号，启动前检查占用。
   num_processes: 8                                   # DeepEP 每节点进程数，与卡号数量一致。
   duration_s: 600                                    # 压测计划窗口（秒），含初始化。
+build:
+  dtk_root: /opt/dtk
+  mpi_home: /opt/mpi
+  arch: auto
+  cache_dir: "${vars.container_workspace}/native-cache" # 必须挂载到宿主机，容器删除后仍保留。
+  jobs: 2
+  timeout_s: 3600
 output_dir: "${vars.host_workspace}/results"
 nodes:
   node0:
     executor: local                                 # 此模板在当前宿主机执行 Docker 命令。
-    gpus: "${vars.gpus}"
+    hcus: "${vars.hcus}"
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+      NCCL_IB_HCA: "${vars.ib_hca}"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
 containers:
   test_image:
     mode: managed                                   # 每用例创建/清理自有容器，不接管现有容器。
@@ -80,7 +91,7 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.pcie_binary}"
       cpu_devices: "${vars.pcie_cpu_devices}"
-      gpu_devices: "${vars.pcie_gpu_devices}"
+      hcu_devices: "${vars.pcie_hcu_devices}"
       size_mib: 512                                 # MiB，不使用全矩阵默认大小。
       iters: 20                                     # ROCM_BW_ITER_CNT，不做独立数据校验。
   memory_bandwidth:
@@ -94,7 +105,7 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       binary: "${vars.memory_binary}"
-      devices: "${vars.memory_gpus}"
+      devices: "${vars.memory_hcus}"
       presets: both                                 # zd1+zd2 共 24 项，逐卡执行。
       model_mhz: 1400                               # MODEL 换算参数，不锁频。
       array_size: 104857600                         # 原生默认元素数，不是 MiB。

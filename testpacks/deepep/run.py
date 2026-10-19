@@ -88,7 +88,7 @@ def preflight(args, env=None):
         if getattr(args, name) <= 0:
             raise ValueError(name + " must be positive")
     if args.num_experts % (args.nnodes * args.num_processes) or args.num_topk > args.num_experts:
-        raise ValueError("Experts must divide the actual GPU world size, and topk must not exceed experts")
+        raise ValueError("Experts must divide the actual HCU world size, and topk must not exceed experts")
     if not 1 <= args.master_port <= 65535:
         raise ValueError("Invalid master port")
     script = Path(args.test_script)
@@ -109,14 +109,17 @@ def preflight(args, env=None):
 
 
 def run(args):
+    if args.test_script == "auto":
+        args.test_script = str(Path(__file__).resolve().parents[2] / "vendor/deepep-tests/test_low_latency.py")
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
     native_env = dict(os.environ)
+    native_env["PYTHONDONTWRITEBYTECODE"] = "1"
     native_env.pop("DEEP_EP_NORMAL_MNVL", None)
     evidence = preflight(args, native_env)
     write_json(output / "environment.json", evidence)
     if args.check_only:
-        print("DeepEP preflight OK; no GPU workload started", flush=True)
+        print("DeepEP preflight OK; no HCU workload started", flush=True)
         return 0
     stopped = cancellation()
     cycle = 0
@@ -139,7 +142,7 @@ def run(args):
                 for sample in parsed:
                     rank = sample.get("native_rank")
                     if rank is not None and not (args.node_rank * args.num_processes <= rank < (args.node_rank + 1) * args.num_processes):
-                        raise ValueError("Native rank falls outside this Bench node's GPU allocation")
+                        raise ValueError("Native rank falls outside this Bench node's HCU allocation")
                     payload = {"measurement_status": "measured", "correctness": "not_checked", "sample_id": sample_id,
                                "cycle": cycle, "timing_method": "native_test_report", **sample}
                     samples.write(json.dumps(payload, allow_nan=False) + "\n")

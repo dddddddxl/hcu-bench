@@ -5,10 +5,12 @@ max_nodes: 1
 duration_control: native
 parameters:
   bench_root: {type: string, required: true}
-  profile: {type: string, required: true}
+  profile: {type: string, default: auto}
+  serving: {type: object, default: {}, description: "Inline profile overrides: server_argv, env, visible_hcus, unset_env"}
   model_path: {type: string, required: true}
-  data_path: {type: string, required: true}
-  ep_config: {type: string, required: true}
+  data_path: {type: string, default: auto}
+  ep_config: {type: string, default: auto}
+  ep_settings: {type: object, default: {}, description: "Inline EP configuration; empty uses bundled Flash INT8 recipe"}
   num_examples: {type: integer, default: 100, min: 0}
   num_shots: {type: integer, default: 5, min: 0}
   num_threads: {type: integer, default: 128, min: 1}
@@ -23,6 +25,10 @@ command:
   - "${p_bench_root}/testpacks/sglang_accuracy/run.py"
   - --profile
   - "${p_profile}"
+  - --serving-json
+  - "${p_serving}"
+  - --ep-settings-json
+  - "${p_ep_settings}"
   - --model-path
   - "${p_model_path}"
   - --data-path

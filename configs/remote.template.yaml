@@ -1,16 +1,16 @@
 # 控制机通过 SSH 在两台 Linux 节点运行原生 DeepEP；使用已有密钥或 SSH config。
 # 复制为 configs/bench.yaml，填写 vars、节点信息和容器脚本后 bash bench.sh deepep。
-# 同一提交的仓库、原生 tests 及依赖须提前放到两个容器内；不会自动分发或安装。
+# 两端挂载/clone 同一提交的仓库；原生 tests 已随仓库提供，不安装镜像依赖。
 version: 1
 name: remote-deepep
 output_dir: ../runs              # 控制机目录，相对于此 YAML；日志和原生报告回传到这里。
 failure_policy: continue
 vars:
   bench_root: /YOUR_CONTAINER_BENCH_REPO
-  deepep_script: /YOUR_NATIVE_TESTS/test_low_latency.py # 同目录须有 utils.py。
+  deepep_script: auto             # 使用随仓库提供的 tests 和 utils。
   master_addr: YOUR_NODE0_REACHABLE_IP # 节点间可达的地址，不是控制机地址或 127.0.0.1。
   master_port: 29450              # 成功周期重启会递增端口，网络须允许这个范围。
-  num_processes: 4                # 每节点 GPU 数，两节点需一致。
+  num_processes: 4                # 每节点 HCU 数，两节点需一致。
   duration_s: 600
 nodes:
   node0:
@@ -19,9 +19,9 @@ nodes:
     user: YOUR_USER               # SSH config 已配置用户时可删除此字段。
     python: python3              # 宿主机 worker 解释器；测试在容器内 Python 3.10+ 执行。
     work_root: /YOUR_HOST_WORKSPACE/bench-runs
-    gpus: [0, 1, 2, 3]
+    hcus: [0, 1, 2, 3]
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
       NCCL_SOCKET_IFNAME: YOUR_NODE0_ACTIVE_INTERFACE
       GLOO_SOCKET_IFNAME: YOUR_NODE0_ACTIVE_INTERFACE
       ROCSHMEM_IB_GID_INDEX: "YOUR_NODE0_GID_INDEX"
@@ -31,9 +31,9 @@ nodes:
     user: YOUR_USER
     python: python3
     work_root: /YOUR_HOST_WORKSPACE/bench-runs
-    gpus: [0, 1, 2, 3]
+    hcus: [0, 1, 2, 3]
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
       NCCL_SOCKET_IFNAME: YOUR_NODE1_ACTIVE_INTERFACE
       GLOO_SOCKET_IFNAME: YOUR_NODE1_ACTIVE_INTERFACE
       ROCSHMEM_IB_GID_INDEX: "YOUR_NODE1_GID_INDEX"

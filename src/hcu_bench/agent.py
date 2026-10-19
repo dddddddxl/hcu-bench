@@ -53,7 +53,24 @@ def kill_group(proc):
         return False
 
 
-def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_cancel=False, capture=False):
+def stop_cooperative(proc):
+    # Native preparation owns separate child sessions; allow its signal handler
+    # to clean them. A forced exit cannot confirm descendant cleanup.
+    if os.name == "nt":
+        kill_group(proc)
+        return False
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+        proc.wait(timeout=8)
+        return proc.returncode in (0, 1, 130)
+    except ProcessLookupError:
+        return proc.poll() in (0, 1, 130)
+    except (OSError, subprocess.TimeoutExpired):
+        kill_group(proc)
+        return False
+
+
+def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_cancel=False, capture=False, log_prefix="", cooperative=False):
     proc = subprocess.Popen(command, cwd=cwd, env={**os.environ, **env}, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace", bufsize=1,
@@ -88,7 +105,7 @@ def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_c
                     else:
                         emit("log", text=text)
                 else:
-                    emit("log", text=text)
+                    emit("log", text=log_prefix + text)
         except Exception as exc:
             reader_errors.append(str(exc))
 
@@ -115,6 +132,8 @@ def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_c
                 proc.wait(timeout=8)
             except (OSError, subprocess.TimeoutExpired):
                 group_clean = kill_group(proc)
+        elif cooperative:
+            group_clean = stop_cooperative(proc)
         else:
             group_clean = kill_group(proc)
         break
@@ -138,8 +157,11 @@ def stage(command, cwd, env, timeout_s, duration_s=None, wrapped=False, ignore_c
         status = "failed"
     if proc.returncode == 125:
         clean = False
+    if cooperative and proc.returncode not in (0, 1, 130):
+        clean = False
     return {"status": status, "returncode": proc.returncode,
             "elapsed_s": time.monotonic() - started, "cleanup": "confirmed" if clean else "unconfirmed",
+            **({key: inner[-1][key] for key in ("phase", "error") if key in inner[-1]} if wrapped and inner else {}),
             **({"output": "\n".join(output)} if capture else {})}
 
 
@@ -216,7 +238,7 @@ def run(spec):
     threading.Thread(target=listen, daemon=True).start()
     emit("environment", data={"hostname": socket.gethostname(), "platform": platform.platform(),
                               "python": sys.version, "executable": sys.executable,
-                              "selected_gpus": spec.get("gpus", []), "simulated": spec.get("simulated", False)})
+                              "selected_hcus": spec.get("gpus", []), "simulated": spec.get("simulated", False)})
     work_dir = Path(spec["work_dir"])
     work_dir.mkdir(parents=True, exist_ok=True)
     leases = []
@@ -252,11 +274,22 @@ def run(spec):
                 cleanup = "unconfirmed"
             if checked["status"] != "completed" or checked["cleanup"] != "confirmed":
                 raise RuntimeError("Container check hook failed: " + checked["status"])
+        if spec.get("prepare"):
+            emit("log", text="[prepare] checking/building bundled native tool")
+            result["phase"] = "prepare"
+            result = stage(spec["prepare"], spec["cwd"], spec.get("env", {}), spec["prepare_timeout_s"],
+                           log_prefix="[prepare] ", cooperative=True)
+            cleanup = result["cleanup"]
+            if result["status"] != "completed" or cleanup != "confirmed":
+                result["phase"] = "prepare"
+                return result
+        result = {"status": "failed", "returncode": None, "elapsed_s": 0, "phase": "workload"}
         result = stage(spec["argv"], spec["cwd"], spec.get("env", {}), spec["timeout_s"],
                        spec.get("duration_s"), spec.get("wrapped", False))
         cleanup = result["cleanup"]
     except Exception as exc:
         emit("log", text="[agent error] " + str(exc))
+        result["status"] = "failed"
         result["error"] = str(exc)
     finally:
         if container and start_attempted:

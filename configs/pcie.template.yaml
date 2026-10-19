@@ -6,18 +6,18 @@ failure_policy: continue
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE
   bench_root: /YOUR_BENCH_REPO
-  binary: /opt/dtk/bin/rocm-bandwidth-test
+  binary: auto                           # 仓库源码首次自动编译；也可填已有工具绝对路径。
   # 编号必须来自当前容器中 binary -e 输出，不能直接套用示例。
   cpu_devices: "YOUR_CPU_DEVICE_IDS"       # 如 "0,1"，CPU 内存代理。
-  gpu_devices: "YOUR_GPU_DEVICE_IDS"       # 如 "2,3,4,5,6,7,8,9"，原生 Device ID。
-  gpus: [0, 1, 2, 3, 4, 5, 6, 7]         # Bench 资源卡号，与 gpu_devices 逐项对应。
+  hcu_devices: "YOUR_HCU_DEVICE_IDS"       # 如 "2,3,4,5,6,7,8,9"，原生 Device ID。
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # Bench 资源卡号，与 hcu_devices 逐项对应。
 output_dir: "${vars.workspace}/results"
 nodes:
   node0:
     executor: local
-    gpus: "${vars.gpus}"
+    hcus: "${vars.hcus}"
     env:
-      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
 tests:
   pcie_bandwidth:
     suite: pcie
@@ -30,6 +30,6 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.binary}"
       cpu_devices: "${vars.cpu_devices}"
-      gpu_devices: "${vars.gpu_devices}"
+      hcu_devices: "${vars.hcu_devices}"
       size_mib: 512                      # MiB，一次拷贝的缓冲区大小。
       iters: 20                          # 设置原生 ROCM_BW_ITER_CNT。

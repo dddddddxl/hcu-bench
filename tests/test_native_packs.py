@@ -168,7 +168,7 @@ class AccuracyTests(unittest.TestCase):
         path = self.root / "profile.json"
         path.write_text(json.dumps({"version": 1, "server_argv": ["sglang", "serve"], "visible_gpus": 8, "env": {"HIP_VISIBLE_DEVICES": "0,1"}}), encoding="utf-8")
         args = SimpleNamespace(profile=str(path), model_path="/model", ep_config="/ep.json", host="127.0.0.1", port=30000)
-        with self.assertRaisesRegex(ValueError, "GPU count"):
+        with self.assertRaisesRegex(ValueError, "HCU count"):
             accuracy.profile_for(args)
 
     def test_readiness_success_and_timeout(self):
@@ -203,7 +203,7 @@ class AccuracyTests(unittest.TestCase):
         evidence = {"num_examples": 100, "test_fixture": True}
         args = SimpleNamespace(output_dir=str(output), check_only=False, port=30000, host="127.0.0.1", startup_timeout=1)
         profile = {"version": 1}
-        with patch.object(accuracy, "preflight", return_value=evidence), patch.object(accuracy, "profile_for", return_value=(profile, ["fake-server"], {})), \
+        with patch.object(accuracy, "materialize_inputs"), patch.object(accuracy, "preflight", return_value=evidence), patch.object(accuracy, "profile_for", return_value=(profile, ["fake-server"], {})), \
                 patch.object(accuracy, "ensure_free_port"), patch.object(accuracy, "wait_ready"), patch.object(accuracy, "evaluate", return_value=0) as evaluate, \
                 patch.object(accuracy, "NativeProcess") as launch:
             launch.return_value.proc.poll.return_value = None
@@ -214,7 +214,7 @@ class AccuracyTests(unittest.TestCase):
 
     def test_accuracy_error_still_cleans_its_server(self):
         args = SimpleNamespace(output_dir=str(self.root), check_only=False, port=30000, host="127.0.0.1", startup_timeout=1)
-        with patch.object(accuracy, "preflight", return_value={}), patch.object(accuracy, "profile_for", return_value=({}, ["fake"], {})), \
+        with patch.object(accuracy, "materialize_inputs"), patch.object(accuracy, "preflight", return_value={}), patch.object(accuracy, "profile_for", return_value=({}, ["fake"], {})), \
                 patch.object(accuracy, "ensure_free_port"), patch.object(accuracy, "wait_ready", side_effect=TimeoutError()), patch.object(accuracy, "NativeProcess") as launch:
             with self.assertRaises(TimeoutError):
                 accuracy.run(args)

@@ -1,0 +1,43 @@
+{
+  "rccl-tests": {
+    "version": "ae3e6357cb3514d5649b3b5dfaa80cb2d2af3532",
+    "source": "https://github.com/ROCm/rccl-tests/tree/ae3e6357cb3514d5649b3b5dfaa80cb2d2af3532",
+    "license": "LICENSE.txt",
+    "tree_sha256": "cada34b1e001facaacb13192c276ca1b01b382c0cb4d7a145f2afdc6d41a4088"
+  },
+  "rocm-bandwidth-test": {
+    "version": "2.6.0",
+    "source": "https://github.com/ROCm/rocm_bandwidth_test/tree/84b8ddd2686be9bd3e438126b44e6bb10d94d522",
+    "license": "LICENSE.txt",
+    "tree_sha256": "d71232d65d5273a4e423141c0804b6f60b3a8efb85b578f36074f63486cc04f3"
+  },
+  "hcu-stream": {
+    "version": "main-staging-1.0",
+    "source": "User-supplied dcu-hipbenchmark-main-staging-1.0.zip; public redistribution authorized by the supplier on 2026-10-19",
+    "license": "No root license supplied; retained GPU-stream/LICENSE and per-file notices",
+    "tree_sha256": "2fb5dfec68ee678b063680fd29dbd934e134b1fc9e12a968a34ce2c67e996b78"
+  },
+  "deepep-tests": {
+    "version": "tests-3-daily-handle11",
+    "source": "User-supplied tests (3).zip; public redistribution authorized by the supplier on 2026-10-19",
+    "modifications": "Verified daily dispatch handle adaptation: assert len(handle)==11; layout-range index 4 -> 6. Correctness assertions retained. See README.md.",
+    "tree_sha256": "5f40a1d691a70b673afdc308a79e1490c851ca1f23dbf97737ef0a82ae0f0d73"
+  },
+  "mooncake": {
+    "version": "0.3.13.post1+237c9167",
+    "source": "https://github.com/HYGON-AI/mooncake-das/tree/237c9167cc8778ffbbc44460f53d590822a602eb",
+    "license": "LICENSE-APACHE",
+    "dependencies": {
+      "pybind11": "https://github.com/pybind/pybind11/tree/58c382a8e3d7081364d2f5c62e7f429f0412743b",
+      "yalantinglibs": "https://github.com/alibaba/yalantinglibs/tree/7801bc9ad9021781f15217552214e325a1cf7373"
+    },
+    "tree_sha256": "2d37cd72cef91f6aa8a84b7dbf6c4348d10354808ed964fe7179c1bbd03c76bc"
+  },
+  "gsm8k": {
+    "version": "3101c7d5072418e28b9008a6636bde82a006892c",
+    "source": "https://github.com/openai/grade-school-math/tree/3101c7d5072418e28b9008a6636bde82a006892c",
+    "split": "grade_school_math/data/test.jsonl (1319 rows)",
+    "license": "LICENSE",
+    "tree_sha256": "f6bc82da12e58de6deb4e7d4c5432b3fd866b537a1a7f58925bdad9447ed45e9"
+  }
+}

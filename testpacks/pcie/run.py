@@ -10,7 +10,7 @@ import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json
+from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json, prepared_binary
 
 KINDS = ("cpu_to_gpu", "gpu_to_cpu", "gpu_to_gpu", "cpu_gpu_bidir", "gpu_gpu_bidir")
 FIELDS = ("kind", "source", "target", "size_bytes", "avg_gbps", "peak_gbps")
@@ -31,11 +31,11 @@ def validate(args, env):
         raise ValueError("PCIe currently supports one node per case")
     cpus, gpus, reserved = ids(args.cpu_devices), ids(args.gpu_devices), ids(args.gpu_ids)
     if set(cpus) & set(gpus) or len(gpus) < 2 or len(gpus) != len(reserved):
-        raise ValueError("Choose distinct CPU/GPU Device IDs and at least two GPUs matching nodes.gpus count")
+        raise ValueError("Choose distinct CPU/HCU Device IDs and at least two HCUs matching nodes.hcus count")
     if not 1 <= args.size_mib <= 4096 or not 1 <= args.iters <= 10000:
         raise ValueError("Invalid buffer size or iteration count")
     if env.get("HIP_VISIBLE_DEVICES") not in (None, "", args.gpu_ids):
-        raise ValueError("HIP_VISIBLE_DEVICES conflicts with nodes.gpus")
+        raise ValueError("HIP_VISIBLE_DEVICES conflicts with nodes.hcus")
     if env.get("ROCR_VISIBLE_DEVICES") or env.get("CUDA_VISIBLE_DEVICES"):
         raise ValueError("Remove ROCR/CUDA masks and recheck native Device IDs")
     # These can change the parser contract, device enumeration or timing method.
@@ -151,6 +151,7 @@ def run(args, stopped):
     out.mkdir(parents=True, exist_ok=True)
     rows, execution = [], []
     try:
+        prepared_binary(args)
         env = dict(os.environ)
         cpus, gpus = validate(args, env)
         binary = Path(args.binary).resolve()
@@ -165,7 +166,7 @@ def run(args, stopped):
         devices = parse_devices(execute([str(binary), "-e"], "devices", out, env, stopped, execution))
         for selected, kind in ((cpus, "CPU"), (gpus, "GPU")):
             if any(device not in devices or devices[device]["type"] != kind for device in selected):
-                raise ValueError("Configured native device IDs do not match the enumerated CPU/GPU types")
+                raise ValueError("Configured native device IDs do not match the enumerated CPU/HCU types")
         write_json(out / "devices.json", devices)
         execute([str(binary), "-t"], "topology", out, env, stopped, execution)
         for kind, src, dst in pairs(cpus, gpus):
@@ -193,10 +194,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--cpu-devices", required=True)
-    parser.add_argument("--gpu-devices", required=True)
+    parser.add_argument("--hcu-devices", "--gpu-devices", dest="gpu_devices", required=True)
     parser.add_argument("--size-mib", type=int, default=512)
     parser.add_argument("--iters", type=int, default=20)
-    parser.add_argument("--gpu-ids", required=True)
+    parser.add_argument("--hcu-ids", "--gpu-ids", dest="gpu_ids", required=True)
     parser.add_argument("--nnodes", type=int, default=1)
     parser.add_argument("--node-rank", type=int, default=0)
     parser.add_argument("--output-dir", required=True)

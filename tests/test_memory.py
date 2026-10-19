@@ -229,6 +229,7 @@ class MemoryTests(unittest.TestCase):
             encoding="utf-8")
         pack = yaml.safe_load((ROOT / "testpacks/memory/manifest.yaml").read_text())
         pack["command"][0], pack["command"][2] = sys.executable, str(launcher)
+        pack["prepare"][0] = sys.executable
         (self.root / "pack.yaml").write_text(yaml.safe_dump(pack), encoding="utf-8")
         data = {"version": 1, "name": "synthetic-memory-contract", "output_dir": "runs",
                 "nodes": {"local": {"executor": "local", "gpus": [1],

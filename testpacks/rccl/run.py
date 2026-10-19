@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "testpacks"))
 sys.path.insert(0, str(ROOT / "experimental/wheel-pilot/rccl-plugin/src"))
-from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json
+from native_common import NativeProcess, CleanupError, cancellation, cleanup_failure, emit, sha256, write_json, prepared_binary
 from hcubench_communication_rccl import RcclAllReduce
 
 
@@ -40,11 +40,11 @@ def validate(params, gpu_ids, nnodes, node_rank, env):
     LocalAllReduce().validate(params)
     devices = gpu_ids.split(",")
     if len(devices) != params["ranks"] or len(set(devices)) != len(devices) or not all(d.isdigit() for d in devices):
-        raise ValueError("ranks must equal the number of distinct configured GPU IDs")
+        raise ValueError("ranks must equal the number of distinct configured HCU IDs")
     if env.get("HIP_VISIBLE_DEVICES") not in (None, "", gpu_ids):
-        raise ValueError("HIP_VISIBLE_DEVICES conflicts with configured GPU IDs")
+        raise ValueError("HIP_VISIBLE_DEVICES conflicts with configured HCU IDs")
     if env.get("ROCR_VISIBLE_DEVICES") or env.get("CUDA_VISIBLE_DEVICES"):
-        raise ValueError("Remove secondary ROCR/CUDA visibility masks; use configured GPU IDs only")
+        raise ValueError("Remove secondary ROCR/CUDA visibility masks; use configured HCU IDs only")
     for key in ("NCCL_TESTS_SPLIT", "NCCL_TESTS_SPLIT_MASK", "NCCL_TESTS_DEVICE"):
         if env.get(key):
             raise ValueError(f"Unsupported environment override: {key}")
@@ -99,6 +99,7 @@ def run(args, stopped):
     out.mkdir(parents=True, exist_ok=True)
     proc = None
     try:
+        prepared_binary(args)
         params = {key: getattr(args, key) for key in RcclAllReduce.schema}
         env = dict(os.environ)
         validate(params, args.gpu_ids, args.nnodes, args.node_rank, env)
@@ -146,7 +147,7 @@ def main():
     for key, rule in RcclAllReduce.schema.items():
         parser.add_argument("--" + key.replace("_", "-"), type=int if rule["type"] == "integer" else str,
                             default=rule["default"] if key != "binary" else None, required=key == "binary")
-    parser.add_argument("--gpu-ids", required=True)
+    parser.add_argument("--hcu-ids", "--gpu-ids", dest="gpu_ids", required=True)
     parser.add_argument("--nnodes", type=int, default=1)
     parser.add_argument("--node-rank", type=int, default=0)
     parser.add_argument("--output-dir", required=True)
