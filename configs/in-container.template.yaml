@@ -16,11 +16,8 @@ vars:
   memory_binary: auto                      # 使用仓库内 main-staging-1.0 源码。
   memory_hcus: "0"                         # 显存带宽单独选卡，必须属于下方 hcus；"0,1" 会逐卡串行。
   deepep_script: auto                      # 仓库内 11 字段 handle 的 daily 测试；须匹配镜像 DeepEP。
-  # e2e 默认附带 GSM8K 和 Flash INT8 / BW1100 8 卡配方；只填写模型和通信环境。
-  model: /YOUR_MODELS/DeepSeek-V4-Flash-Channel-INT8-w8a8
+  model_script: ./model_scripts/model_a.local.sh # 模型路径、TP/EP、量化及环境放入启动脚本。
   dataset: auto                           # 内置 GSM8K test.jsonl；也可填本地 JSONL 路径。
-  profile: auto                           # 启动参数可直接在下方 params.serving 中修改。
-  ep_config: auto                         # 内置 normal_dispatch / normal_combine 参考配置。
   iface: YOUR_ACTIVE_INTERFACE             # 实际 socket 网卡。
   ib_hca: YOUR_ACTIVE_IB_HCA_LIST           # e2e NCCL_IB_HCA；如 mlx5_0，不照抄别的节点。
   gid: "YOUR_GID_INDEX"                     # 实际 RDMA GID，保留字符串引号，不能照搬其他节点。
@@ -46,6 +43,11 @@ nodes:
       NCCL_IB_HCA: "${vars.ib_hca}"
       NCCL_SOCKET_IFNAME: "${vars.iface}"
       GLOO_SOCKET_IFNAME: "${vars.iface}"
+models:
+  model_a:
+    start_script: "${vars.model_script}"
+    port: 30903                           # 脚本读取 BENCH_PORT；禁止后台化。
+    # tokenizer_path: /YOUR_LOCAL_MODEL  # 服务返回模型目录不可用时才需填写。
 tests:
   # all 按顺序串行执行；某项暂不测可在该项下加 enabled: false。
   # RCCL 单机 AllReduce，固定迭代完成后校验；不能配置 duration_s。
@@ -121,26 +123,26 @@ tests:
       NCCL_SOCKET_IFNAME: "${vars.iface}"
       GLOO_SOCKET_IFNAME: "${vars.iface}"
       ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
-  # bash bench.sh e2e 选择此项；参考配方要求 BW1100 8 卡，不是任意卡数通用配方。
+  # e2e 选择精度+性能，同一个模型只启动一次；e2e_acc 只跑此项。
   sglang_gsm8k:
-    suite: e2e
-    adapter: command
-    pack: ../testpacks/sglang_accuracy/manifest.yaml
+    suite: e2e_acc
+    models: [model_a]
     nodes: [node0]
     timeout_s: 5400                        # 包含模型加载、评测及服务清理。
     params:
-      bench_root: "${vars.bench_root}"
-      profile: "${vars.profile}"
-      model_path: "${vars.model}"
       data_path: "${vars.dataset}"
-      ep_config: "${vars.ep_config}"
-      serving:                           # 只写需要覆盖的项；完整命令用 server_argv 列表。
-        env:
-          NCCL_IB_HCA: "${vars.ib_hca}"
-          NCCL_SOCKET_IFNAME: "${vars.iface}"
-          GLOO_SOCKET_IFNAME: "${vars.iface}"
-      port: 30903                         # 本次服务端口，已占用就报错，不复用其他服务。
       num_examples: 100                   # 评分题数，不包含前面的 few-shot 样例。
       num_shots: 5                        # 前 5 条作为提示样例。
       max_tokens: 2048                    # 单题输出 token 上限。
       min_score: ""                       # 空字符串：只报告分数；有明确标准再填 "0.90" 等阈值。
+  model_throughput:
+    suite: e2e_perf
+    models: [model_a]
+    nodes: [node0]
+    timeout_s: 14400
+    params:
+      shapes: [[128, 128], [1024, 1024], [4096, 512]]
+      concurrency: [1, 8, 32]
+      requests: 256
+      warmup_requests: 32
+      repeats: 3

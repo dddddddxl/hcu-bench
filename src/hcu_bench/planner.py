@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from .config import apply_overrides, load_document, resolve_variables, validate_config
-from .models import Case, Plan, SUITES, require
+from .models import Case, Plan, SUITES, SUITE_GROUPS, require
+from .e2e_config import expand_model_tests
 from .registry import get_pack, resolve_params
 
 
@@ -12,13 +13,13 @@ def make_plan(path: str, selection: str = "all", overrides: list[str] | None = N
     source = Path(path).resolve()
     config = resolve_variables(apply_overrides(load_document(source), overrides or []))
     validate_config(config)
-    selected = list(SUITES) if selection == "all" else selection.split(",")
-    require(bool(selected) and all(suite in SUITES for suite in selected) and len(selected) == len(set(selected)), f"Invalid suite selection: {selection}")
+    names = list(SUITES) if selection == "all" else selection.split(",")
+    require(bool(names) and all(suite in (*SUITES, *SUITE_GROUPS) for suite in names)
+            and len(names) == len(set(names)), f"Invalid suite selection: {selection}")
+    selected = {child for name in names for child in SUITE_GROUPS.get(name, (name,))}
     cases = []
     case_ids = set()
-    for test_id, test in config["tests"].items():
-        if not test.get("enabled", True) or test.get("suite") not in selected:
-            continue
+    for test_id, test in expand_model_tests(config, selected):
         pack = get_pack(test, source.parent)
         require(pack.get("duration_control") != "native" or test.get("duration_s") is None,
                 f"{test_id}: native duration_control forbids framework duration_s; configure the pack's native duration parameter")

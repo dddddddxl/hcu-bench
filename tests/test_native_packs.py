@@ -342,7 +342,7 @@ class NativeLifecycleTests(unittest.TestCase):
 
     def test_two_native_cases_plan_has_confirmed_defaults(self):
         plan = make_plan(str(ROOT / "configs/deepep-sglang.template.yaml"))
-        self.assertEqual([case.suite for case in plan.cases], ["deepep", "e2e"])
+        self.assertEqual([case.suite for case in plan.cases], ["deepep", "e2e_acc"])
         self.assertEqual(plan.cases[0].duration_s, 600)
         self.assertEqual(plan.cases[1].params["num_examples"], 100)
         self.assertEqual(plan.cases[1].params["min_score"], "")

@@ -1,71 +1,58 @@
-# 在已有容器内顺序评测两个模型；模型需兼容 SGLang 0.5.12 GSM8K 接口。
-# 这只是多模型编排模板，不是两个模型的已验证部署配方。
-# 复制为 configs/bench.yaml，填写 vars 后 bash bench.sh e2e。
+# 在已有容器中运行：复制为 configs/bench.yaml，编辑模型脚本后 bash bench.sh e2e。
+# e2e_acc / e2e_perf 可分别运行；e2e 同时选中两者，每个模型只启动一次。
 version: 1
-name: multi-model-gsm8k
-failure_policy: continue        # 当前模型失败并确认清理后，继续下一个；可改为 stop。
+name: multi-model-e2e
+failure_policy: continue       # 服务健康才继续下一任务；清理失败总是停止。
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE
-  bench_root: /YOUR_BENCH_REPO
-  hcus: [0, 1, 2, 3, 4, 5, 6, 7] # 须与 serving.visible_hcus 一致。
-  dataset: auto                 # 仓库自带 GSM8K；也可指定自己的 JSONL。
-  iface: YOUR_SOCKET_INTERFACE
-  ib_hca: YOUR_ACTIVE_IB_HCA_LIST
-  model_a: /YOUR_LOCAL_MODELS/model-a
-  model_b: /YOUR_LOCAL_MODELS/model-b
+  bench_root: /YOUR_BENCH_REPO  # 执行环境内完整仓库的绝对路径。
 output_dir: "${vars.workspace}/results"
+build:
+  cache_dir: "${vars.workspace}/client-cache" # 独立客户端 Python，不升级服务镜像的库。
+  timeout_s: 3600             # 首次客户端安装时限，独立于正式测试。
 nodes:
   node0:
     executor: local
-    hcus: "${vars.hcus}"
+    hcus: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       HIP_VISIBLE_DEVICES: "${hcu_ids}"
-      NCCL_IB_HCA: "${vars.ib_hca}"
-      NCCL_SOCKET_IFNAME: "${vars.iface}"
-      GLOO_SOCKET_IFNAME: "${vars.iface}"
+models:
+  model_a:
+    start_script: ./model_scripts/model_a.local.sh # 相对目标仓库根目录，不是控制机路径。
+    port: 30000              # 脚本读取 BENCH_PORT，前台 exec，不用 nohup/&。
+    startup_timeout_s: 1800
+    # tokenizer_path: /models/model-a # 服务返回的目录不可用时填写，不自动下载。
+    # model_name: model-a            # 服务发布多个模型名时填写精确 ID。
+    # before_perf_script: ./model_scripts/reset-cache.local.sh # 可选的缓存重置脚本。
+  model_b:
+    start_script: ./model_scripts/model_b.local.sh
+    port: 30000              # 串行运行，前一模型退出后复用端口。
+    # nodes: [node0]         # 可覆盖测试项的 nodes/container，仍仅支持单节点服务。
+    # container: another_image
 tests:
-  model_a_gsm8k:                # 名称出现在报告中，两个模型不要使用同一个测试名。
-    suite: e2e
-    adapter: command
-    pack: ../testpacks/sglang_accuracy/manifest.yaml
-    nodes: [node0]              # 当前仅支持单节点服务，不通过增加 nodes 启动多机模型。
-    timeout_s: 5400             # 包括模型加载和评测；不设置 duration_s。
-    params:
-      bench_root: "${vars.bench_root}"
-      model_path: "${vars.model_a}"
-      profile: auto            # 内置 Flash INT8 8 卡模板，只适用于兼容模型。
-      ep_config: auto
-      serving:
-        name: model-a
-        visible_hcus: 8
-      data_path: "${vars.dataset}"
-      port: 30903              # 必须未被其他服务占用。
-      num_examples: 100
-      num_shots: 5
-      max_tokens: 2048
-      min_score: ""            # 只报告分数；有明确标准后再填字符串阈值。
-  model_b_gsm8k:
-    suite: e2e
-    adapter: command
-    pack: ../testpacks/sglang_accuracy/manifest.yaml
+  accuracy:
+    suite: e2e_acc
+    models: [model_a, model_b]
     nodes: [node0]
     timeout_s: 5400
     params:
-      bench_root: "${vars.bench_root}"
-      model_path: "${vars.model_b}"
-      profile: auto
-      ep_config: auto
-      serving:
-        name: model-b
-        visible_hcus: 8
-        # 需要改启动命令时，取消下面注释并填写完整 argv 列表。
-        # server_argv 替换内置命令；env 合并内置环境，unset_env 删除不需要的环境。
-        # 示例不是任意模型的通用配方，其他模型须同步检查 env/EP 等设置。
-        # server_argv: [sglang, serve, --model-path, "${model_path}", --tp, "8",
-        #               --host, "${host}", --port, "${port}"]
-      data_path: "${vars.dataset}"
-      port: 30904
+      dataset: gsm8k
       num_examples: 100
       num_shots: 5
       max_tokens: 2048
-      min_score: ""
+      min_score: ""          # 只报分数，不默认判定精度通过。
+  performance:
+    suite: e2e_perf
+    models: [model_a, model_b]
+    nodes: [node0]
+    timeout_s: 14400         # 每个模型的全部性能组合总时限，不是单次请求时限。
+    params:
+      shapes: [[128, 128], [1024, 1024], [4096, 512]] # 目标输入/输出 token，另记实际长度。
+      concurrency: [1, 8, 32]
+      requests: 256          # 每个组合的正式请求数，至少等于最大并发。
+      warmup_requests: 32    # 每个组合独立预热，排除在正式统计之外。
+      repeats: 3            # 同一服务内复测，不重复加载模型。
+      seed: 42
+      request_timeout_s: 600
+      extra_body: {}        # 例如经验证支持的 ignore_eos，不猜思考模式。
+      python: auto          # 自动准备固定 EvalScope，也可填已有 1.13.0 客户端 Python。

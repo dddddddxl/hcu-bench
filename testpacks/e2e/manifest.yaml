@@ -1,0 +1,15 @@
+version: 1
+id: e2e.script-session
+suite: e2e
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  session: {type: object, required: true}
+prepare: [python3, -u, "${p_bench_root}/testpacks/e2e/prepare.py", --session-json, "${p_session}", --output-dir, "${case_dir}"]
+command: [python3, -u, "${p_bench_root}/testpacks/e2e/run.py", --session-json, "${p_session}", --output-dir, "${case_dir}"]
+cwd: "${case_dir}"
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/**/*.json", "${case_dir}/**/*.log", "${case_dir}/**/*.html", "${case_dir}/**/*.db"]
+artifact_limit_mb: 300

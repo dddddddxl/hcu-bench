@@ -33,6 +33,13 @@
     },
     "tree_sha256": "2d37cd72cef91f6aa8a84b7dbf6c4348d10354808ed964fe7179c1bbd03c76bc"
   },
+  "evalscope": {
+    "version": "1.13.0",
+    "source": "https://pypi.org/project/evalscope/1.13.0/",
+    "license": "LICENSE",
+    "archive_sha256": "e0a57e9a0b4ed5716e5c7a7cad4747d5cf1831de2a9e129d9b4894a8fb0d217d",
+    "tree_sha256": "3ad94aeec395271116c53397493aeb64b300caefdfe4374b92dd5957bbbe90ef"
+  },
   "gsm8k": {
     "version": "3101c7d5072418e28b9008a6636bde82a006892c",
     "source": "https://github.com/openai/grade-school-math/tree/3101c7d5072418e28b9008a6636bde82a006892c",

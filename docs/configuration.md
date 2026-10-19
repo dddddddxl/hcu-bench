@@ -13,6 +13,7 @@
 | `output_dir` | 控制端报告目录；相对路径以 YAML 所在目录为基准 |
 | `nodes` | 本地或 SSH 节点，声明卡号、工作目录和环境变量 |
 | `containers` | 可选；复用已有容器或调用用户脚本创建容器 |
+| `models` | 模型名称、启动脚本及服务端口；模型部署参数在脚本中 |
 | `tests` | 按顺序执行的测试块，同一个 suite 可以有多个测试块 |
 
 以一个显存带宽测试块为例，下面是要放到 `tests` 下的配置片段：
@@ -62,13 +63,13 @@ matrix:
 repeats: 3
 ```
 
-这会生成 3 个 token 配置，每个运行 3 轮。多个 matrix 字段按笛卡尔积组合；每轮独立归档。不要将整个算子形状数据集展开成百万项 matrix，数据文件路径应交给原生测试包处理。
+这会生成 3 个 token 配置，每个运行 3 轮。多个 matrix 字段按笛卡尔积组合；每轮独立归档。引用 `models` 的端到端测试不用外层 `matrix/repeats`，改用 `params.shapes/concurrency/repeats`。不要将整个算子形状数据集展开成百万项 matrix，数据文件路径应交给原生测试包处理。
 
 `timeout_s` 是正式测试的故障时限，不是测量迭代次数。首次编译另用 `build.timeout_s`，不扣减测试窗口。DeepEP 可使用测试块的 `duration_s`；Mooncake 使用 `params.duration`。RCCL、PCIe、memory 和 e2e 必须执行完各自的有限用例，不接受框架 `duration_s`。
 
 ## 自动准备
 
-RCCL、PCIe、memory、Mooncake 的 `params.binary: auto` 从仓库源码构建并缓存；填具体路径则复用已有程序。DeepEP 的 `test_script: auto` 使用内置测试，e2e 的 `data_path`、`profile`、`ep_config` 均可保持 `auto`。
+RCCL、PCIe、memory、Mooncake 的 `params.binary: auto` 从仓库源码构建并缓存；填具体路径则复用已有程序。DeepEP 的 `test_script: auto` 使用内置测试，e2e_acc 的 `data_path: auto` 使用内置 GSM8K；e2e_perf 的 `python: auto` 在缓存中准备隔离 EvalScope 客户端，首次需 Python 包源或 wheelhouse。
 
 ```yaml
 build:
@@ -111,41 +112,47 @@ SSH 只使用已有免密配置；`check/plan` 不会验证连通性或启动负
 
 ## 多个模型顺序评测
 
-每个模型写成一个独立 `suite: e2e` 测试块，分别指定 `model_path` 和 `serving`。运行 `bash bench.sh e2e` 会按 YAML 顺序评测所有启用的 e2e 测试块；每个模型的服务在该用例结束时清理，报告按测试名分开。
+顶层 `models` 定义模型及启动脚本；`e2e_acc` / `e2e_perf` 测试块各自引用模型列表。运行 `bash bench.sh e2e` 会逐模型启动服务、先精度再吞吐、清理后换下一个模型。完整参数和脚本约定见 [端到端测试](e2e.md)。
 
 ```bash
 cp configs/e2e-multi-model.template.yaml configs/bench.yaml
-# 编辑模型路径、卡号、网卡及各模型 serving 参数
+# 编辑 YAML 的脚本路径、卡号、测试参数，以及每个模型的启动脚本
 bash bench.sh check -c configs/bench.yaml --suite e2e
 bash bench.sh e2e
 ```
 
-启动参数直接写在 YAML 的 `params` 下，无需另外制作 JSON：
+推荐配置如下；模型路径、量化、TP/DP/EP、网卡等放在启动脚本中，不塞进测试参数：
 
 ```yaml
-params:
-  bench_root: "${vars.bench_root}"
-  model_path: "${vars.model}"
-  profile: auto
-  data_path: auto
-  ep_config: auto
-  serving:
-    visible_hcus: 8
-    env:
-      NCCL_IB_HCA: "${vars.ib_hca}"
-      NCCL_SOCKET_IFNAME: "${vars.iface}"
-      GLOO_SOCKET_IFNAME: "${vars.iface}"
-    # server_argv: [...]   # 填完整 argv 时替换内置启动命令；不是 shell 字符串。
-    # unset_env: [...]     # 替换内置列表，按模型列出不需要的环境变量。
-  # ep_settings:          # 有自定义需求时填完整 normal_dispatch/normal_combine。
-  #   normal_dispatch: {...}
-  #   normal_combine: {...}
+models:
+  model_a:
+    start_script: model_scripts/model_a.local.sh
+  model_b:
+    start_script: model_scripts/model_b.local.sh
+tests:
+  accuracy:
+    suite: e2e_acc
+    models: [model_a, model_b]
+    nodes: [node0]
+    timeout_s: 5400
+    params: {num_examples: 100, num_shots: 5, min_score: ""}
+  throughput:
+    suite: e2e_perf
+    models: [model_a, model_b]
+    nodes: [node0]
+    timeout_s: 14400
+    params:
+      shapes: [[128, 128], [1024, 1024]]
+      concurrency: [1, 8]
+      requests: 256
+      warmup_requests: 32
+      repeats: 3
 ```
 
-`profile: auto` 以仓库的 Flash INT8 8 卡配方为基础，`serving.env` 合并环境，其余 `serving` 字段替换同名字段。不同模型不能盲用该配方，替换启动命令时也应检查继承的环境和 EP 设置。仍可用 `profile: /path/profile.json` 兼容已有配置；`ep_settings` 与外部 `ep_config` 不能同时指定。
+普通测试块按 YAML 顺序执行；模型测试按首次引用顺序合并成会话，同一会话中的精度排在吞吐前。`e2e_acc`、`e2e_perf` 可以单独选择，`e2e` 同时选择两项，`all` 不会重复执行分组。当前服务和客户端在同一节点/容器，不能直接扩展为多机推理。
 
-`server_argv` 是参数数组，例如 `[sglang, serve, --model-path, "${model_path}", --tp, "8", --host, "${host}", --port, "${port}"]`。它支持 `${model_path}`、`${ep_config}`、`${host}`、`${port}`，由 e2e 包装器展开。YAML 内也可引用 `${vars.xxx}`；外部 JSON 不展开 YAML 变量。内置 profile 的网卡取 YAML 环境或显式 `serving.env`，不会猜测；外部 JSON 中已写死的环境只有 `serving.env` 能覆盖。
+旧的 `suite: e2e` 测试块按 `e2e_acc` 兼容，旧 `testpacks/sglang_accuracy/manifest.yaml`、`profile`、`serving.server_argv` 和 `ep_settings` 保留，不会自动增加吞吐负载。旧配置样例见 [deepep-sglang.template.yaml](../configs/deepep-sglang.template.yaml)，新配置优先使用脚本接口。
 
-当前评测接口固定为 SGLang 0.5.12 的 GSM8K；仓库自带官方 test 集 1319 条。自定义数据每行须含非空 `question` 和 `answer` 字符串。默认前 5 条作为提示样例，随后 100 条评分，至少需要 105 条。`num_examples: 0` 表示评测提示样例之后的全部数据。每次生成的实际 profile/EP 与评测信息记录在该用例的报告目录。
+精度接口固定为 SGLang 0.5.12 的 GSM8K；仓库自带官方 test 集 1319 条。自定义数据每行须含非空 `question` 和 `answer` 字符串。默认前 5 条作为提示样例，随后 100 条评分，至少需要 105 条。`num_examples: 0` 表示评测提示样例之后的全部数据。
 
-多模型模板只演示编排，不保证任意模型都兼容 Flash INT8 配方。每个模型都需经过验证的服务参数和 EP 配置。当前不支持多机模型服务、其他评测数据集或通用推理吞吐测试。
+吞吐按长度 × 并发 × 轮次逐点执行，实际结果独立列出，不把多个模型或不同长度混算。模板只演示编排；每个模型都需要经过验证的启动参数，本地模拟回归不代替真实 HCU 性能验证。

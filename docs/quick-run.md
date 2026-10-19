@@ -14,7 +14,7 @@
 cp configs/in-container.template.yaml configs/bench.yaml
 ```
 
-修改 `configs/bench.yaml` 顶部 `vars`：可写工作目录、容器内 Bench 路径、模型、实际网卡/GID、卡号和压测时长。工具、脚本、数据、profile、EP 路径可保持 `auto`，启动参数可在 YAML 的 `serving` 修改。`configs/bench.yaml` 被 Git 忽略，不提交节点私有配置。
+修改 `configs/bench.yaml` 顶部 `vars`：可写工作目录、容器内 Bench 路径、模型启动脚本、实际网卡/GID、卡号和压测时长。原生工具、DeepEP 脚本、GSM8K 数据可保持 `auto`。模型参数写在独立启动脚本中，YAML 引用路径，见 [端到端测试](e2e.md)。`configs/bench.yaml` 和 `model_scripts/*.local.sh` 被 Git 忽略，不提交节点私有配置。
 
 随后在容器里执行：
 
@@ -23,7 +23,9 @@ bash bench.sh rccl                # 只跑单机 MPI AllReduce
 bash bench.sh deepep              # 只跑低延迟压测
 bash bench.sh pcie                # 只跑五类 PCIe 带宽路径
 bash bench.sh memory              # 只跑单卡显存/缓存/LDS 带宽
-bash bench.sh e2e                 # 只跑精度测试
+bash bench.sh e2e_acc             # 只跑精度测试
+bash bench.sh e2e_perf            # 只跑吞吐测试
+bash bench.sh e2e                 # 精度 + 吞吐
 bash bench.sh all                 # 按 YAML 顺序跑全部启用项
 bash bench.sh deepep,e2e          # 选择多个 suite
 ```
@@ -92,6 +94,6 @@ check/plan 只做静态检查，不连节点或启动工作负载。原生依赖
 
 ## 不会隐藏的准备条件
 
-模型权重和匹配的框架运行库必须已存在。源码在目标环境自动编译，缺少编译器或开发库会报告准备失败，不下载模型、不安装依赖、不自动猜测 wheel 接口。内置 profile 的网卡取 YAML 配置；外部 JSON 中写死的环境需用 `serving.env` 显式覆盖。
+模型权重和匹配的框架运行库必须已存在。原生源码在目标环境自动编译，缺少编译器或开发库会报告准备失败，不下载模型、不安装系统开发库、不猜测 wheel 接口。e2e_perf 首次在独立缓存 venv 安装 Python 客户端依赖，需要包源或 wheelhouse，不改服务环境。新模型配置的网卡和 EP 参数放在各自的启动脚本中。
 
 原生断言、SIGABRT/SIGKILL、空结果都会如实记录；达到压测时长是计划结束，不推断完整正确性通过。HCU 锁不代表其他业务空闲，启动前的业务占用检查仍需人工或你的启动脚本负责。

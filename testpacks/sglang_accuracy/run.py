@@ -193,6 +193,8 @@ def local_url(args):
 def ensure_free_port(args):
     family = socket.AF_INET6 if ":" in args.host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as probe:
+        if os.name != "nt":
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind((args.host, args.port))
 
 

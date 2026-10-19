@@ -19,7 +19,7 @@ MOCK_PACK = {
 def get_pack(test: dict, base: Path) -> dict:
     adapter = test.get("adapter")
     require(adapter in ("mock", "command"), "adapter must be mock or command")
-    require(test.get("suite") in SUITES, f"Unknown suite: {test.get('suite')}")
+    require(test.get("suite") in (*SUITES, "e2e"), f"Unknown suite: {test.get('suite')}")
     if adapter == "mock":
         require("pack" not in test and not test.get("container"), "mock must not use a real test pack or container")
         return dict(MOCK_PACK)
@@ -27,7 +27,9 @@ def get_pack(test: dict, base: Path) -> dict:
     pack_path = (base / test["pack"]).resolve()
     pack = load_document(pack_path)
     keys(pack, {"version", "id", "suite", "parameters", "parameter_aliases", "command", "prepare", "cwd", "env", "result_protocol", "requires_metrics", "artifacts", "artifact_limit_mb", "duration_control", "max_nodes"}, "test pack")
-    require(pack.get("version") == 1 and pack.get("suite") == test["suite"], "Test-pack version or suite mismatch")
+    pack_suite = "e2e_acc" if pack.get("suite") == "e2e" and pack.get("id") != "e2e.script-session" else pack.get("suite")
+    compatible = pack_suite == test["suite"] or (pack.get("id") == "e2e.script-session" and test["suite"] in ("e2e", "e2e_acc", "e2e_perf"))
+    require(pack.get("version") == 1 and compatible, "Test-pack version or suite mismatch")
     require(isinstance(pack.get("id"), str) and bool(pack["id"]), "Test-pack id is required")
     argv(pack.get("command"), "test-pack command")
     if "prepare" in pack:

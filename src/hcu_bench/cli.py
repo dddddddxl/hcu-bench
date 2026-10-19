@@ -52,10 +52,12 @@ def dispatch(args):
             "deepep": "native: low-latency pressure (single/multiple nodes)",
             "mooncake": "native: RDMA/VRAM pressure (multiple nodes, shared directory required)",
             "operators": "extension slot: no bundled native operator tests",
-            "e2e": "native: single-node SGLang 0.5.12 GSM8K accuracy",
+            "e2e_acc": "native: SGLang 0.5.12 GSM8K accuracy; script-managed single-node service",
+            "e2e_perf": "native: EvalScope 1.13.0 serving throughput/latency; multi-model pipeline",
         }
         for suite in SUITES:
             print(f"{suite:12} {descriptions[suite]}")
+        print("e2e          group: e2e_acc + e2e_perf (enabled tasks only; one service per model/config)")
         print("Adapters: command (test-pack manifest), mock (simulation only)")
         print("all runs enabled tests in your YAML; it does not add missing suites.")
         print("Executors: local, ssh (Linux + key/ssh-agent/SSH config)")

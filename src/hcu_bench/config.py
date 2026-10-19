@@ -101,7 +101,9 @@ def resolve_variables(config: dict) -> dict:
 
 
 def validate_config(data: dict) -> None:
-    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases", "vars", "build"}, "config")
+    keys(data, {"version", "name", "output_dir", "failure_policy", "nodes", "containers", "tests", "max_cases", "vars", "build", "models"}, "config")
+    from .e2e_config import validate_models
+    validate_models(data.get("models", {}))
     build = data.get("build", {})
     keys(build, {"dtk_root", "mpi_home", "arch", "arch_num", "compiler", "cache_dir", "jobs", "timeout_s"}, "build")
     for key in ("dtk_root", "mpi_home", "arch", "compiler", "cache_dir"):
@@ -160,7 +162,19 @@ def validate_config(data: dict) -> None:
             require("start" not in container and "stop" not in container, f"{name}: existing containers must not have start/stop hooks")
     for test_id, test in data["tests"].items():
         require(bool(ID_PATTERN.fullmatch(test_id)), f"Invalid test ID: {test_id}")
-        keys(test, {"suite", "adapter", "enabled", "nodes", "pack", "params", "matrix", "repeats", "timeout_s", "duration_s", "container", "env"}, f"test {test_id}")
+        keys(test, {"suite", "adapter", "enabled", "nodes", "pack", "params", "matrix", "repeats", "timeout_s", "duration_s", "container", "env", "models"}, f"test {test_id}")
+        # Old e2e test blocks were accuracy-only; CLI e2e is now a group.
+        if test.get("suite") == "e2e":
+            test["suite"] = "e2e_acc"
+        if "models" in test:
+            require(test.get("suite") in ("e2e_acc", "e2e_perf"), f"{test_id}: models require an e2e sub-suite")
+            names = test["models"]
+            require(isinstance(names, list) and names and all(isinstance(n, str) and n in data.get("models", {}) for n in names),
+                    f"{test_id}: choose known models")
+            require(len(names) == len(set(names)), f"{test_id}: duplicate models")
+            require(not set(test) & {"adapter", "pack", "matrix", "repeats", "duration_s"},
+                    f"{test_id}: model sessions manage their pack; use params.repeats for performance, no matrix/duration_s")
+            test.setdefault("timeout_s", 7200)
         require(test.get("suite") in SUITES, f"{test_id}: unknown suite")
         require(isinstance(test.get("enabled", True), bool), f"{test_id}: enabled must be boolean")
         positive(test.get("timeout_s"), f"{test_id}.timeout_s")

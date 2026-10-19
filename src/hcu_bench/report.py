@@ -3,6 +3,7 @@ import json
 from collections import Counter
 
 from .store import RunStore, write_json
+from .e2e_report import build_e2e_report
 
 
 def build_report(store: RunStore) -> dict:
@@ -48,4 +49,5 @@ def build_report(store: RunStore) -> dict:
         prefix = "[SIMULATED - NOT HARDWARE DATA] " if group["simulated"] else ""
         lines.append(f"{prefix}{group['test_id']}/{group['node']} {group['name']}: reported-value mean={group['mean_of_reported_values']:.6g} {group['unit']}, range={group['min']:.6g}..{group['max']:.6g}, n={group['count']}, source={group['source_statistic']}, case_status={group['case_statuses']}, params={group['params']}")
     (store.path / "summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    build_e2e_report(store, state)
     return summary

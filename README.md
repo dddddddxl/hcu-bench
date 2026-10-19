@@ -1,6 +1,6 @@
 # HCU Bench
 
-HCU Bench 是面向海光 HCU 测试的命令行工具，将通信、PCIe、显存带宽和模型精度测试统一到一份 YAML 中。准备好测试环境后，修改配置即可单项运行、组合运行或一键执行：
+HCU Bench 是面向海光 HCU 测试的命令行工具，将通信、PCIe、显存带宽、模型精度和推理吞吐测试统一编排。测试参数写在 YAML，模型部署参数放在各自的启动脚本中：
 
 ```bash
 bash bench.sh rccl          # 单个 suite
@@ -19,10 +19,11 @@ bash bench.sh all           # YAML 中全部启用项
 | `memory` | hcu-stream 的 zd1 / zd2 共 24 项，覆盖显存、L1/L2 缓存和 LDS | 单机，指定卡逐卡串行 | 每卡、每用例的 GB/s |
 | `deepep` | 原生低延迟压测，默认 600 秒；支持 token、hidden、top-k、expert 数 | 单机 / 多机 | 有效带宽、分阶段带宽和延迟 |
 | `mooncake` | RDMA / VRAM 压测，支持 pair、fan-in、pairs、ring | 多机，至少两节点 | 吞吐、原生日志、可选吞吐下限判断 |
-| `e2e` | SGLang 0.5.12 GSM8K 精度测试；自启动服务、评测、清理；默认 100 题、5-shot | 单节点服务 | 分数、评测耗时、回答及原生报告 |
+| `e2e_acc` | SGLang 0.5.12 GSM8K 评测接口，默认 100 题、5-shot | 单节点服务 | 分数、评测耗时、回答及原生报告 |
+| `e2e_perf` | EvalScope 1.13.0 流式请求压测；扫描输入/输出长度、并发、轮次 | 单节点服务 | 请求吞吐、输出/总 tokens/s、TTFT、TPOT、ITL、端到端延迟及分位数 |
 | `operators` | 扩展入口和模拟用例 | 由接入的测试包决定 | **尚未内置真实算子测试** |
 
-`e2e` 自带 GSM8K、DeepSeek-V4-Flash Channel INT8 / BW1100 8 卡参考 profile 和 EP 配置。启动命令和环境可直接在 YAML 中修改；其他模型需要验证对应参数。当前不是通用推理性能测试，也不支持多机模型服务编排。
+`e2e` 是 `e2e_acc` + `e2e_perf` 的分组。每个模型启动一次，先运行选中的精度项，再运行吞吐项，清理后换下一个模型。支持 OpenAI 兼容服务，附 SGLang / vLLM 启动脚本模板；不支持多机模型服务编排。具体模型能否启动仍取决于镜像、权重和启动参数。
 
 “已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。PCIe 和 memory 已覆盖解析与编排回归，新的统一入口仍需目标 HCU 验证；原生测试成功不等于整套 `all` 已验收。
 
@@ -47,9 +48,10 @@ python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print(
 | memory | main-staging-1.0 hcu-stream 源码，自动按架构编译 | make、匹配架构的 AICC/DTK |
 | DeepEP | `test_low_latency.py`、`utils.py`，包含已验证的 11 项 handle 接口适配 | 匹配接口的 Torch/DeepEP、通信环境 |
 | Mooncake | Hygon Transfer Engine、pybind11、yalantinglibs 源码，自动编译 | CMake、C++20 编译器、HIP、RDMA/numa/gflags/glog/jsoncpp/yaml-cpp 开发库、Python 开发头文件；两端共享可写目录 |
-| e2e | GSM8K test JSONL、Flash INT8 profile、EP 配置、评测包装器 | SGLang 0.5.12 及其依赖、本地模型权重 |
+| e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
+| e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
 
-以上是运行镜像的基础依赖，不是要求另找测试代码。源码版本、校验与授权说明见 [vendor](vendor/README.md)。首次构建不联网下载第三方源码，也不运行 apt/pip/install；依赖不全或原生编译失败会明确报错。
+以上是运行镜像的基础依赖，不是要求另找测试代码。源码版本、校验与授权说明见 [vendor](vendor/README.md)。原生 C/C++ 构建不联网下载源码、不安装系统软件包；`e2e_perf` 首次会在独立缓存虚拟环境安装 EvalScope 的 Python 依赖，不改服务环境的 DTK、Torch 或 SGLang。依赖不全或准备失败会保留错误，不自动换库。
 
 ### 2. 复制并修改 YAML
 
@@ -67,14 +69,24 @@ cp configs/in-container.template.yaml configs/bench.yaml
 | `vars.pcie_*_devices` | PCIe 工具的 CPU/HCU Device ID，不是 HIP 卡号 |
 | `vars.memory_hcus` | 显存测试卡号，必须属于 `hcus` |
 | `vars.iface` / `vars.ib_hca` / `vars.gid` | 实际通信网卡、RDMA 设备和 GID |
-| `vars.model` | e2e 本地模型路径 |
+| `vars.model_script` / `models` | 模型启动脚本路径；模型路径、TP、量化、网卡等部署参数写在脚本内 |
 | `build` | 已有 DTK/MPI 路径、架构、构建缓存；默认探测 HCU 架构 |
 
 只填写需要运行的 suite；不运行的测试块设为 `enabled: false`，不要删除公共变量定义。模板中的 `YOUR_*` 是占位符，不是可直接使用的配置。
 
 PCIe 的 Device ID 必须先在同一执行环境运行 `rocm-bandwidth-test -e` 获取，并根据 PCI 地址核对；**它不是 HCU 卡号**。显存带宽与 PCIe 是两种测试，不能互换二进制或设备编号。
 
-模板中的 `*_binary`、`deepep_script`、`dataset`、`profile`、`ep_config` 默认保持 `auto`，无需另找文件。已有工具也可填写绝对路径，工具不会偷偷替换无效的显式路径。e2e 的启动命令放在 `params.serving.server_argv`，环境放在 `params.serving.env`，EP 参数放在 `params.ep_settings`；这些都能在同一份 YAML 修改，见 [参数与模型配置](docs/configuration.md)。
+模板中的 `*_binary`、`deepep_script`、`dataset` 默认保持 `auto`，无需另找测试源码。已有工具也可填写绝对路径，工具不会替换无效的显式路径。
+
+运行模型测试时，复制一份 [SGLang 模板](model_scripts/sglang.template.sh) 或 [vLLM 模板](model_scripts/vllm.template.sh)，写入已经验证的部署命令，再把路径填入 YAML：
+
+```bash
+cp model_scripts/sglang.template.sh model_scripts/model_a.local.sh
+# 编辑 model_a.local.sh：权重路径、TP、量化、EP 配置、网卡等
+# 在 bench.yaml 中填写 vars.model_script 或 models.<名称>.start_script
+```
+
+脚本最后用 `exec` 前台启动服务，监听 `$BENCH_HOST:$BENCH_PORT`，不要加 `nohup` 或 `&`。`*.local.sh` 和 `configs/bench.yaml` 都被 Git 忽略。具体字段见 [端到端测试](docs/e2e.md)。
 
 ### 3. 检查并运行
 
@@ -86,13 +98,13 @@ bash bench.sh all
 
 `check` 检查配置和参数，`plan` 展示实际命令；二者都不会连接节点、启动容器或占用 HCU，也不证明环境已经可运行。原生工具、模型和依赖在实际执行时检查。
 
-综合模板按 **RCCL → PCIe → memory → DeepEP → e2e** 串行运行。**`all` 只运行当前 YAML 中启用的测试**，不自动加入 Mooncake、算子或任何模拟项。要加入 Mooncake，将其模板中的节点、容器配置和测试块合并到同一 YAML。
+综合模板按 **RCCL → PCIe → memory → DeepEP → 模型流水线** 串行运行。**`all` 只运行当前 YAML 中启用的测试**，不会重复运行 e2e 分组，也不自动加入 Mooncake、算子或任何模拟项。要加入 Mooncake，将其模板中的节点、容器配置和测试块合并到同一 YAML。
 
 `configs/bench.yaml` 是默认配置路径，已被 Git 忽略。升级仓库不会覆盖个人配置，也不会自动增加新 suite；新增测试块需从最新模板补入。
 
 ### 首次编译与缓存
 
-运行 RCCL、PCIe、memory、Mooncake 时，先校验随仓库提供的源码，再在执行环境的缓存目录编译。源码、架构、编译器或已记录的运行库信息变化时会使用新缓存；失败构建不会标记为可用。DeepEP 和 e2e 直接使用内置脚本，不编译它们依赖的框架。
+运行 RCCL、PCIe、memory、Mooncake 时，先校验源码，再在执行环境的缓存目录编译。源码、架构、编译器或已记录的运行库信息变化时会使用新缓存；失败构建不会标记为可用。DeepEP / e2e_acc 不编译推理框架；e2e_perf 的客户端也缓存于 `build.cache_dir`，首次安装成功后复用。
 
 `build.timeout_s` 默认 3600 秒，独立于测试时限；`build.jobs` 默认 2，`build.cache_dir` 指定可写缓存目录。自动建容器时应把缓存放在持久挂载目录，避免每个容器重复编译。Mooncake 会等待所有节点准备好后再开始负载。
 
@@ -106,7 +118,9 @@ bash bench.sh rccl
 bash bench.sh pcie
 bash bench.sh memory
 bash bench.sh deepep
-bash bench.sh e2e
+bash bench.sh e2e_acc                     # 仅精度
+bash bench.sh e2e_perf                    # 仅吞吐
+bash bench.sh e2e                         # 精度 + 吞吐，共用每个模型的服务
 bash bench.sh deepep,e2e                   # 仍按 YAML 中的顺序执行
 bash bench.sh configs/another-node.yaml all
 
@@ -130,9 +144,11 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 | memory | `devices`、`presets`、`model_mhz`、`array_size` |
 | DeepEP | `duration_s`（测试块）、`num_processes`、`num_tokens`、`hidden`、`num_topk`、`num_experts` |
 | Mooncake | `topology`、`duration`、`buffer_size`、`threads`、`batch_size`、`block_size`、`operation` |
-| e2e | `serving`、`ep_settings`、`model_path`、`num_examples`、`num_shots`、`num_threads`、`max_tokens`、`min_score` |
+| 模型部署 | `models.<名称>.start_script`、`port`、`startup_timeout_s`；其余部署参数在启动脚本内 |
+| e2e_acc | `models`、`num_examples`、`num_shots`、`num_threads`、`max_tokens`、`min_score` |
+| e2e_perf | `models`、`shapes`、`concurrency`、`requests`、`warmup_requests`、`repeats`、`seed`、`extra_body` |
 
-参数通常写在测试块的 `params` 中；字段、范围和默认值以各测试包的 `manifest.yaml` 为准。`matrix` 可展开参数组合，`repeats` 可重复整个用例，见 [配置说明](docs/configuration.md)。
+参数通常写在测试块的 `params` 中；原生包字段以 `manifest.yaml` 为准。普通测试可用 `matrix` / 外层 `repeats`；引用 `models` 的测试不使用这两个字段，吞吐扫描使用 `params.shapes`、`params.concurrency`、`params.repeats`，见 [端到端测试](docs/e2e.md)。
 
 DeepEP 的 `duration_s` 是计划窗口，必须小于故障时限 `timeout_s`。Mooncake 使用原生 `params.duration`；RCCL、PCIe、memory、e2e 按完整用例结束，不能设置框架 `duration_s`。memory 的 `model_mhz` 仅影响部分用例的带宽换算，**不会锁定硬件频率**。
 
@@ -145,6 +161,7 @@ DeepEP 的 `duration_s` 是计划窗口，必须小于故障时限 `timeout_s`�
 | 控制机通过 SSH 调度 | [remote.template.yaml](configs/remote.template.yaml) | 双节点原生 DeepEP 示例 |
 | 仅 PCIe / 仅 memory | [pcie.template.yaml](configs/pcie.template.yaml) / [memory.template.yaml](configs/memory.template.yaml) | 无需填写模型和通信测试输入 |
 | Mooncake 多机 | [mooncake.template.yaml](configs/mooncake.template.yaml) | 使用已准备的容器，共享目录须在所有节点可写 |
+| 多模型精度 / 吞吐 | [e2e-multi-model.template.yaml](configs/e2e-multi-model.template.yaml) | 每个模型单独启动脚本，精度和吞吐串行共用服务 |
 | 无 HCU 演示 | [demo.yaml](configs/demo.yaml) | 全部为模拟数据，不能作为性能结果 |
 
 自动建容器模式的控制端需要 Python 3.10+、PyYAML 和 Docker。模板保留以下脚本接口，设备、权限、挂载和镜像由使用者明确配置：
@@ -159,7 +176,7 @@ bash container.sh stop NAME
 
 多节点使用已有 SSH 密钥、ssh-agent 或 SSH config，不保存密码。将这一个完整仓库部署或共享挂载到目标环境，原生工具在各节点自动准备；模型和运行库仍需在目标可见。每个测试独立配置 `nodes`，因此同一 YAML 可以让 RCCL/PCIe/memory/e2e 使用一个节点、DeepEP/Mooncake 使用多个节点；**不能仅给 e2e 增加节点就获得多机推理支持**。
 
-多个模型可写成多个 `suite: e2e` 测试块，各自指定模型和启动 profile，顺序评测。完整示例见 [多模型配置](docs/configuration.md#多个模型顺序评测)。
+多模型写在顶层 `models`，精度与吞吐测试各自用 `models: [model_a, model_b]` 引用。同一模型、节点、容器及环境配置会合并为一次服务会话；改变部署配置会分开启动。旧 `suite: e2e` / profile 配置仍按精度测试解释，不会自动加吞吐负载。完整示例见 [端到端测试](docs/e2e.md)。
 
 文档和新 YAML 字段统一使用 HCU。旧 `gpus`、`gpu_devices`、`gpu_id` 仍有兼容别名，不能和对应新字段同时填写。原生环境变量、命令参数、源码及历史结果字段保留原名，例如 `GPU_MAX_HW_QUEUES`，不可机械改名。
 
@@ -171,6 +188,7 @@ bash container.sh stop NAME
 | --- | --- |
 | `summary.txt` / `summary.json` | 执行状态和分组指标汇总 |
 | `metrics.csv` | 逐条指标，含 suite、节点、参数、单位、正确性及模拟标记 |
+| `e2e.csv` / `e2e.md` | 模型流水线专用汇总，每个工作负载和轮次单独一行；保留失败及未出结果项 |
 | `state.json` / `results.jsonl` | 用例状态 / 标准结果记录 |
 | `logs/` | 各节点执行日志 |
 | `raw/` / `artifacts.jsonl` | 收回的原生报告 / 归档状态 |
@@ -180,7 +198,7 @@ bash container.sh stop NAME
 
 - 普通失败默认清理后继续下一项；`failure_policy: stop` 可立即停止。清理无法确认时，无论策略如何都停止后续测试。
 - 达到计划时长不等于正确性通过；超时、原生断言、空结果和异常退出不会被当作成功。
-- PCIe、memory 默认只报告带宽；e2e 的 `min_score: ""` 只报告分数。有明确标准后才能启用阈值判断。
+- PCIe、memory 默认只报告带宽；e2e_acc 的 `min_score: ""` 只报告分数。e2e_perf 要求正式请求全部成功，但不把请求成功当作模型正确性通过，不设通用吞吐门槛。
 - 原生报告缺失或归档失败会单独警告，保留已采集结果；查看汇总时也要检查用例状态和归档状态。
 - HCU 资源锁只协调本工具，不能代替业务占用检查。工具不改频率，不清理其他用户的进程或容器。
 
@@ -200,4 +218,4 @@ bash bench.sh configs/demo.yaml all
 
 接入新测试只需编写 manifest 和必要的包装脚本，声明参数、启动命令、指标及原生报告路径，不必修改调度框架。见 [测试包接口](docs/testpacks.md)。
 
-模块说明：[RCCL](docs/rccl.md) · [PCIe](docs/pcie.md) · [显存带宽](docs/memory.md) · [DeepEP / GSM8K](docs/native-tests.md) · [Mooncake](docs/mooncake.md)。
+模块说明：[RCCL](docs/rccl.md) · [PCIe](docs/pcie.md) · [显存带宽](docs/memory.md) · [DeepEP / 旧版 GSM8K 配置](docs/native-tests.md) · [端到端精度与吞吐](docs/e2e.md) · [Mooncake](docs/mooncake.md)。

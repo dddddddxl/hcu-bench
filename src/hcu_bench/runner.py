@@ -81,6 +81,18 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
                             return
                         if case.adapter != "mock" and sample["measurement_status"] == "simulated":
                             sample = {"measurement_status": "invalid", "correctness": "not_checked", "metrics": [], "reason": "Real test emitted a simulated result"}
+                        test_id, suite, params = case.test_id, case.suite, case.params
+                        if case.pack.get("id") == "e2e.script-session":
+                            tasks = case.params["session"]["tasks"]
+                            task = next((t for t in tasks if t["test_id"] == sample.get("e2e_task")
+                                         and t["suite"] == sample.get("e2e_suite")), None)
+                            if task is not None and sample.get("model_id") == case.params["session"]["model_id"]:
+                                test_id, suite = task["test_id"], task["suite"]
+                                params = {"model_id": case.params["session"]["model_id"], "model": case.params["session"]["model"],
+                                          **task["params"], "workload": sample.get("workload")}
+                            else:
+                                sample = {"measurement_status": "invalid", "correctness": "not_checked", "metrics": [],
+                                          "reason": "Result does not identify a configured model/task"}
                         if sample["measurement_status"] in ("measured", "simulated"):
                             valid += 1
                         elif sample["measurement_status"] == "invalid":
@@ -88,8 +100,8 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
                             timed.write(f"[{timestamp}] [warning] Invalid sample skipped: {sample.get('reason', 'not supplied')}\n")
                             timed.flush()
                         correctness_failed |= sample["correctness"] == "failed"
-                        store.append("results.jsonl", {**sample, "run_id": store.path.name, "case_id": case.id, "test_id": case.test_id,
-                                     "suite": case.suite, "node": node_id, "node_rank": case.nodes.index(node_id), "params": case.params,
+                        store.append("results.jsonl", {**sample, "run_id": store.path.name, "case_id": case.id, "test_id": test_id,
+                                     "suite": suite, "node": node_id, "node_rank": case.nodes.index(node_id), "params": params,
                                      "repeat": case.repeat, "observed_at": timestamp, "simulated": case.adapter == "mock"})
 
                     try:
@@ -108,6 +120,9 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
                     elif correctness_failed:
                         result["status"] = "failed"
                         result["error"] = "Correctness failure was reported"
+                    elif result["status"] in GOOD and case.pack.get("id") == "e2e.script-session" and invalid:
+                        result["status"] = "invalid"
+                        result["error"] = "Model session emitted invalid results"
                     elif result["status"] in GOOD and case.pack["requires_metrics"] and valid == 0:
                         result["status"] = "invalid"
                         result["error"] = "No valid measurement samples; process exit alone is not a performance result"

@@ -58,7 +58,7 @@ tests:
       GLOO_SOCKET_IFNAME: "${vars.iface}"
       ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
   sglang_gsm8k:
-    suite: e2e
+    suite: e2e_acc
     adapter: command
     pack: ../testpacks/sglang_accuracy/manifest.yaml
     nodes: [node0]

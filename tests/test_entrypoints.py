@@ -47,12 +47,15 @@ class PublicTemplateTests(unittest.TestCase):
             self.assertEqual(argv[argv.index("--node-rank") + 1], str(rank))
             self.assertEqual(argv[argv.index("--num-processes") + 1], "4")
 
-    def test_multi_model_template_keeps_models_and_profiles_separate(self):
+    def test_multi_model_template_reuses_server_for_accuracy_and_performance(self):
         plan = make_plan(str(ROOT / "configs/e2e-multi-model.template.yaml"), "e2e")
-        self.assertEqual([c.test_id for c in plan.cases], ["model_a_gsm8k", "model_b_gsm8k"])
-        for field in ("model_path", "serving", "port"):
-            self.assertNotEqual(plan.cases[0].params[field], plan.cases[1].params[field])
-        self.assertTrue(all(c.nodes == ["node0"] and c.params["min_score"] == "" for c in plan.cases))
+        sessions = [c.params["session"] for c in plan.cases]
+        self.assertEqual([s["model_id"] for s in sessions], ["model_a", "model_b"])
+        self.assertNotEqual(sessions[0]["model"]["start_script"], sessions[1]["model"]["start_script"])
+        for case, session in zip(plan.cases, sessions):
+            self.assertEqual(case.nodes, ["node0"])
+            self.assertEqual([t["suite"] for t in session["tasks"]], ["e2e_acc", "e2e_perf"])
+            self.assertEqual(session["tasks"][0]["params"]["min_score"], "")
 
     def test_accuracy_rejects_multinode_and_framework_duration_before_launch(self):
         config = str(ROOT / "configs/in-container.template.yaml")
@@ -60,12 +63,11 @@ class PublicTemplateTests(unittest.TestCase):
         data = load_document(Path(config))
         data["nodes"]["node1"] = dict(data["nodes"]["node0"])
         test = data["tests"]["sglang_gsm8k"]
-        test["pack"] = str(ROOT / "testpacks/sglang_accuracy/manifest.yaml")
         data["tests"] = {"sglang_gsm8k": test}
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "test.yaml"
             for changes, message in (({"nodes": ["node0", "node1"]}, "at most 1"),
-                                     ({"duration_s": 10}, "duration_control")):
+                                     ({"duration_s": 10}, "duration_s")):
                 changed = {**data, "tests": {"sglang_gsm8k": {**test, **changes}}}
                 path.write_text(yaml.safe_dump(changed), encoding="utf-8")
                 with self.subTest(changes=changes), self.assertRaisesRegex(BenchError, message):
@@ -111,7 +113,7 @@ class BashEntrypointTests(unittest.TestCase):
         summary = json.loads(reports[0].read_text(encoding="utf-8"))
         self.assertEqual({m["suite"] for m in summary["metrics"]}, set(SUITES))
         self.assertTrue(all(m["simulated"] for m in summary["metrics"]))
-        self.assertEqual(summary["case_counts"], {"completed": 8})
+        self.assertEqual(summary["case_counts"], {"completed": 9})
 
     def test_explicit_yaml_and_selected_suites(self):
         config = self.repo / "configs/custom node.yaml"

@@ -45,7 +45,7 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 复用该分支的 `GSM8KEval` 与 `run_eval_once`，未复制评分算法。默认使用 chat、max_tokens=2048，这两项可配置；temperature=0、top_p=1 在当前包装器中固定。数据集前 5 条作为 few-shot，不计入后续 100 条评分。`num_examples: 0` 表示所有剩余题目。
 
-每个 e2e 用例只允许一个节点，且不能配置框架 `duration_s`。多模型顺序评测使用多个 e2e 测试块，各自提供启动 profile；见 [多模型配置](configuration.md#多个模型顺序评测)。
+本文保留旧 profile 接口，当前 suite 名为 `e2e_acc`（旧 `e2e` 配置仍兼容）。每个用例只允许一个节点，且不能配置框架 `duration_s`。新配置使用模型启动脚本，共用服务完成精度和吞吐；见 [端到端测试](e2e.md)。
 
 `min_score: ""` 表示只报告真实分数，correctness 为 not_checked，不称为“精度通过”。以后设置字符串阈值，例如 `"0.90"` 才启用阈值判断；不套用 HCU Qwen 用例的 0.88。报告包含准确率、评测耗时、实际题数和空响应率，附模型 config/数据集/评测源码哈希、软件版本、回答 JSON、原生 HTML 和服务日志。
 

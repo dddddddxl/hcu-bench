@@ -27,7 +27,7 @@ artifact_limit_mb: 100
 
 参数类型支持 integer、number、string、boolean、object。object 以 JSON 字符串替换 `${p_参数名}`，由目标包装器校验内部字段。`parameter_aliases: {旧名称: 新名称}` 可保留配置兼容，不能同时提供新旧名称。
 
-可选 suite 为 `rccl/pcie/memory/deepep/mooncake/operators/e2e`。`command` 必须是 argv 数组；需要 shell 时显式写 `[bash, -lc, '...']`，优先直接指向脚本。参数必须声明类型和支持范围，未知参数不透传。
+可选 suite 为 `rccl/pcie/memory/deepep/mooncake/operators/e2e_acc/e2e_perf`；CLI 的 `e2e` 同时选择两个子项，旧 manifest 的 `e2e` 兼容为精度包。模型会话包由框架根据 `models` 自动生成，不需要手填。`command` 必须是 argv 数组；需要 shell 时显式写 `[bash, -lc, '...']`，优先直接指向脚本。参数必须声明类型和支持范围，未知参数不透传。
 
 可用模板变量：`run_id/case_id/test_id/node_id/node_rank/nnodes/case_dir/host_case_dir/run_dir/hcu_ids/python` 以及 `p_参数名`。本地非容器测试还可用 `pack_dir`。`${run_dir}` 是控制机路径，`${host_case_dir}` 是目标宿主机目录；使用容器时 `${case_dir}` 是容器内目录，否则与宿主机目录相同。`${python}` 为宿主机解释器配置，容器内解释器应在测试入口命令中明确填写。Shell 原生 `$VAR` 需写成 `$$VAR`，避免被模板处理。
 

@@ -68,7 +68,7 @@ def cancellation():
 class NativeProcess:
     """Track owned descendants by process identity; never kill by program name."""
 
-    def __init__(self, command, cwd, env, log_path, on_line=None):
+    def __init__(self, command, cwd, env, log_path, on_line=None, echo=True):
         import psutil
 
         self.psutil = psutil
@@ -97,7 +97,8 @@ class NativeProcess:
                 for line in self.proc.stdout:
                     self.log.write(line)
                     self.log.flush()
-                    print(line.rstrip("\r\n"), flush=True)
+                    if echo:
+                        print(line.rstrip("\r\n"), flush=True)
                     if on_line:
                         on_line(line.rstrip("\r\n"))
             except Exception as exc:

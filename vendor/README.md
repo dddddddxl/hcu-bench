@@ -12,6 +12,7 @@
 | deepep-tests | DeepEP 低延迟压测 | 用户提供的原生测试和 utils；使用已验证 daily 的 11 字段 handle 接口 |
 | mooncake | RDMA/VRAM 传输 | HYGON-AI 固定提交的 transfer-engine、common、构建文件，及固定版 pybind11/yalantinglibs |
 | gsm8k | 简单精度测试 | 官方 test.jsonl，MIT；沿用评测器的前 5 条 few-shot、后 100 条评分方式 |
+| evalscope | 模型吞吐 HTTP 客户端 | 1.13.0 官方源码压缩包，Apache-2.0；首次在独立 venv 安装，Python 依赖需包源或 wheelhouse |
 
 ## 来源与修改
 
