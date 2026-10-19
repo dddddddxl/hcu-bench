@@ -11,7 +11,7 @@ bash bench.sh check -c configs/bench.yaml --suite pcie
 bash bench.sh pcie
 ```
 
-使用综合容器模板时，已包含 `pcie_bandwidth`，`bash bench.sh all` 会按 YAML 顺序执行 RCCL、PCIe、DeepEP、e2e。旧的个人 YAML 不会自动更新：从模板补入 PCIe 的 vars 和测试块。也支持既有 SSH/managed 容器接口，一个 PCIe 用例只选择一个节点；多台机器分别配置用例，不做跨机 PCIe。
+使用综合容器模板时，已包含 `pcie_bandwidth`，`bash bench.sh all` 会按 YAML 顺序执行 RCCL、PCIe、memory、DeepEP、e2e。旧的个人 YAML 不会自动更新：从模板补入 PCIe 的 vars 和测试块。也支持既有 SSH/managed 容器接口，一个 PCIe 用例只选择一个节点；多台机器分别配置用例，不做跨机 PCIe。
 
 先在**实际执行测试的容器**中运行：
 

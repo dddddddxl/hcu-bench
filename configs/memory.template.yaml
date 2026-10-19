@@ -1,0 +1,32 @@
+# 仅测单卡显存/缓存/LDS 带宽；在已有容器内执行，所有路径填容器内绝对路径。
+# 复制为 configs/bench.yaml，改 vars 后 bash bench.sh memory。
+version: 1
+name: memory-bandwidth
+failure_policy: continue
+vars:
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  bench_root: /YOUR_BENCH_REPO
+  memory_binary: /YOUR_DCU_HIPBENCHMARK/hcu-stream # 已编译的 main-staging-1.0；不自动编译或安装。
+  gpus: [0]                     # 先确认空闲；多个卡号时逐卡串行，不是多卡聚合带宽。
+output_dir: "${vars.workspace}/results"
+nodes:
+  node0:
+    executor: local
+    gpus: "${vars.gpus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+tests:
+  memory_bandwidth:
+    suite: memory
+    adapter: command
+    pack: ../testpacks/memory/manifest.yaml
+    nodes: [node0]
+    timeout_s: 1800              # 全部卡/用例的故障时限；超时不是完成，不配置 duration_s。
+    repeats: 1                  # 需要三轮独立复测就改成 3。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.memory_binary}"
+      presets: both             # both=zd1(15项)+zd2(9项)；也可只填 zd1 或 zd2。
+      devices: ""               # 空字符串测 nodes.gpus 全部；或填其中的子集，例如 "1,3"。
+      model_mhz: 1400            # 原 zd1 的 MODEL 换算参数，不是锁频！统一对比口径再改为 1280 等。
+      array_size: 104857600      # 原生默认 10240*10240 个元素，不是 MiB；部分用例不使用此参数。

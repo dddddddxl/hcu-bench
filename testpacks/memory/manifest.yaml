@@ -1,0 +1,40 @@
+version: 1
+id: memory.bandwidth
+suite: memory
+duration_control: native
+max_nodes: 1
+parameters:
+  bench_root: {type: string, required: true}
+  binary: {type: string, required: true, description: "Prebuilt main-staging-1.0 hcu-stream executable"}
+  devices: {type: string, default: "", description: "Comma-separated subset of nodes.gpus; empty uses all assigned GPUs serially"}
+  presets: {type: string, default: both, choices: [both, zd1, zd2]}
+  model_mhz: {type: integer, default: 1400, min: 2, max: 10000, description: "MODEL cycle-to-bandwidth conversion input, not a hardware clock setting"}
+  array_size: {type: integer, default: 104857600, min: 1, max: 2147483647, description: "Native --arraysize element count; not bytes and not used by every kernel"}
+command:
+  - python3
+  - -u
+  - ${p_bench_root}/testpacks/memory/run.py
+  - --binary
+  - ${p_binary}
+  - --devices
+  - ${p_devices}
+  - --presets
+  - ${p_presets}
+  - --model-mhz
+  - ${p_model_mhz}
+  - --array-size
+  - ${p_array_size}
+  - --gpu-ids
+  - ${gpu_ids}
+  - --nnodes
+  - ${nnodes}
+  - --node-rank
+  - ${node_rank}
+  - --output-dir
+  - ${case_dir}
+cwd: ${case_dir}
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv"]
+artifact_limit_mb: 100

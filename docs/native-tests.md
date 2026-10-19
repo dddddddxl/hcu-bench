@@ -1,4 +1,4 @@
-# 两项真实测试的编排
+# DeepEP 与 SGLang 精度测试
 
 Mooncake 的 RDMA/VRAM 压测使用独立测试包和多节点模板，见 [Mooncake 压测](mooncake.md)。下文的两项测试及参考成绩仍指 DeepEP 和 SGLang。
 
@@ -31,7 +31,7 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 只重启成功完成的周期。SIGKILL、SIGABRT、正确性断言或 profiler 崩溃不会自动吞掉重试；控制机取消其他节点并保留日志。包装器只对可解析但数值无效的性能行记 invalid，不修改原生 profiler 的断言。低延迟子进程明确 unset DEEP_EP_NORMAL_MNVL；其余通信变量由配置提供。
 
-预检要求显式提供 `ROCSHMEM_HEAP_SIZE` 和 `HIP_BUFFER_EXTRA_SIZE`。模板里的 `ROCSHMEM_IPC_MNVL` / `ROCSHMEM_GDR_DISABLE_XDP` 是超节点配置示例，不是所有硬件的必填项；IPC/IB 节点应依据实际镜像的后端选择配置，不能直接套用旧超节点环境。
+预检要求显式提供 `ROCSHMEM_HEAP_SIZE` 和 `HIP_BUFFER_EXTRA_SIZE`。`ROCSHMEM_IPC_MNVL` / `ROCSHMEM_GDR_DISABLE_XDP` 等超节点配置不作为通用默认值；应依据实际硬件和镜像的后端选择添加，不能直接套用其他节点环境。双节点原生模板见 [remote.template.yaml](../configs/remote.template.yaml)。
 
 指标保留 native_rank/cycle：dispatch+combine effective bandwidth、mean/min/max latency、dispatch/combine bandwidth、send/recv latency。`(total)` 分阶段指标使用独立名称，不和普通分阶段指标混合。不把这些指标称为 RCCL busbw；停止时长也不表示整项正确性通过。
 
@@ -43,7 +43,9 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 包装器检查模型 config、DeepEP config、数据格式、SGLang 0.5.12 版本和原生评测接口。参考配方要求显式绑定 8 张卡、容器内 memlock 为 unlimited，不满足时先报错，不擅自改宿主机权限。端口已占用就报错，不复用或杀掉现有服务。只启动自己的前台服务，等待 `/health`，运行评测，然后清理自己的子进程；服务退出/全空响应/样本不足都是执行失败，不伪装成精度结果。
 
-复用该分支的 `GSM8KEval` 与 `run_eval_once`，未复制评分算法。按 cookbook HCU 用例使用 chat、temperature=0、top_p=1、max_tokens=2048；这些参数可配置。数据集前 5 条作为 few-shot，不计入后续 100 条评分。`num_examples: 0` 表示所有剩余题目。
+复用该分支的 `GSM8KEval` 与 `run_eval_once`，未复制评分算法。默认使用 chat、max_tokens=2048，这两项可配置；temperature=0、top_p=1 在当前包装器中固定。数据集前 5 条作为 few-shot，不计入后续 100 条评分。`num_examples: 0` 表示所有剩余题目。
+
+每个 e2e 用例只允许一个节点，且不能配置框架 `duration_s`。多模型顺序评测使用多个 e2e 测试块，各自提供启动 profile；见 [多模型配置](configuration.md#多个模型顺序评测)。
 
 `min_score: ""` 表示只报告真实分数，correctness 为 not_checked，不称为“精度通过”。以后设置字符串阈值，例如 `"0.90"` 才启用阈值判断；不套用 HCU Qwen 用例的 0.88。报告包含准确率、评测耗时、实际题数和空响应率，附模型 config/数据集/评测源码哈希、软件版本、回答 JSON、原生 HTML 和服务日志。
 

@@ -3,6 +3,9 @@ version: 1
 name: deepep-pressure-then-sglang-gsm8k
 output_dir: ../runs
 failure_policy: continue
+vars:
+  iface: YOUR_ACTIVE_INTERFACE
+  gid: "YOUR_GID_INDEX"
 nodes:
   node0:
     executor: ssh
@@ -44,10 +47,12 @@ tests:
       num_experts: 256
     env:
       ROCSHMEM_HEAP_SIZE: "4737418240"
-      ROCSHMEM_IPC_MNVL: "1"
-      ROCSHMEM_GDR_DISABLE_XDP: "1"
+      # MNVL/XDP 仅在对应硬件和原生配方要求时添加，不作为通用默认值。
       HIP_BUFFER_EXTRA_SIZE: "0"
       NCCL_IB_DISABLE: "1"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
+      ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
   sglang_gsm8k:
     suite: e2e
     adapter: command

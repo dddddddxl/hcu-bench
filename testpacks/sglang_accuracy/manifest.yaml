@@ -1,6 +1,8 @@
 version: 1
 id: sglang.deepseek-v4-gsm8k
 suite: e2e
+max_nodes: 1
+duration_control: native
 parameters:
   bench_root: {type: string, required: true}
   profile: {type: string, required: true}

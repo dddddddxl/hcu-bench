@@ -23,7 +23,7 @@ artifact_limit_mb: 100
 
 可选 `max_nodes: 1` 等正整数限制测试包支持的节点数量，超出时在编排阶段报错。RCCL 使用 `max_nodes: 1` 和 `duration_control: native`，只在完整单机迭代结束后校验结果。
 
-五类 suite 是 `rccl/deepep/mooncake/operators/e2e`。`command` 必须是 argv 数组；需要 shell 时显式写 `[bash, -lc, '...']`，优先直接指向脚本。参数必须声明类型和支持范围，未知参数不透传。
+可选 suite 为 `rccl/pcie/memory/deepep/mooncake/operators/e2e`。`command` 必须是 argv 数组；需要 shell 时显式写 `[bash, -lc, '...']`，优先直接指向脚本。参数必须声明类型和支持范围，未知参数不透传。
 
 可用模板变量：`run_id/case_id/test_id/node_id/node_rank/nnodes/case_dir/host_case_dir/run_dir/gpu_ids/python` 以及 `p_参数名`。本地非容器测试还可用 `pack_dir`。`${run_dir}` 是控制机路径，`${host_case_dir}` 是目标宿主机目录；使用容器时 `${case_dir}` 是容器内目录，否则与宿主机目录相同。`${python}` 为宿主机解释器配置，容器内解释器应在测试入口命令中明确填写。Shell 原生 `$VAR` 需写成 `$$VAR`，避免被模板处理。
 
@@ -69,4 +69,4 @@ start/check/stop 在目标宿主机执行。start 必须新建指定名称的容
 
 自有容器名称包含 run/case/node，避免误认其他容器。工作进程只清理自己创建的进程组；SSH 断连后 worker 会尝试退出，无法确认时标记 cleanup_unconfirmed，不继续后续测试。
 
-参考模板：`configs/remote.template.yaml` 与 `testpacks/deepep/manifest.template.yaml`。其中 YOUR_* 和 wrapper 入口必须由你提供并确认，模板不是可以直接跑的 DeepEP 测试。
+已接入的双节点 DeepEP 使用 `configs/remote.template.yaml` 与 `testpacks/deepep/manifest.yaml`，需填写实际节点、输入路径、网卡及容器脚本。`testpacks/deepep/manifest.template.yaml` 仅保留为接入自定义 wrapper 的接口示例，不是默认原生入口。

@@ -6,6 +6,8 @@
 
 把 Bench 仓库和原生测试/模型/数据挂进你自己创建的容器，在容器里使用现有 Python 3.10+、PyYAML 和测试依赖。工具不安装软件，不改 DTK；容器内不需要 Docker 命令或 Docker socket。
 
+内置原生包装器还需要 psutil。各 suite 的输入要求和功能范围见 [README](../README.md)，参数、混合节点及多模型示例见 [配置说明](configuration.md)。
+
 在容器内的 Bench 仓库目录，首次准备：
 
 ```bash
@@ -17,14 +19,16 @@ cp configs/in-container.template.yaml configs/bench.yaml
 随后在容器里执行：
 
 ```bash
+bash bench.sh rccl                # 只跑单机 MPI AllReduce
 bash bench.sh deepep              # 只跑低延迟压测
 bash bench.sh pcie                # 只跑五类 PCIe 带宽路径
+bash bench.sh memory              # 只跑单卡显存/缓存/LDS 带宽
 bash bench.sh e2e                 # 只跑精度测试
 bash bench.sh all                 # 按 YAML 顺序跑全部启用项
 bash bench.sh deepep,e2e          # 选择多个 suite
 ```
 
-suite 顺序仍按 YAML，而不是逗号参数顺序。综合容器模板包含 RCCL、PCIe、DeepEP、e2e；Mooncake 见单独的双机模板。PCIe 需先核对原生工具的 Device ID，配置和结果说明见 [PCIe 带宽测试](pcie.md)。
+suite 顺序仍按 YAML，而不是逗号参数顺序。综合容器模板包含 RCCL、PCIe、memory、DeepEP、e2e；Mooncake 见单独的双机模板。PCIe 需先核对原生工具的 Device ID，见 [PCIe 带宽测试](pcie.md)；memory 使用已有 hcu-stream，选卡后逐卡串行，见 [显存带宽测试](memory.md)。
 
 退出测试会保留用户自己的容器，只清理本次测试的进程。所有输出归档到 `vars.workspace/results/RUN_ID`，控制台会打印具体目录。
 
@@ -57,7 +61,13 @@ bash container.sh stop NAME
 - check：运行中返回 0；不存在或已停止返回 1；Docker 无法访问等检查错误返回其他非零值。后者不能假装清理成功。
 - stop：只清理本次创建的 NAME，完成返回 0；无法确认所有权或清理失败返回非零。需要能处理 start 中途失败留下的现场。
 
-当前没有擅自添加通用 docker run 配方；真实脚本仍由节点环境提供。模板填好并接入该脚本后，工具自动调用它，不再手动 docker exec / run_node.sh。
+仓库不提供通用 docker run 配方，启动脚本由节点环境提供。模板填好并接入该脚本后，工具自动调用它，无需手动 docker exec。
+
+### 从宿主机或 SSH 复用已有容器
+
+将测试的 `container` 指向一个 `mode: existing` 配置，指定固定容器名、容器内可写 `work_root` 和 `check` 命令。删除 managed 模式的 `start` / `stop` 字段；existing 模式禁止这两项。`check` 仍须遵守上述返回码约定。
+
+默认通过 `docker exec -i` 在容器内执行 Python worker，不停止或删除该容器。完整 existing 示例见 [Mooncake 模板](../configs/mooncake.template.yaml)；接口同样可用于单机 suite。
 
 宿主机只有 Python 3.6 时，这个宿主机控制模式不能直接运行 Bench。可选择上面的容器内模式，或使用已准备好依赖的控制机和现有 SSH executor；不默认给测试容器挂载宿主机 Docker socket。
 

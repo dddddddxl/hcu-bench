@@ -45,8 +45,19 @@ def preview(plan):
 
 def dispatch(args):
     if args.action == "list":
+        descriptions = {
+            "rccl": "native: single-node MPI AllReduce (2-8 GPUs)",
+            "pcie": "native: single-node CPU/GPU copy bandwidth (five path types)",
+            "memory": "native: single-GPU memory/cache/LDS bandwidth (zd1/zd2, serial GPUs)",
+            "deepep": "native: low-latency pressure (single/multiple nodes)",
+            "mooncake": "native: RDMA/VRAM pressure (multiple nodes, shared directory required)",
+            "operators": "extension slot: no bundled native operator tests",
+            "e2e": "native: single-node SGLang 0.5.12 GSM8K accuracy",
+        }
         for suite in SUITES:
-            print(f"{suite:12} mock (simulation only), command (external test-pack manifest)")
+            print(f"{suite:12} {descriptions[suite]}")
+        print("Adapters: command (test-pack manifest), mock (simulation only)")
+        print("all runs enabled tests in your YAML; it does not add missing suites.")
         print("Executors: local, ssh (Linux + key/ssh-agent/SSH config)")
         print("Containers: existing, managed; user-supplied start/check/stop hooks")
         return 0

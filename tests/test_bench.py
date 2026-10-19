@@ -22,7 +22,7 @@ from hcu_bench.config import load_document
 from hcu_bench.containers import HookContainerLauncher, render_argv
 from hcu_bench.executors.base import AGENT_PATH
 from hcu_bench.executors.ssh import SSHExecutor
-from hcu_bench.models import BenchError, Plan
+from hcu_bench.models import BenchError, Plan, SUITES
 from hcu_bench.planner import make_plan
 from hcu_bench.report import build_report
 from hcu_bench.results import parse_sample
@@ -65,10 +65,11 @@ class Fixture(unittest.TestCase):
 
 
 class ConfigurationTests(Fixture):
-    def test_demo_has_five_suites(self):
+    def test_demo_covers_all_suite_slots_as_simulation(self):
         plan = make_plan(str(ROOT / "configs/demo.yaml"))
-        self.assertEqual(len(plan.cases), 6)
-        self.assertEqual({case.suite for case in plan.cases}, {"rccl", "deepep", "mooncake", "operators", "e2e"})
+        self.assertEqual(len(plan.cases), len(SUITES) + 1)
+        self.assertEqual({case.suite for case in plan.cases}, set(SUITES))
+        self.assertTrue(all(case.adapter == "mock" for case in plan.cases))
 
     def test_suite_selection(self):
         plan = make_plan(str(ROOT / "configs/demo.yaml"), "deepep,mooncake")
@@ -134,14 +135,15 @@ class ConfigurationTests(Fixture):
         for name, container in (("in-container.template.yaml", None), ("managed-container.template.yaml", "test_image")):
             with self.subTest(name=name):
                 plan = make_plan(str(ROOT / "configs" / name))
-                self.assertEqual([case.suite for case in plan.cases], ["rccl", "pcie", "deepep", "e2e"])
+                self.assertEqual([case.suite for case in plan.cases], ["rccl", "pcie", "memory", "deepep", "e2e"])
                 self.assertTrue(all(case.container == container for case in plan.cases))
                 self.assertIsNone(plan.cases[0].duration_s)
                 self.assertIsNone(plan.cases[1].duration_s)
-                self.assertEqual(plan.cases[2].duration_s, 600)
+                self.assertIsNone(plan.cases[2].duration_s)
+                self.assertEqual(plan.cases[3].duration_s, 600)
                 self.assertEqual(plan.nodes["node0"]["gpus"], list(range(8)))
                 with patch("subprocess.Popen", side_effect=AssertionError("preview must not execute")):
-                    self.assertEqual(preview(plan)["case_count"], 4)
+                    self.assertEqual(preview(plan)["case_count"], 5)
 
     def test_variable_based_configuration_executes(self):
         self.data["vars"] = {"samples": 1, "output": "variable-results"}
@@ -427,7 +429,11 @@ class ProtocolTests(unittest.TestCase):
     def test_cli_list(self):
         with contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(["list"]), 0)
-        self.assertIn("mooncake", output.getvalue())
+        lines = output.getvalue().splitlines()
+        self.assertEqual([line.split()[0] for line in lines[:len(SUITES)]], list(SUITES))
+        self.assertIn("no bundled native operator tests", output.getvalue())
+        self.assertIn("SGLang 0.5.12", output.getvalue())
+        self.assertIn("simulation only", output.getvalue())
 
 
 if __name__ == "__main__":

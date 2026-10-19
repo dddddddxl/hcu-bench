@@ -1,0 +1,59 @@
+# 在已有容器内顺序评测两个模型；模型需兼容 SGLang 0.5.12 GSM8K 接口。
+# 这只是多模型编排模板，不是两个模型的已验证部署配方。
+# 复制为 configs/bench.yaml，填写 vars 后 bash bench.sh e2e。
+version: 1
+name: multi-model-gsm8k
+failure_policy: continue        # 当前模型失败并确认清理后，继续下一个；可改为 stop。
+vars:
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  bench_root: /YOUR_BENCH_REPO
+  gpus: [0, 1, 2, 3, 4, 5, 6, 7] # 先确认空闲；须与各 profile 的 visible_gpus 一致。
+  dataset: /YOUR_DATASETS/gsm8k.jsonl
+  model_a: /YOUR_LOCAL_MODELS/model-a
+  profile_a: /YOUR_CONFIGS/model-a.profile.json # 启动 argv/env，按模型单独准备。
+  ep_config_a: /YOUR_CONFIGS/model-a.ep.json
+  model_b: /YOUR_LOCAL_MODELS/model-b
+  profile_b: /YOUR_CONFIGS/model-b.profile.json
+  ep_config_b: /YOUR_CONFIGS/model-b.ep.json
+output_dir: "${vars.workspace}/results"
+nodes:
+  node0:
+    executor: local
+    gpus: "${vars.gpus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${gpu_ids}"
+tests:
+  model_a_gsm8k:                # 名称出现在报告中，两个模型不要使用同一个测试名。
+    suite: e2e
+    adapter: command
+    pack: ../testpacks/sglang_accuracy/manifest.yaml
+    nodes: [node0]              # 当前仅支持单节点服务，不通过增加 nodes 启动多机模型。
+    timeout_s: 5400             # 包括模型加载和评测；不设置 duration_s。
+    params:
+      bench_root: "${vars.bench_root}"
+      model_path: "${vars.model_a}"
+      profile: "${vars.profile_a}"
+      ep_config: "${vars.ep_config_a}"
+      data_path: "${vars.dataset}"
+      port: 30903              # 必须未被其他服务占用。
+      num_examples: 100
+      num_shots: 5
+      max_tokens: 2048
+      min_score: ""            # 只报告分数；有明确标准后再填字符串阈值。
+  model_b_gsm8k:
+    suite: e2e
+    adapter: command
+    pack: ../testpacks/sglang_accuracy/manifest.yaml
+    nodes: [node0]
+    timeout_s: 5400
+    params:
+      bench_root: "${vars.bench_root}"
+      model_path: "${vars.model_b}"
+      profile: "${vars.profile_b}"
+      ep_config: "${vars.ep_config_b}"
+      data_path: "${vars.dataset}"
+      port: 30904
+      num_examples: 100
+      num_shots: 5
+      max_tokens: 2048
+      min_score: ""
