@@ -21,7 +21,7 @@ class LocalAllReduce(RcclAllReduce):
     def plan(self, params):
         plan = super().plan(params)
         # Never let an inherited MPI allocation launch tests on other hosts.
-        plan["argv"][1:1] = ["--host", "localhost"]
+        plan["argv"][1:1] = ["--host", f"localhost:{params['ranks']}"]
         plan["execution_owner"] = "hcu-bench"
         plan["notes"] = ["Single-host launch; full native validation required"]
         return plan

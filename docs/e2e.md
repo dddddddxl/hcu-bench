@@ -116,7 +116,7 @@ Bench 不默认关闭模型缓存，也不声称不同随机 prompt 一定完全
 
 ## 首次准备与结果
 
-EvalScope 源码随仓库提供，校验后在 `build.cache_dir` 下创建独立 venv。首次用 pip 安装 Python 依赖，需网络包源或管理员配置好的 `PIP_NO_INDEX` / `PIP_FIND_LINKS`；这些依赖 wheel 不随仓库带齐，不能声称完全离线。无需另拉测试代码，不向服务环境安装或升级 DTK、Torch、SGLang。每次记录客户端版本和依赖清单，后续复用缓存。
+EvalScope 源码随仓库提供，校验后在 `build.cache_dir` 下创建独立 venv。通过执行端现有 pip 22.3+ 的 `--python` 参数安装到该隔离环境，不依赖镜像自带 ensurepip。首次安装 Python 依赖需网络包源或管理员配置好的 `PIP_NO_INDEX` / `PIP_FIND_LINKS`；这些依赖 wheel 不随仓库带齐，不能声称完全离线。无需另拉测试代码，不向服务环境安装或升级 DTK、Torch、SGLang。每次记录客户端版本和依赖清单，后续复用缓存。
 
 统一报告仍有 `summary.json`、`metrics.csv` 和 `results.jsonl`，另外生成：
 

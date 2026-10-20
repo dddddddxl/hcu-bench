@@ -16,6 +16,8 @@
 
 ## 来源与修改
 
+- rocm-bandwidth-test 过滤 extended-scope fine-grained HCU 内存池，避免新 DTK 下 Device ID 与传输池索引错位；计时和带宽公式不变。包装器拒绝一设备多池的歧义枚举。
+
 - hcu-stream 和 DeepEP 测试由提供方于 2026-10-19 明确授权公开分发。提供的压缩包没有这两部分的根许可证，不另行声称它们采用 MIT/Apache；已有版权说明和 GPU-stream 子项目许可证均保留。
 - DeepEP 的唯一接口适配：读取接收布局前断言 `len(handle) == 11`，随后从 `handle[6]` 读取布局，而不是原来的 `handle[4]`。没有删除正确性检查。其他 wheel 接口不保证兼容，可在 YAML 指定另一份已验证的测试脚本。
 - 源码导入时统一文本换行为 LF。构建在缓存副本里进行，不修改这里的源码。

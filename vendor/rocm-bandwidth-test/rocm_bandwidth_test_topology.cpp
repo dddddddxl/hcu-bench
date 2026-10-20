@@ -95,7 +95,9 @@ hsa_status_t MemPoolInfo(hsa_amd_memory_pool_t pool, void* data) {
     status = hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS, &flag);
     ErrorCheck(status);
     bool is_kernarg = (HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_KERNARG_INIT & flag);
-    bool is_fine_grained = (HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED & flag);
+    // Extended-scope fine-grained pools are not coarse GPU transfer pools.
+    bool is_fine_grained = ((HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED |
+                            HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_EXTENDED_SCOPE_FINE_GRAINED) & flag);
 
     // Update the pool handle for system memory if kernarg is true
     if (is_kernarg) {

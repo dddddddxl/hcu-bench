@@ -51,7 +51,7 @@ class RcclNativeTests(unittest.TestCase):
         stop = stopped or threading.Event()
         def launch(argv, cwd, env, path):
             self.assertEqual(env["HIP_VISIBLE_DEVICES"], "6,7")
-            self.assertEqual(argv[1:3], ["--host", "localhost"])
+            self.assertEqual(argv[1:3], ["--host", f"localhost:{self.params['ranks']}"])
             script = f"import sys,time; print({log!r}); print({stderr!r}, file=sys.stderr); time.sleep({60 if cancel_running else 0}); sys.exit({code})"
             process = original([sys.executable, "-u", "-c", script], cwd, env, path)
             if cancel_running:
@@ -74,6 +74,13 @@ class RcclNativeTests(unittest.TestCase):
             result = rccl.run(self.args, stop)
         samples = [parse_sample(line) for line in output.getvalue().splitlines() if line.startswith("BENCH_RESULT ")]
         return result, samples
+
+    def test_local_launch_declares_slots_for_every_assigned_rank(self):
+        for ranks in (2, 8):
+            params = {**self.params, "ranks": ranks}
+            argv = rccl.LocalAllReduce().plan(params)["argv"]
+            self.assertEqual(argv[argv.index("--host") + 1], f"localhost:{ranks}")
+            self.assertEqual(argv[argv.index("-np") + 1], str(ranks))
 
     def test_complete_run_metrics_and_artifacts(self):
         code, samples = self.execute()

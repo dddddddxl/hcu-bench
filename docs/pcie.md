@@ -4,6 +4,8 @@
 
 ## 配置和运行
 
+随仓库源码已补充过滤 extended-scope fine-grained HCU 内存池，避免新 DTK 下同一卡出现两个池、Device ID 与传输池编号错位。包装器要求每个 Device Index 恰好对应一个池；枚举有歧义时在测量前失败，不输出错误路径的数据。该适配不改变计时或带宽公式。
+
 ```bash
 cp configs/pcie.template.yaml configs/bench.yaml
 # 编辑 bench.yaml：工作目录、仓库路径、工具路径和设备编号

@@ -102,7 +102,7 @@ class CacheTests(unittest.TestCase):
 
     def recipe(self, suite, source, build, settings):
         target = source / "fixture.exe"
-        code = "import shutil; shutil.copyfile(%r, %r)" % (sys.executable, str(target))
+        code = "import shutil; shutil.copy2(%r, %r)" % (sys.executable, str(target))
         return [[sys.executable, "-c", code]], target
 
     def test_first_build_cache_hit_and_corrupt_binary_rebuild(self):

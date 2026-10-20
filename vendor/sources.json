@@ -7,9 +7,10 @@
   },
   "rocm-bandwidth-test": {
     "version": "2.6.0",
+    "modifications": "Exclude extended-scope fine-grained GPU memory pools from coarse transfer enumeration; timing and bandwidth formulas unchanged.",
     "source": "https://github.com/ROCm/rocm_bandwidth_test/tree/84b8ddd2686be9bd3e438126b44e6bb10d94d522",
     "license": "LICENSE.txt",
-    "tree_sha256": "d71232d65d5273a4e423141c0804b6f60b3a8efb85b578f36074f63486cc04f3"
+    "tree_sha256": "c8b7bb702e8008278a7ae37039f4caf6a63efeecb88869b4acc710239d33980a"
   },
   "hcu-stream": {
     "version": "main-staging-1.0",

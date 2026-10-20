@@ -46,9 +46,9 @@ def prepare(session, output, stopped):
             python = cache / ("venv/Scripts/python.exe" if os.name == "nt" else "venv/bin/python")
             marker = cache / "ready.json"
             if not marker.is_file():
-                execute([sys.executable, "-m", "venv", str(cache / "venv")], output, stopped)
+                execute([sys.executable, "-m", "venv", "--without-pip", str(cache / "venv")], output, stopped)
                 print("Preparing isolated EvalScope client; Python dependencies require a package index or configured wheelhouse.", flush=True)
-                execute([str(python), "-m", "pip", "install", "--disable-pip-version-check",
+                execute([sys.executable, "-m", "pip", "--python", str(python), "install", "--disable-pip-version-check",
                          f"evalscope[perf] @ {source.as_uri()}"], output, stopped)
                 execute([str(python), "-c", VERIFY], output, stopped)
                 write_json(marker, {"source_sha256": SOURCE_SHA256, "version": VERSION})
@@ -64,7 +64,9 @@ def prepare(session, output, stopped):
         execute([python, "-c", VERIFY], output, stopped)
         interpreters[python] = python
     for python in sorted(set(interpreters.values())):
-        execute([python, "-m", "pip", "freeze"], output, stopped)
+        command = ([sys.executable, "-m", "pip", "--python", python]
+                   if python == interpreters.get("auto") else [python, "-m", "pip"])
+        execute([*command, "freeze"], output, stopped)
     write_json(output / "e2e-client.json", {"version": VERSION, "interpreters": interpreters})
 
 

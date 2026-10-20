@@ -55,7 +55,10 @@ def parse_devices(text):
         kind = re.search(r"Device Type:\s*(CPU|GPU)\b", body)
         if index in devices or not kind:
             raise ValueError("Ambiguous native device listing")
-        devices[index] = {"type": kind[1]}
+        pools = len(re.findall(r"Allocatable Memory Size \(KB\):", body))
+        if pools != 1:
+            raise ValueError("Ambiguous native memory pools: require exactly one pool per Device Index; use the bundled tool")
+        devices[index] = {"type": kind[1], "pool_count": pools}
         for field, pattern in (("name", r"Device Name:\s*([^\r\n]+)"),
                                ("bdf", r"Device\s+BDF:\s*([^\r\n]+)"),
                                ("uuid", r"Device UUID:\s*([^\r\n]+)")):

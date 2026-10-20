@@ -24,16 +24,19 @@ DEVICES = """RocmBandwidthTest Version: 2.6.0
 Device Index: 0
   Device Type: CPU
   Device Name: fixture CPU
+  Allocatable Memory Size (KB): 1024
 Device Index: 2
   Device Type: GPU
   Device Name: fixture GPU
   Device  BDF: 2a:0.0
   Device UUID: GPU-fixture-a
+  Allocatable Memory Size (KB): 1024
 Device Index: 3
   Device Type: GPU
   Device Name: fixture GPU
   Device  BDF: 2d:0.0
   Device UUID: GPU-fixture-b
+  Allocatable Memory Size (KB): 1024
 """
 
 
@@ -63,6 +66,12 @@ class PcieTests(unittest.TestCase):
         self.assertEqual(devices[3]["uuid"], "GPU-fixture-b")
         for text in ("", "Usage: ...", DEVICES + DEVICES, DEVICES.replace("Device Type: CPU", "Device Type: OTHER")):
             with self.assertRaises(ValueError):
+                pcie.parse_devices(text)
+
+    def test_rejects_missing_or_duplicate_native_pools(self):
+        marker = "  Allocatable Memory Size (KB): 1024\n"
+        for text in (DEVICES.replace(marker, "", 1), DEVICES.replace(marker, marker * 2, 1)):
+            with self.assertRaisesRegex(ValueError, "Ambiguous native memory pools"):
                 pcie.parse_devices(text)
 
     def test_five_paths_without_self_or_duplicate_bidir(self):

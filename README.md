@@ -54,7 +54,7 @@ python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print(
 | DeepEP | `test_low_latency.py`、`utils.py`，包含已验证的 11 项 handle 接口适配 | 匹配接口的 Torch/DeepEP、通信环境 |
 | Mooncake | Hygon Transfer Engine、pybind11、yalantinglibs 源码，自动编译 | CMake、C++20 编译器、HIP、RDMA/numa/gflags/glog/jsoncpp/yaml-cpp 开发库、Python 开发头文件；两端共享可写目录 |
 | e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
-| e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
+| e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip 22.3+（不要求 ensurepip）、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
 | operators | 固定算子脚本、参数目录、解析器和来源 SHA256 | 匹配脚本 ABI 的 Torch、Triton、FlashAttention、NumPy、einops；FA FP16 性能使用原脚本的本地 `.so` 路径 |
 | migraphx | ResNet50 / BERT 命令、三轮中位数、输入检查和指纹记录 | MIGraphX driver、numactl、onnx、psutil、本地 ONNX；BERT 另需匹配的 rocBLAS 调优库 |
 

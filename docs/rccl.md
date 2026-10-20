@@ -21,7 +21,7 @@ bash bench.sh all        # 与 YAML 中其余启用项串行执行
   也可显式指定已有二进制。构建使用镜像已有 make、hipcc、Open MPI 和 DTK/RCCL，不下载或升级库。
 - 模板默认 half、8 KiB 到 64 MiB、倍增 2、预热 20 次、测量 50 次；可直接改 YAML。
   `max_bytes` 必须落在倍增序列上。完整有限轮次测试不接受 `duration_s`；超时由 `timeout_s` 控制并记为失败。
-- MPI 显式使用 `--host localhost`，不会继承集群分配去其他节点启动进程。
+- MPI 显式使用 `--host localhost:RANKS`，按配置卡数声明本机 slots，不会继承集群分配去其他节点启动进程。
 
 ## 结果与失败
 
