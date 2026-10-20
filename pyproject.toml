@@ -11,6 +11,7 @@ dependencies = ["PyYAML>=6,<7"]
 
 [project.optional-dependencies]
 native = ["psutil>=5.9,<8"]
+migraphx = ["psutil>=5.9,<8", "onnx>=1.16,<2"]
 
 [project.scripts]
 hcu-bench = "hcu_bench.cli:main"

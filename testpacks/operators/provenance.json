@@ -1,0 +1,65 @@
+{
+  "source": "User-provided yy_script archive and hcu-bench case collection, 2026-10-20",
+  "files": [
+    {
+      "file": "blas_pressure.py",
+      "original_sha256": "cc749d691d93faff34aadd21f7ce25a151dc2376a61a8f7d9df4445e09b4bd07",
+      "bundled_sha256": "cc749d691d93faff34aadd21f7ce25a151dc2376a61a8f7d9df4445e09b4bd07",
+      "adaptations": []
+    },
+    {
+      "file": "fa_fwd_pressure.py",
+      "original_sha256": "6021f2eb864fe16d6ad0b6a0eebf291e44d495951348e1cf8e75d4713e2228cb",
+      "bundled_sha256": "aa009e290a48a78d40c2fd4be9433c08b9cee6a8ac50178aced7f79482fa7545",
+      "adaptations": [
+        "Use ast.literal_eval for literal window arguments.",
+        "Require private per-case BENCH_FA_CACHE_DIR instead of shared /fa_debug.",
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    },
+    {
+      "file": "fa_fwd_mfu.py",
+      "original_sha256": "37740be2802e3cccb2f5b5540357014619939245952dd13bd2c137021d4a6b80",
+      "bundled_sha256": "abb11ab15fb1b943c89dd04c4208382697c0787fecfdcdf9afea1b86404435fb",
+      "adaptations": [
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    },
+    {
+      "file": "fa_fwd_fixlen.py",
+      "original_sha256": "188c24be8a66a39c95d35e52247f597b1e3581f0f6fcfc99207f5f54d34c30f5",
+      "bundled_sha256": "c9dfd7fdbbe4ce7aad65cfedae7504e8e9d5d16c2ac121cdecd1e59e58959f4f",
+      "adaptations": [
+        "Use ast.literal_eval for literal window arguments.",
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    },
+    {
+      "file": "flash_attention_utils.py",
+      "original_sha256": "ca1c5e4b284323b1a2bed26333a68abae4a8646d50c21a834709303dc6ec7315",
+      "bundled_sha256": "789b6df4dff1972c1f525f1fa604938da3b598dcc3113ff3662b7bcabff1c8d9",
+      "adaptations": [
+        "Use ast.literal_eval for literal sequence-length arguments.",
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    },
+    {
+      "file": "prefix_decode_benchmark.py",
+      "original_sha256": "2748ef45cac4d253e2bdfd08958ab9a8d73c58ff34fed721222add4ea3880320",
+      "bundled_sha256": "91fea268e4054029466960b7e23abb9fc1c65beea3d59f779d8f52356c674630",
+      "adaptations": [
+        "Normalize CRLF to LF per repository .gitattributes.",
+        "Transcode GB18030 comments to UTF-8 to match the declared source encoding.",
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    },
+    {
+      "file": "bench_fp8_fixlen.py",
+      "original_sha256": "c16dd62ff6f81ef67f92d2a549e9cbc442f42acc0eadc85527a03a9064703a5e",
+      "bundled_sha256": "f6ea6cb7237aab75e50e0057ce878bd6be890632767edb0e94afaa4e28f79efc",
+      "adaptations": [
+        "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
+      ]
+    }
+  ]
+}

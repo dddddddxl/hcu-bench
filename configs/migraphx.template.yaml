@@ -1,0 +1,64 @@
+# MIGraphX 原生模型推理，无 HTTP 服务。六个组合，各三轮，每轮 -n 20。
+version: 1
+name: fixed-migraphx-models
+output_dir: ../runs
+failure_policy: stop
+vars:
+  image: YOUR_APPROVED_MIGRAPHX_IMAGE # 可通过 --set vars.image=... 替换，不内置镜像地址。
+  container_hook: /YOUR_HOST_SCRIPTS/container.sh
+  host_workspace: /YOUR_HOST_WORKSPACE
+  container_workspace: /work/bench-runs
+  bench_root: /workspace/hcu-bench
+  resnet50_model: /models/resnet50-torch-fp32.onnx
+  bert_model: /models/bert-large-uncased-squad-v2-opt-mha-384.onnx
+  rocblas_dir: /opt/rocblas-install
+  numa_node: 0 # 必须按目标卡实际 NUMA 归属填写。
+  hcus: [0] # 单卡容器通常为 0；须用 BDF/UUID 核实，不能猜测映射。
+nodes:
+  node0:
+    executor: local
+    hcus: "${vars.hcus}"
+containers:
+  migraphx:
+    mode: managed
+    name: "bench-${run_id}-${case_id}-${node_id}"
+    work_root: "${vars.container_workspace}"
+    # Hook 挂载已准备的模型/调优库/运行库为只读，只透传目标卡，不下载或替换环境。
+    start: [bash, "${vars.container_hook}", start, "${container_name}", "${vars.image}", "${vars.host_workspace}", "${vars.container_workspace}"]
+    check: [bash, "${vars.container_hook}", check, "${container_name}"]
+    stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
+    hook_timeout_s: 120
+tests:
+  resnet50:
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [node0]
+    container: migraphx
+    timeout_s: 2100 # 包含文件指纹检查、三轮各 600 秒上限及清理余量。
+    params:
+      bench_root: "${vars.bench_root}"
+      model: "${vars.resnet50_model}"
+      numa_node: "${vars.numa_node}"
+    matrix:
+      recipe: [resnet50_fp16, resnet50_int8]
+      batch: [1, 32]
+    env:
+      BENCH_IMAGE: "${vars.image}"
+  bert_large:
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [node0]
+    container: migraphx
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: bert_large_fp16
+      model: "${vars.bert_model}"
+      numa_node: "${vars.numa_node}"
+      rocblas_dir: "${vars.rocblas_dir}"
+    matrix:
+      batch: [1, 32]
+    env:
+      BENCH_IMAGE: "${vars.image}"

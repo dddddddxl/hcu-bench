@@ -1,0 +1,55 @@
+# 固定算子用例；在 Docker 宿主机运行。镜像和启动脚本均由用户选择。
+version: 1
+name: fixed-operators
+output_dir: ../runs
+failure_policy: stop
+vars:
+  image: YOUR_APPROVED_OPERATOR_IMAGE
+  container_hook: /YOUR_HOST_SCRIPTS/container.sh
+  host_workspace: /YOUR_HOST_WORKSPACE
+  container_workspace: /work/bench-runs
+  bench_root: /workspace/hcu-bench
+  hcus: [0] # 目标执行环境内已核实的唯一卡号；先以 BDF/UUID 核对物理卡。
+nodes:
+  node0:
+    executor: local
+    hcus: "${vars.hcus}"
+containers:
+  operators:
+    mode: managed
+    name: "bench-${run_id}-${case_id}-${node_id}"
+    work_root: "${vars.container_workspace}"
+    start: [bash, "${vars.container_hook}", start, "${container_name}", "${vars.image}", "${vars.host_workspace}", "${vars.container_workspace}"]
+    check: [bash, "${vars.container_hook}", check, "${container_name}"]
+    stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
+    hook_timeout_s: 120
+tests:
+  operator_performance:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [node0]
+    container: operators
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      native_timeout_s: 1800
+    matrix:
+      recipe: [pa_decode, fa_fp16_forward, fa_fp8_forward]
+    env:
+      BENCH_IMAGE: "${vars.image}"
+  operator_stress:
+    enabled: false # 原生 100 万次；只在已安排完整压测窗口时开启。超时不能算通过。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [node0]
+    container: operators
+    timeout_s: 86520
+    params:
+      bench_root: "${vars.bench_root}"
+      native_timeout_s: 86400
+    matrix:
+      recipe: [blas_fp16_stress, fa_fp16_stress, fa_bf16_stress]
+    env:
+      BENCH_IMAGE: "${vars.image}"

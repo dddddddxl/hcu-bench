@@ -23,6 +23,8 @@ bash bench.sh rccl                # 只跑单机 MPI AllReduce
 bash bench.sh deepep              # 只跑低延迟压测
 bash bench.sh pcie                # 只跑五类 PCIe 带宽路径
 bash bench.sh memory              # 只跑单卡显存/缓存/LDS 带宽
+bash bench.sh operators           # 只跑已配置的算子测试
+bash bench.sh migraphx            # 只跑已配置的 ResNet50 / BERT 原生推理
 bash bench.sh e2e_acc             # 只跑精度测试
 bash bench.sh e2e_perf            # 只跑吞吐测试
 bash bench.sh e2e                 # 精度 + 吞吐

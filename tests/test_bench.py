@@ -431,7 +431,8 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(main(["list"]), 0)
         lines = output.getvalue().splitlines()
         self.assertEqual([line.split()[0] for line in lines[:len(SUITES)]], list(SUITES))
-        self.assertIn("no bundled native operator tests", output.getvalue())
+        self.assertIn("fixed BLAS/FA repeatability stress and PA/FA performance", output.getvalue())
+        self.assertIn("MIGraphX ResNet50/BERT fixed inference", output.getvalue())
         self.assertIn("SGLang 0.5.12", output.getvalue())
         self.assertIn("simulation only", output.getvalue())
 

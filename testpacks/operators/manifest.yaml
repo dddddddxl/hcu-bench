@@ -1,0 +1,16 @@
+version: 1
+id: operators.fixed-recipes
+suite: operators
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  recipe: {type: string, required: true, choices: [blas_fp16_stress, fa_fp16_stress, fa_bf16_stress, pa_decode, fa_fp16_forward, fa_fp8_forward]}
+  native_timeout_s: {type: integer, default: 1800, min: 1, max: 604800}
+command: [python3, -u, "${p_bench_root}/testpacks/operators/run.py", --recipe, "${p_recipe}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+cwd: ${case_dir}
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv", "${case_dir}/*.receipt"]
+artifact_limit_mb: 100

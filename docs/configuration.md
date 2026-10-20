@@ -67,6 +67,8 @@ repeats: 3
 
 `timeout_s` 是正式测试的故障时限，不是测量迭代次数。首次编译另用 `build.timeout_s`，不扣减测试窗口。DeepEP 可使用测试块的 `duration_s`；Mooncake 使用 `params.duration`。RCCL、PCIe、memory 和 e2e 必须执行完各自的有限用例，不接受框架 `duration_s`。
 
+[固定算子](operators.md) 同样不接受 `duration_s`；原生百万次压力测试默认关闭。[MIGraphX 模型](migraphx.md) 使用独立的 `migraphx` suite，batch 仅允许 1、32，每组合内部三轮，不属于 `e2e` 分组。这两个模板的镜像都由 `vars.image` 选择。
+
 ## 自动准备
 
 RCCL、PCIe、memory、Mooncake 的 `params.binary: auto` 从仓库源码构建并缓存；填具体路径则复用已有程序。DeepEP 的 `test_script: auto` 使用内置测试，e2e_acc 的 `data_path: auto` 使用内置 GSM8K；e2e_perf 的 `python: auto` 在缓存中准备隔离 EvalScope 客户端，首次需 Python 包源或 wheelhouse。

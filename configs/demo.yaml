@@ -1,5 +1,5 @@
 version: 1
-name: seven-suite-framework-demo
+name: all-suite-framework-demo
 output_dir: ../runs
 failure_policy: continue
 nodes:
@@ -39,6 +39,12 @@ tests:
     timeout_s: 10
   operators_demo:
     suite: operators
+    adapter: mock
+    nodes: [local]
+    params: {samples: 3}
+    timeout_s: 10
+  migraphx_demo:
+    suite: migraphx
     adapter: mock
     nodes: [local]
     params: {samples: 3}

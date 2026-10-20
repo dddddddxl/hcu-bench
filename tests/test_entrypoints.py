@@ -113,7 +113,7 @@ class BashEntrypointTests(unittest.TestCase):
         summary = json.loads(reports[0].read_text(encoding="utf-8"))
         self.assertEqual({m["suite"] for m in summary["metrics"]}, set(SUITES))
         self.assertTrue(all(m["simulated"] for m in summary["metrics"]))
-        self.assertEqual(summary["case_counts"], {"completed": 9})
+        self.assertEqual(summary["case_counts"], {"completed": len(SUITES) + 1})
 
     def test_explicit_yaml_and_selected_suites(self):
         config = self.repo / "configs/custom node.yaml"
