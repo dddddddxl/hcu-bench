@@ -1,0 +1,22 @@
+version: 1
+id: models.migraphx-fixed
+suite: e2e_perf
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  recipe: {type: string, required: true, choices: [resnet50_fp16, resnet50_int8, bert_large_fp16]}
+  batch: {type: integer, required: true, choices: [1, 32]}
+  model: {type: string, required: true}
+  numa_node: {type: integer, required: true, min: 0}
+  rocblas_dir: {type: string, default: "", description: "BERT requires a prepared matching tuning directory containing lib"}
+  binary: {type: string, default: migraphx-driver}
+  numactl: {type: string, default: numactl}
+  round_timeout_s: {type: integer, default: 600, min: 1, max: 86400}
+command: [python3, -u, "${p_bench_root}/testpacks/migraphx/run.py", --recipe, "${p_recipe}", --batch, "${p_batch}", --model, "${p_model}", --numa-node, "${p_numa_node}", --rocblas-dir, "${p_rocblas_dir}", --binary, "${p_binary}", --numactl, "${p_numactl}", --round-timeout-s, "${p_round_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+cwd: ${case_dir}
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv", "${case_dir}/*.receipt"]
+artifact_limit_mb: 100
