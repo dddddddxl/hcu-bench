@@ -13,7 +13,7 @@ class RcclTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.config = {"schema_version":1, "test":"communication.rccl_allreduce", "params":{"max_bytes":16384}}
+        self.config = {"schema_version":1, "test":"communication.rccl_allreduce", "params":{"ranks":2, "min_bytes":8192, "max_bytes":16384}}
         self.obj, self.resolved = api.resolve(self.config)
         self.plan = api.plan(self.config)
         self.log = """# nThread 1 nGpus 1 minBytes 8192 maxBytes 16384 step: 2(factor) warmup iters: 20 iters: 50 agg iters: 1 validation: 1 graph: 0
@@ -113,6 +113,19 @@ rccl-tests: Version skill-bundle:archive-ae3e635
             config["params"][key] = value
             with self.assertRaises(ValueError):
                 api.resolve(config)
+
+    def test_default_fixed_16g_plan_and_limits(self):
+        config = {"schema_version": 1, "test": "communication.rccl_allreduce", "params": {}}
+        obj, resolved = api.resolve(config)
+        self.assertEqual(resolved["params"]["ranks"], 8)
+        self.assertEqual(obj.sizes(resolved["params"]), [17179869184])
+        plan = api.plan(config)
+        for flag, value in (("-np", "8"), ("-b", "17179869184"), ("-e", "17179869184"),
+                            ("-f", "2"), ("-g", "1")):
+            self.assertEqual(plan["argv"][plan["argv"].index(flag) + 1], value)
+        for key in ("min_bytes", "max_bytes"):
+            with self.assertRaises(ValueError):
+                api.resolve({**config, "params": {key: 17179869185}})
 
 
 if __name__ == "__main__":

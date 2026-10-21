@@ -19,9 +19,11 @@ bash bench.sh all        # 与 YAML 中其余启用项串行执行
 - 镜像须已有 Python 3.10+、psutil、Open MPI、DTK/RCCL；控制端还需 PyYAML。
 - `binary: auto` 使用仓库内 rccl-tests `ae3e635`，首次自动编译 MPI 版 `all_reduce_perf`，之后复用缓存。
   也可显式指定已有二进制。构建使用镜像已有 make、hipcc、Open MPI 和 DTK/RCCL，不下载或升级库。
-- 模板默认 half、8 KiB 到 64 MiB、倍增 2、预热 20 次、测量 50 次；可直接改 YAML。
-  `max_bytes` 必须落在倍增序列上。完整有限轮次测试不接受 `duration_s`；超时由 `timeout_s` 控制并记为失败。
-- MPI 显式使用 `--host localhost:RANKS`，按配置卡数声明本机 slots，不会继承集群分配去其他节点启动进程。
+- 默认 8 卡、half/sum、固定 16 GiB 消息，等价于 `mpirun -np 8 all_reduce_perf -b 16G -e 16G -f 2 -g 1` 的卡数和消息配置。
+  YAML 的 `min_bytes`、`max_bytes` 均为 `17179869184`；原生 `G` 按 1024³ 字节换算，这是每个 rank 的消息大小，不是八卡合计。
+  保留预热 20 次、测量 50 次及原生数据校验；一次产生 out-of-place、in-place 两条测量记录。
+  参数允许设置到 16 GiB；调整范围时 `max_bytes` 必须落在倍增序列上。完整有限轮次测试不接受 `duration_s`；超时由 `timeout_s` 控制并记为失败。
+- MPI 显式使用 `--host localhost:<ranks>`，为本机提供与进程数一致的 slot；默认 `localhost:8`，不会继承集群分配去其他节点启动进程。
 
 ## 结果与失败
 
@@ -29,7 +31,7 @@ bash bench.sh all        # 与 YAML 中其余启用项串行执行
 日志哈希、环境指纹、两种模式的 wrong 数和正确性页尾。内核 launch-bounds 警告也视为失败。
 空结果、截断、校验失败、取消或超时均不会作为成功数据输出。
 
-`metrics.csv` 的指标名包含字节数和模式，例如 `allreduce_67108864B_out_of_place_busbw`。
+`metrics.csv` 的指标名包含字节数和模式，例如 `allreduce_17179869184B_out_of_place_busbw`。
 不同消息大小、in-place/out-of-place 不混合平均；latency 为原生迭代平均值，不伪造 P99。
 RCCL busbw 不能直接当成 DeepEP effective bandwidth。
 
