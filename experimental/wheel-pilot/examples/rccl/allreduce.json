@@ -3,9 +3,9 @@
   "test": "communication.rccl_allreduce",
   "params": {
     "binary": "/opt/rccl-tests/build/all_reduce_perf",
-    "ranks": 2,
-    "min_bytes": 8192,
-    "max_bytes": 67108864,
+    "ranks": 8,
+    "min_bytes": 17179869184,
+    "max_bytes": 17179869184,
     "step_factor": 2,
     "datatype": "half",
     "operation": "sum",

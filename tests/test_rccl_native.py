@@ -41,7 +41,7 @@ class RcclNativeTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.params = {key: rule["default"] for key, rule in rccl.RcclAllReduce.schema.items()}
-        self.params["max_bytes"] = 16384
+        self.params.update(ranks=2, min_bytes=8192, max_bytes=16384)
         self.args = SimpleNamespace(**self.params, gpu_ids="6,7", nnodes=1, node_rank=0, output_dir=str(self.root))
         self.env = dict(hostname="fixture", binary_sha256="a" * 64, rccl_library_sha256="b" * 64,
                         mpi_version="fixture", dtk_version="fixture", variables={"HIP_VISIBLE_DEVICES": "6,7"})
@@ -50,8 +50,8 @@ class RcclNativeTests(unittest.TestCase):
         original = rccl.NativeProcess
         stop = stopped or threading.Event()
         def launch(argv, cwd, env, path):
-            self.assertEqual(env["HIP_VISIBLE_DEVICES"], "6,7")
-            self.assertEqual(argv[1:3], ["--host", f"localhost:{self.params['ranks']}"])
+            self.assertEqual(env["HIP_VISIBLE_DEVICES"], self.args.gpu_ids)
+            self.assertEqual(argv[1:3], ["--host", f"localhost:{self.args.ranks}"])
             script = f"import sys,time; print({log!r}); print({stderr!r}, file=sys.stderr); time.sleep({60 if cancel_running else 0}); sys.exit({code})"
             process = original([sys.executable, "-u", "-c", script], cwd, env, path)
             if cancel_running:
@@ -106,6 +106,39 @@ class RcclNativeTests(unittest.TestCase):
                 self.assertEqual(samples[0]["metrics"], [])
                 self.assertFalse(json.loads((self.root / "assessment.json").read_text())["evidence_valid"])
 
+    def test_default_eight_card_16g_result_and_limits(self):
+        self.params = {key: rule["default"] for key, rule in rccl.RcclAllReduce.schema.items()}
+        self.assertEqual((self.params["ranks"], self.params["min_bytes"], self.params["max_bytes"]),
+                         (8, 17179869184, 17179869184))
+        self.args = SimpleNamespace(**self.params, gpu_ids="0,1,2,3,4,5,6,7", nnodes=1,
+                                    node_rank=0, output_dir=str(self.root))
+        self.env["variables"]["HIP_VISIBLE_DEVICES"] = self.args.gpu_ids
+        rccl.validate(self.params, self.args.gpu_ids, 1, 0, {})
+        for key in ("min_bytes", "max_bytes"):
+            with self.assertRaisesRegex(ValueError, "outside supported range"):
+                rccl.validate({**self.params, key: 17179869185}, self.args.gpu_ids, 1, 0, {})
+        plan = rccl.LocalAllReduce().plan(self.params)
+        self.assertEqual(plan["expected_sizes_bytes"], [17179869184])
+        for flag, value in (("--host", "localhost:8"), ("-np", "8"), ("-b", "17179869184"),
+                            ("-e", "17179869184"), ("-f", "2"), ("-g", "1")):
+            self.assertEqual(plan["argv"][plan["argv"].index(flag) + 1], value)
+        log = "\n".join([
+            "# nThread 1 nGpus 1 minBytes 17179869184 maxBytes 17179869184 step: 2(factor) warmup iters: 20 iters: 50 agg iters: 1 validation: 1 graph: 0",
+            "rccl-tests: Version skill-bundle:archive-ae3e635",
+            *(f"#   Rank {i} Pid {100+i} on fixture device {i} [0000:{0xe0+i:02x}:00.0] fixture-HCU" for i in range(8)),
+            "# out-of-place in-place",
+            "# size count type redop root time algbw busbw #wrong time algbw busbw #wrong",
+            "# (B) (elements) (us) (GB/s) (GB/s) (us) (GB/s) (GB/s)",
+            "17179869184 8589934592 half sum -1 100000 171.80 300.65 0 100000 171.80 300.65 0",
+            "# Out of bounds values : 0 OK",
+            "# Avg bus bandwidth : 300.65", "",
+        ])
+        code, samples = self.execute(log=log)
+        self.assertEqual(code, 0)
+        self.assertEqual([s["mode"] for s in samples], ["out_of_place", "in_place"])
+        self.assertTrue(all(s["size_bytes"] == 17179869184 for s in samples))
+        self.assertEqual(sum(len(s["metrics"]) for s in samples), 6)
+
     def test_cleanup_failure_uses_reserved_exit_code(self):
         code, samples = self.execute(close_error=True)
         self.assertEqual(code, 125)
@@ -149,6 +182,11 @@ class RcclNativeTests(unittest.TestCase):
             self.assertEqual([case.suite for case in plan.cases], ["rccl", "pcie", "memory", "deepep", "e2e"])
             self.assertTrue(all(case.adapter == "command" for case in plan.cases))
             self.assertEqual(plan.cases[0].pack["id"], "rccl.allreduce")
+            self.assertEqual((plan.cases[0].params["ranks"], plan.cases[0].params["min_bytes"],
+                              plan.cases[0].params["max_bytes"]), (8, 17179869184, 17179869184))
+            for key in ("ranks", "min_bytes", "max_bytes"):
+                self.assertEqual(plan.cases[0].pack["parameters"][key]["default"],
+                                 rccl.RcclAllReduce.schema[key]["default"])
 
     def test_planner_rejects_multiple_nodes_and_pressure_duration(self):
         data = yaml.safe_load((ROOT / "configs/in-container.template.yaml").read_text(encoding="utf-8"))

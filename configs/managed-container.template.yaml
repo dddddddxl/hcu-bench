@@ -75,8 +75,8 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.rccl_binary}"
       ranks: "${vars.rccl_ranks}"
-      min_bytes: 8192                               # 8 KiB，单位字节。
-      max_bytes: 67108864                           # 64 MiB，必须落在倍增序列上。
+      min_bytes: 17179869184                         # 16 GiB，等价于原生 -b 16G。
+      max_bytes: 17179869184                         # 固定 16 GiB，等价于原生 -e 16G。
       step_factor: 2
       datatype: half                               # half / float / double，操作默认为 sum。
       warmup_iters: 20
