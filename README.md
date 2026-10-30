@@ -16,21 +16,21 @@ bash bench.sh all           # YAML 中全部启用项
 
 | Suite | 当前功能 | 节点范围 | 主要结果 |
 | --- | --- | --- | --- |
-| `rccl` | MPI AllReduce sum，支持消息大小扫描、预热、迭代次数和数据类型 | 单机 2–8 卡 | 延迟、algbw、busbw、原生正确性检查 |
+| `rccl` | 10 类 MPI 通信：AllReduce、AllGather、ReduceScatter、Broadcast、Reduce、AllToAll/AllToAllv、Gather、Scatter、SendRecv | 单机 2–8 卡 | 延迟、algbw、busbw、原生正确性检查 |
 | `pcie` | CPU→HCU、HCU→CPU、HCU→HCU、CPU↔HCU、HCU↔HCU 五类路径；默认 512 MiB | 单机，逐对串行 | 各路径 Avg BW、Peak BW，五类 CSV |
 | `memory` | hcu-stream 的 zd1 / zd2 共 24 项，覆盖显存、L1/L2 缓存和 LDS | 单机，指定卡逐卡串行 | 每卡、每用例的 GB/s |
 | `deepep` | 原生低延迟压测，默认 600 秒；支持 token、hidden、top-k、expert 数 | 单机 / 多机 | 有效带宽、分阶段带宽和延迟 |
 | `mooncake` | RDMA / VRAM 压测，支持 pair、fan-in、pairs、ring | 多机，至少两节点 | 吞吐、原生日志、可选吞吐下限判断 |
 | `e2e_acc` | SGLang 0.5.12 GSM8K 评测接口，默认 100 题、5-shot | 单节点服务 | 分数、评测耗时、回答及原生报告 |
 | `e2e_perf` | EvalScope 1.13.0 流式请求压测；扫描输入/输出长度、并发、轮次 | 单节点服务 | 请求吞吐、tokens/s、TTFT、TPOT、ITL、端到端延迟及分位数 |
-| `operators` | BLAS FP16、FA FP16/BF16 重复性压测；PA decode、FA FP16/FP8 前向性能 | 单机单卡 | 完成迭代数、TFLOPS、延迟、PA 带宽；保留原始日志 |
+| `operators` | Conv/GEMM 正确性与性能；BLAS/FA 重复性压测；PA、FA 前向性能 | 单机单卡 | 原生校验、延迟、GFLOPS/TFLOPS、PA 带宽及原始日志 |
 | `migraphx` | MIGraphX ResNet50 FP16/INT8、BERT-large FP16 固定推理用例 | 单机单卡 | 三轮吞吐中位数、ms/batch、逐轮结果及原始日志 |
 
 `e2e` 是 `e2e_acc` + `e2e_perf` 的分组。对于服务类模型，每个模型启动一次，先运行选中的精度项，再运行吞吐项，清理后换下一个模型。支持 OpenAI 兼容服务，附 SGLang / vLLM 启动脚本模板；不支持多机模型服务编排。具体模型能否启动仍取决于镜像、权重和启动参数。
 
-`migraphx` 是独立 suite，不属于 `e2e` 分组；使用直接命令测试包，无需 HTTP 服务或 `models` 服务配置。固定用例见 [算子测试](docs/operators.md) 和 [ResNet50 / BERT](docs/migraphx.md)；镜像均由 `vars.image` 选择。Conv 和通用 GEMM 暂未接入（BLAS 固定矩阵压测是独立用例）。百万次压测默认关闭，需明确安排测试窗口后开启。
+`migraphx` 是独立 suite，不属于 `e2e` 分组；使用直接命令测试包，无需 HTTP 服务或 `models` 服务配置。固定用例见 [算子测试](docs/operators.md) 和 [ResNet50 / BERT](docs/migraphx.md)。Conv/GEMM 使用文档附件中的原始 CSV，和 BLAS 固定矩阵压测分开；百万次压测默认关闭。
 
-“已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。PCIe、memory、固定算子和 MIGraphX 包已覆盖解析与编排回归；固定算子与 MIGraphX 的新入口尚未完成目标 HCU 实测，原生测试成功也不等于整套 `all` 已验收。
+“已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。本次新增的 Conv/GEMM 和 RCCL 通信集合已覆盖解析、编排与失败处理回归，尚待空闲节点实测；原生测试成功也不等于整套 `all` 已验收。
 
 ## 快速开始
 
@@ -48,14 +48,14 @@ python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print(
 
 | 测试 | 仓库已提供 | 镜像仍需具备 |
 | --- | --- | --- |
-| RCCL | 固定版本 rccl-tests 源码，自动编译 MPI AllReduce | make、HIP 编译器、Open MPI、DTK/RCCL 开发库 |
+| RCCL | 固定版本 rccl-tests 源码，按 collective 自动编译对应 MPI 工具 | make、HIP 编译器、Open MPI、DTK/RCCL 开发库 |
 | PCIe | rocm-bandwidth-test 2.6.0 逐对输出版本源码，自动编译 | CMake、C++ 编译器、HSA 开发库 |
 | memory | main-staging-1.0 hcu-stream 源码，自动按架构编译 | make、匹配架构的 AICC/DTK |
 | DeepEP | `test_low_latency.py`、`utils.py`，包含已验证的 11 项 handle 接口适配 | 匹配接口的 Torch/DeepEP、通信环境 |
 | Mooncake | Hygon Transfer Engine、pybind11、yalantinglibs 源码，自动编译 | CMake、C++20 编译器、HIP、RDMA/numa/gflags/glog/jsoncpp/yaml-cpp 开发库、Python 开发头文件；两端共享可写目录 |
 | e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
 | e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip 22.3+（不要求 ensurepip）、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
-| operators | 固定算子脚本、参数目录、解析器和来源 SHA256 | 匹配脚本 ABI 的 Torch、Triton、FlashAttention、NumPy、einops；FA FP16 性能使用原脚本的本地 `.so` 路径 |
+| operators | 固定算子脚本、Conv/GEMM CSV、解析器及来源 SHA256 | Conv 需 MIOpenDriver，GEMM 需 rocblas-bench；PA/FA/BLAS 需匹配 ABI 的 Torch/Triton/FlashAttention 等 |
 | migraphx | ResNet50 / BERT 命令、三轮中位数、输入检查和指纹记录 | MIGraphX driver、numactl、onnx、psutil、本地 ONNX；BERT 另需匹配的 rocBLAS 调优库 |
 
 以上是运行镜像的基础依赖，不是要求另找测试代码。原生构建源码版本、校验与授权说明见 [vendor](vendor/README.md)，固定算子脚本来源见 [算子测试](docs/operators.md)。原生 C/C++ 构建不联网下载源码、不安装系统软件包；EvalScope 服务压测首次会在独立缓存虚拟环境安装客户端 Python 依赖，不改服务环境的 DTK、Torch 或 SGLang。MIGraphX 固定模型包不自动安装依赖。依赖不全或准备失败会保留错误，不自动换库。
@@ -105,7 +105,7 @@ bash bench.sh all
 
 `check` 检查配置和参数，`plan` 展示实际命令；二者都不会连接节点、启动容器或占用 HCU，也不证明环境已经可运行。原生工具、模型和依赖在实际执行时检查。
 
-综合模板按 **RCCL → PCIe → memory → DeepEP → 模型流水线** 串行运行。**`all` 只运行当前 YAML 中启用的测试**，不会重复运行 e2e 分组，也不自动加入 Mooncake、算子或任何模拟项。要加入 Mooncake，将其模板中的节点、容器配置和测试块合并到同一 YAML。
+综合模板已包含 Conv/GEMM、RCCL 通信集合、PCIe、memory、DeepEP 和模型流水线，按 YAML 顺序串行运行。**`all` 只运行当前 YAML 中启用的测试**，不会自动修改已有个人配置；PA/FA、Mooncake、MIGraphX 需从各自模板合并所需测试块。无需执行的项设置 `enabled: false`。
 
 `configs/bench.yaml` 是默认配置路径，已被 Git 忽略。升级仓库不会覆盖个人配置，也不会自动增加新 suite；新增测试块需从最新模板补入。
 
@@ -122,7 +122,7 @@ memory 默认使用已有 AICC，YY/gfx92a 自动对应 `arch_num: 9210`。**此
 这两类测试使用独立模板，可以选择不同镜像。模板默认在 Docker 宿主机执行，需要填写容器启动、检查、停止 hook；在已有容器内运行时，删除 `containers` 和测试块中的 `container` 字段，并填写容器内路径。详见 [算子用例](docs/operators.md) 和 [模型用例](docs/migraphx.md)。
 
 ```bash
-# 算子性能：PA decode、FA FP16、FA FP8，共 3 项。
+# 算子性能：Conv/GEMM，以及 PA decode、FA FP16/FP8。
 cp configs/operators.template.yaml configs/bench.yaml
 # 编辑 vars.image、容器 hook、仓库路径和唯一目标卡。
 bash bench.sh check -c configs/bench.yaml --suite operators
@@ -174,12 +174,12 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 | 范围 | 常调参数 |
 | --- | --- |
 | 公共 | `enabled`、`nodes`、`repeats`、`timeout_s`、`failure_policy` |
-| RCCL | `ranks`、`min_bytes`、`max_bytes`、`step_factor`、`datatype`、`warmup_iters`、`iters` |
+| RCCL | `collective`、`root`、`ranks`、`min_bytes`、`max_bytes`、`step_factor`、`datatype`、`warmup_iters`、`iters` |
 | PCIe | `cpu_devices`、`hcu_devices`、`size_mib`、`iters` |
 | memory | `devices`、`presets`、`model_mhz`、`array_size` |
 | DeepEP | `duration_s`（测试块）、`num_processes`、`num_tokens`、`hidden`、`num_topk`、`num_experts` |
 | Mooncake | `topology`、`duration`、`buffer_size`、`threads`、`batch_size`、`block_size`、`operation` |
-| operators | `recipe`、`native_timeout_s`；固定 shape / 循环次数不开放任意修改 |
+| operators | 固定配方：`recipe`、`native_timeout_s`；Conv/GEMM：`dtype`、`mode`、分组/方向/用例过滤、预热/迭代/轮次及 `max_norm_error` |
 | 服务类模型部署 | `models.<名称>.start_script`、`port`、`startup_timeout_s`；其余部署参数在启动脚本内 |
 | e2e_acc | `models`、`num_examples`、`num_shots`、`num_threads`、`max_tokens`、`min_score` |
 | EvalScope e2e_perf | `models`、`shapes`、`concurrency`、`requests`、`warmup_requests`、`repeats`、`seed`、`extra_body` |
@@ -199,7 +199,9 @@ DeepEP 的 `duration_s` 是计划窗口，必须小于故障时限 `timeout_s`�
 | 仅 PCIe / 仅 memory | [pcie.template.yaml](configs/pcie.template.yaml) / [memory.template.yaml](configs/memory.template.yaml) | 无需填写模型和通信测试输入 |
 | Mooncake 多机 | [mooncake.template.yaml](configs/mooncake.template.yaml) | 使用已准备的容器，共享目录须在所有节点可写 |
 | 多模型精度 / 吞吐 | [e2e-multi-model.template.yaml](configs/e2e-multi-model.template.yaml) | 每个模型单独启动脚本，精度和吞吐串行共用服务 |
-| 固定算子压测 / 性能 | [operators.template.yaml](configs/operators.template.yaml) | 单机单卡；3 项性能默认开启，3 项百万次压测默认关闭；镜像可选 |
+| 算子压测 / 性能 | [operators.template.yaml](configs/operators.template.yaml) | Conv/GEMM 和 PA/FA 性能；百万次压测默认关闭；镜像可选 |
+| Conv/GEMM | [numeric-operators.template.yaml](configs/numeric-operators.template.yaml) | 已有容器内执行；56 组 Conv、42 组 GEMM；perf 自动先校验 |
+| RCCL 通信集合 | [rccl.template.yaml](configs/rccl.template.yaml) | 单机 2–8 卡；按算子编译，归约类使用 sum |
 | ResNet50 / BERT 性能 | [migraphx.template.yaml](configs/migraphx.template.yaml) | MIGraphX 原生推理，6 个组合，每组 3 轮；镜像可选 |
 | 无 HCU 演示 | [demo.yaml](configs/demo.yaml) | 全部为模拟数据，不能作为性能结果 |
 

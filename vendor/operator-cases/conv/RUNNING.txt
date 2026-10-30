@@ -1,0 +1,53 @@
+Conv 卷积性能测试
+
+文件
+run_conv_cases.py：批量执行脚本，Python 3.8+，仅使用标准库。
+conv2d.csv：13 个尺寸与方向配置。
+conv3d.csv：15 个尺寸与方向配置。
+SOURCE.txt：原始用例来源记录。
+三个执行所需文件必须放在同一目录。
+
+在 Linux DTK 容器内使用 Bash 执行以下命令。
+先确认目标卡空闲，并按实际设备映射替换 HIP_VISIBLE_DEVICES=0。
+source /opt/dtk/env.sh
+python3 --version
+/opt/dtk/bin/MIOpenDriver --version
+
+预览命令，不执行 GPU 测试
+python3 run_conv_cases.py --dtype fp16 --mode check --dry-run
+
+正确性检查
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp32 --mode check
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp16 --mode check
+检查 logs/check_* 中每个用例的校验输出。进程退出码仅代表执行状态。
+
+确认上述正确性检查通过后，串行运行性能测试
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp32 --mode perf
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp16 --mode perf
+
+筛选示例：只测试 Conv2D 前向 FP16
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp16 --mode check --suite conv2d --direction fwd
+确认对应校验通过后：
+HIP_VISIBLE_DEVICES=0 python3 run_conv_cases.py --dtype fp16 --mode perf --suite conv2d --direction fwd
+
+默认行为
+--mode check：每项执行一次带验证的命令，-V 1 -i 1 -t 1。
+--mode perf：每项先预跑 10 次，再执行 3 轮，每轮 100 次，-V 0 -t 1。
+--suite：all、conv2d、conv3d，默认为 all。
+--direction：all、fwd、dgrad、wgrad，默认为 all。
+--warmup、--iters、--repeats：调整预跑迭代数、每轮迭代数、正式轮数。
+--driver：指定 MIOpenDriver 的绝对路径。
+默认每种精度 28 项，两种精度合计 56 项。CSV 的 count 不作为循环次数。
+
+结果
+logs/ 下每次执行生成独立目录，保留逐项逐阶段日志、execution.csv 和 metadata.json。
+execution.csv 记录命令和退出码，不代表正确性判定或性能统计。
+正式计时从每项 run1、run2、run3 日志中读取 GPU Kernel Time，单位 ms。
+取三轮值的中位数，记录最小值和最大值；warmup 和 check 日志不纳入正式统计。
+元数据记录用例文件哈希、运行参数及相关环境变量。
+另行记录卡型号、设备映射、驱动/DTK/MIOpen 版本和容器镜像。
+
+脚本验证范围
+已核对两种精度的全部 56 条正确性检查命令与原 CSV 参数一致。
+已检查预跑、正式轮数及方向筛选的命令生成。
+尚未执行 GPU 测试，需在目标卡上检查正确性和实际性能。

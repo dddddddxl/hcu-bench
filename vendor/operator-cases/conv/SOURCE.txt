@@ -1,0 +1,35 @@
+Retrieved: 2026-10-21
+SSH alias: nmz36
+Observed hostname: github-nmz2
+Remote source root: /public/dtk/autotest_platform/miopen_test/api_test
+
+Local files are original copies downloaded with scp:
+conv2d.csv <- python/test_size/conv2d.csv
+conv3d.csv <- python/test_size/conv3d.csv
+test_conv.sh <- cpp/test_case/test_conv.sh
+test_conv_fprop.py <- python/test_conv_fprop.py
+test_conv_dgrad.py <- python/test_conv_dgrad.py
+test_conv_wgrad.py <- python/test_conv_wgrad.py
+read_test_size.py <- python/read_test_size.py
+README.md <- README.md
+
+CSV data-row counts, excluding the header:
+conv2d.csv: 13 rows (F=1: 4; F=2: 4; F=4: 5)
+conv3d.csv: 15 rows (F=1: 5; F=2: 5; F=4: 5)
+Both CSVs contain cmd-fp32 and cmd-fp16 columns with MIOpenDriver commands.
+test_conv.sh contains 68 test_conv invocations, using a separate hipdnn API test executable.
+
+SHA256 verified against the remote files:
+5d2c05a773fe21a7d5a2eb30073451e67ca3b60b8f5da446d8b48ecb1ed7cd6e  conv2d.csv
+1adaff077b52fb73b9f5f05742b4410f547d01ce6717e702f6a47bdfa6c4bacf  conv3d.csv
+9711f3a21218eb32e16d2fbe758ae13b5affaefb476966e3dda4b02884b14c9c  test_conv.sh
+
+Validation scope:
+Read files only; no convolution benchmarks executed.
+MIOpenDriver conv --help checked in the running megatron_test container.
+F=1 forward; F=2 backward data; F=4 backward weights.
+No evidence currently establishes these files as the actual nightly workload.
+The copied Python files are references, not a standalone runnable test package;
+the original directory also supplies dependencies such as utils.py and hipdnn.
+Host /public/dtk resolves to /public5/dtk; do not assume that this path is visible
+inside megatron_test merely because /public is mounted.

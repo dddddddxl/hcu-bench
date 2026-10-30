@@ -120,15 +120,15 @@ class RcclAllReduce:
         for line_no, line in enumerate(text.splitlines(), 1):
             if not re.match(r"^\s*\d+\s", line):
                 continue
-            fields = line.split()
+            fields = self.row_fields(line)
             try:
                 if len(fields) != 13:
                     raise ValueError("column count")
                 size, count = int(fields[0]), int(fields[1])
-                if fields[2:5] != [p["datatype"], p["operation"], "-1"] or size != count * width:
+                if not self.row_semantics(p, fields, size, count, width):
                     raise ValueError("row semantics")
                 pair = []
-                for mode, start in (("out_of_place", 5), ("in_place", 9)):
+                for mode, start in self.measurement_modes():
                     time, alg, bus = map(float, fields[start:start+3])
                     wrong_value = float(fields[start+3].rstrip("*"))
                     if not all(math.isfinite(v) for v in (time, alg, bus, wrong_value)) or time <= 0 or min(alg, bus, wrong_value) < 0 or not wrong_value.is_integer():
@@ -140,7 +140,7 @@ class RcclAllReduce:
             except (ValueError, OverflowError):
                 issues.append(f"malformed_data_row:line_{line_no}")
         actual = [(r["size_bytes"], r["mode"]) for r in rows]
-        wanted_rows = [(s, m) for s in self.sizes(p) for m in ("out_of_place", "in_place")]
+        wanted_rows = [(s, mode) for s in self.sizes(p) for mode, _ in self.measurement_modes()]
         if actual != wanted_rows:
             issues.append("missing_duplicate_or_unexpected_rows")
         checks = re.findall(r"^# Out of bounds values\s*:\s*(\d+)\s+(OK|FAILED)\s*$", text, re.M)
@@ -163,6 +163,15 @@ class RcclAllReduce:
         return {"execution": execution, "evidence_valid": not issues, "issues": issues, "environment": env,
                 "correctness": correctness, "measurement": {"sample_kind": "iteration_aggregate", "unit": "us", "bandwidth_unit": "GB/s", "method": "rccl-tests wall-clock batch duration / iters / agg_iters, averaged across ranks (-a 1)",
                 "boundary": "startColl loop through completeColl; validation outside timing; graph disabled", "iters": p["iters"], "warmup_iters": p["warmup_iters"], "raw_per_invocation_samples_available": False, "reported_average_busbw_GBps": average, "rows": rows}}
+
+    def row_fields(self, line):
+        return line.split()
+
+    def measurement_modes(self):
+        return (("out_of_place", 5), ("in_place", 9))
+
+    def row_semantics(self, p, fields, size, count, width):
+        return fields[2:5] == [p["datatype"], p["operation"], "-1"] and size == count * width
 
     def export_csv(self, measurement, path):
         with path.open("w", encoding="utf-8", newline="") as f:

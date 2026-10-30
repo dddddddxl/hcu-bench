@@ -6,15 +6,18 @@
 
 | 目录 | 用途 | 范围 |
 | --- | --- | --- |
-| rccl-tests | MPI AllReduce | src、verifiable 及构建文件，NVIDIA/AMD 原许可证 |
+| rccl-tests | 10 类单机 MPI 通信 | src、verifiable 及构建文件，NVIDIA/AMD 原许可证 |
 | rocm-bandwidth-test | CPU↔HCU、HCU↔HCU | ROCm 6.4.2 源码提交中的原生 2.6.0；不是新版重写项目的同名标签 |
 | hcu-stream | zd1/zd2 24 项 | 用户提供的 main-staging-1.0，含 main.cpp 引用的内核；未移除编译失败的用例 |
 | deepep-tests | DeepEP 低延迟压测 | 用户提供的原生测试和 utils；使用已验证 daily 的 11 字段 handle 接口 |
 | mooncake | RDMA/VRAM 传输 | HYGON-AI 固定提交的 transfer-engine、common、构建文件，及固定版 pybind11/yalantinglibs |
 | gsm8k | 简单精度测试 | 官方 test.jsonl，MIT；沿用评测器的前 5 条 few-shot、后 100 条评分方式 |
 | evalscope | 模型吞吐 HTTP 客户端 | 1.13.0 官方源码压缩包，Apache-2.0；首次在独立 venv 安装，Python 依赖需包源或 wheelhouse |
+| operator-cases | Conv/GEMM 正确性与性能 | 用户授权公开的脚本、CSV 及来源材料；运行使用镜像已有 MIOpenDriver / rocblas-bench |
 
 ## 来源与修改
+
+- `operator-cases/conv` 和 `operator-cases/gemm` 保留飞书测试指导附件原始脚本、CSV 及来源材料，提供方于 2026-10-30 允许随公开仓库分发；没有附带根许可证，不另行声称 MIT/Apache。包装器调用原始脚本的参数构造函数，额外实现原生校验和计时解析、进程清理及标准结果收集。
 
 - rocm-bandwidth-test 过滤 extended-scope fine-grained HCU 内存池，避免新 DTK 下 Device ID 与传输池索引错位；计时和带宽公式不变。包装器拒绝一设备多池的歧义枚举。
 

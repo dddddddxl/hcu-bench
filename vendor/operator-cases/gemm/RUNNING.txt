@@ -1,0 +1,86 @@
+GEMM 矩阵乘性能测试
+
+测试工具：rocblas-bench（命令使用连字符）。
+测试包：run_gemm_cases.py、gemm_cases.csv；Python 3.8+，仅使用标准库。
+用例：4 组新增规则方阵，8 组从 DTK YAML 提取的模型 GEMM，2 组模型 strided-batched GEMM。
+每种精度 14 项，FP32、FP16、BF16 共 42 项。精度扩展由本测试集新增。
+
+1. 准备环境
+将包放入安装 DTK 的 Linux 容器，在 Bash 中解压并进入目录：
+unzip gemm_test_cases.zip -d gemm_test
+cd gemm_test
+source /opt/dtk/env.sh
+mkdir -p bin
+cp /opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench ./bin/rocblas-bench
+chmod u+x ./bin/rocblas-bench
+./bin/rocblas-bench --version
+
+nmz36 的 megatron_test 容器中，该二进制原文件权限为 0644。
+上述操作给工作副本增加执行权限；DTK 库继续由环境脚本提供。
+本地副本只用于直接参数调用，未配备 --yaml 需要的 gentest 等辅助文件。
+
+2. 正确性检查
+确认目标卡空闲，按设备映射替换 HIP_VISIBLE_DEVICES=0，串行运行：
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp32 --mode check
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode check
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype bf16 --mode check
+
+check 使用 --test 1 --verify 1 --cold_iters 2 --iters 1。
+--test 请求 GPU/CPU 结果的相等或容差检查；--verify 请求范数误差检查。
+检查每条日志的诊断、误差和执行状态，确认正确性后再测性能。
+大尺寸 CPU 参考计算可能较慢；进程退出码为 0 不能单独当作精度通过。
+
+3. 性能测试
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp32 --mode perf
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode perf
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype bf16 --mode perf
+
+每项独立运行 3 轮。每轮同一进程内 --cold_iters 10 预热，然后 --iters 100 正式计时。
+性能阶段关闭 CPU 结果检查：--test 0 --verify 0。
+次数可通过 --warmup 10 --iters 100 --repeats 3 修改。
+
+4. 筛选用例
+--group 可选 all、square、dlrm、bert、transformer、batched，默认 all。
+--case-id 可指定 gemm_cases.csv 中的单个 case_id。
+例如先检查再测 square-4096：
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode check --case-id square-4096
+确认正确性后执行：
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode perf --case-id square-4096
+仅预览命令：
+python3 run_gemm_cases.py --dtype fp16 --mode perf --dry-run
+
+5. 数学与精度定义
+普通 GEMM：C = alpha * op(A) * op(B) + beta * C。
+GEMM_EX：D = alpha * op(A) * op(B) + beta * C；本套件使用默认 C/D 同址方式。
+op(A) 为 M*K，op(B) 为 K*N，输出为 M*N。
+FP32：gemm 或 gemm_strided_batched，f32_r。
+FP16：gemm_ex 或 gemm_strided_batched_ex，A/B/C/D 为 f16_r，compute_type 为 f32_r。
+BF16：gemm_ex 或 gemm_strided_batched_ex，A/B/C/D 为 bf16_r，compute_type 为 f32_r。
+全套固定 alpha=1、beta=0、initialization=trig_float、math_mode=0、use_hipblaslt=0。
+flush_batch_count=1：重复复用同一组矩阵缓冲区，允许缓存命中。
+FP32 本套件未启用 XF32 加速。BF16 的实际可用性需由目标卡及 DTK 执行验证。
+
+6. Leading dimension 与 batch stride
+rocBLAS 按列主序解释矩阵。
+transA=N 时 lda>=M；transA=T 时 lda>=K。
+transB=N 时 ldb>=K；transB=T 时 ldb>=N。
+ldc>=M；gemm_ex 的 ldd>=M。
+stride_a/b/c/d 以元素为单位，而不是字节。本套件保留所选源用例的 stride。
+修改尺寸时必须同时检查 leading dimension 和 batch stride。
+
+7. 结果
+每次运行在 logs/ 下创建独立目录，保存逐条原始日志、execution.csv、metadata.json。
+execution.csv 记录进程状态和实际命令，不自动作出正确性判定或计算性能汇总。
+读取正式日志中的 rocblas-Gflops 和 us；us 是微秒，GFLOPS/1000 = TFLOPS。
+三轮 us 取中位数，并记录最小值和最大值。
+普通 GEMM 常用估算 FLOPs=2*M*N*K；批量 GEMM 还需乘 batch_count。
+TFLOPS = 2*M*N*K*batch_count/(time_us*1000000)。
+记录卡型号、UUID/BDF、驱动、DTK、rocBLAS 版本、容器镜像、设备占用状态。
+
+8. 来源与验证范围
+源 YAML：/public/dtk/autotest_platform/dcc_cp/rocblas/rocblas_general.yaml。
+精确来源行号在 gemm_cases.csv，哈希和扩展说明在 gemm_sources.json。
+原始模型条目为 FP32；FP16/BF16 是本套件增加的测试变体。
+该集合是起始测试子集，未确认属于 nightly 实际任务，也不是理论峰值保证。
+已核查当前容器 CLI help、5.2.0.2e172d3e3-dirty 版本和参数生成。
+当前构建报告未包含 hipBLASLt。未执行 GPU 正确性或性能测试。

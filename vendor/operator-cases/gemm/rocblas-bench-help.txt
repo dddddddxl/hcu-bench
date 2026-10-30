@@ -1,0 +1,152 @@
+644 77374152 /opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench
+total 150300
+-rw-r--r-- 1 root root 77374152 Sep 18 11:23 rocblas-bench
+-rw-r--r-- 1 root root    24758 Sep 18 10:59 rocblas_common.yaml
+-rw-r--r-- 1 root root 76428080 Sep 18 11:23 rocblas-gemm-tune
+-rw-r--r-- 1 root root    26072 Sep 18 10:59 rocblas_gentest.py
+-rw-r--r-- 1 root root    38580 Sep 18 10:59 rocblas_template.yaml
+ 0x000000000000001d (RUNPATH)            Library runpath: [/opt/dtk-26.04.2/llvm/lib:/data/jenkins_workspace/workspace/rocBLAS_release/rocblas/build/release/library/src:/opt/hyhal/lib::/opt/dtk-26.04.2/hip/lib:/opt/dtk-26.04.2/lib]
+rocBLAS info: client (OPENMP) reduced omp_set_num_threads to 126
+rocBLAS warning: LD_LIBRARY_PATH override may use incompatible rocblas 
+rocBLAS info: Using reference library 'blas64'
+
+/tmp/rocblas-bench-inspect.w8VXkW/rocblas-bench [ --data <path> | --yaml <path> ] <options> ...
+
+--sizem |-m <value>        Specific matrix size: sizem is only applicable to BLAS-2 & BLAS-3: the number of rows or columns in matrix.  (Default value is: 128)
+
+--sizen |-n <value>        Specific matrix/vector size: BLAS-1: the length of the vector. BLAS-2 & BLAS-3: the number of rows or columns in matrix  (Default value is: 128)
+
+--sizek |-k <value>        Specific matrix size: BLAS-2: the number of sub or super-diagonals of A. BLAS-3: the number of columns in A and rows in B.  (Default value is: 128)
+
+--kl <value>               Specific matrix size: kl is only applicable to BLAS-2: The number of sub-diagonals of the banded matrix A.  (Default value is: 32)
+
+--ku <value>               Specific matrix size: ku is only applicable to BLAS-2: The number of super-diagonals of the banded matrix A.  (Default value is: 32)
+
+--lda <value>              Leading dimension of matrix A, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)
+
+--ldb <value>              Leading dimension of matrix B, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)
+
+--ldc <value>              Leading dimension of matrix C, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)
+
+--ldd <value>              Leading dimension of matrix D, is only applicable to BLAS-EX   (Default value is: 128)
+
+--any_stride <value>       Do not modify input strides based on leading dimensions 
+
+--stride_a <value>         Specific stride of strided_batched matrix A, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)
+
+--stride_b <value>         Specific stride of strided_batched matrix B, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)
+
+--stride_c <value>         Specific stride of strided_batched matrix C, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)
+
+--stride_d <value>         Specific stride of strided_batched matrix D, is only applicable to strided batchedBLAS_EX: second dimension * leading dimension.  (Default value is: 16384)
+
+--stride_x <value>         Specific stride of strided_batched vector x, is only applicable to strided batchedBLAS_2: second dimension.  (Default value is: 16384)
+
+--stride_y <value>         Specific stride of strided_batched vector y, is only applicable to strided batchedBLAS_2: leading dimension.  (Default value is: 16384)
+
+--incx <value>             increment between values in x vector  (Default value is: 1)
+
+--incy <value>             increment between values in y vector  (Default value is: 1)
+
+--alpha <value>            specifies the scalar alpha  (Default value is: 1)
+
+--alphai <value>           specifies the imaginary part of the scalar alpha  (Default value is: 0)
+
+--beta <value>             specifies the scalar beta  (Default value is: 0)
+
+--betai <value>            specifies the imaginary part of the scalar beta  (Default value is: 0)
+
+--function |-f <value>     BLAS function to test. 
+
+--precision |-r <value>    Precision. Options: h,s,d,c,z,f8_r, bf8_r, f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r  (Default value is: f32_r)
+
+--a_type <value>           Precision of matrix A. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r 
+
+--b_type <value>           Precision of matrix B. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r 
+
+--c_type <value>           Precision of matrix C. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r 
+
+--d_type <value>           Precision of matrix D. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r 
+
+--compute_type <value>     Precision of computation. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r 
+
+--composite_compute_type <value> Precision of computation. Options: f32, f8_f8_f32, f8_bf8_f32, bf8_f8_f32, bf8_bf8_f32 
+
+--initialization <value>   Initialize with random integers, trig functions sin and cos, or hpl-like input. Options: rand_int, trig_float, hpl  (Default value is: rand_int)
+
+--transposeA <value>       N = no transpose, T = transpose, C = conjugate transpose  (Default value is: N)
+
+--transposeB <value>       N = no transpose, T = transpose, C = conjugate transpose  (Default value is: N)
+
+--side <value>             L = left, R = right. Only applicable to certain routines  (Default value is: L)
+
+--uplo <value>             U = upper, L = lower. Only applicable to certain routines  (Default value is: U)
+
+--diag <value>             U = unit diagonal, N = non unit diagonal. Only applicable to certain routines  (Default value is: N)
+
+--batch_count <value>      Number of matrices. Only applicable to batched and strided_batched routines  (Default value is: 1)
+
+--HMM <value>              Parameter requesting the use of HipManagedMemory 
+
+--test |-t <value>         Equality/tolerance check on GPU vs. CPU results? 0 = No, 1 = Yes (default: No). Warning: tests may require specific initialization to pass.  (Default value is: 0)
+
+--verify |-v <value>       Norm check on GPU vs. CPU results? 0 = No, 1 = Yes (default: No)  (Default value is: 0)
+
+--iters |-i <value>        Iterations to run inside timing loop  (Default value is: 10)
+
+--cold_iters |-j <value>   Cold Iterations to run before entering the timing loop  (Default value is: 2)
+
+--algo <value>             extended precision gemm algorithm  (Default value is: 0)
+
+--solution_index <value>   extended precision gemm solution index  (Default value is: 0)
+
+--flags <value>            gemm_ex flags, see rocblas_gemm_flags enum in documentation  (Default value is: 0)
+
+--geam_ex_op <value>       geam_ex_operation, 0: min_plus operation, 1: plus_min operation  (Default value is: 0)
+
+--atomics_allowed <value>  Atomic operations with non-determinism in results are allowed (default true) 
+
+--atomics_not_allowed <value> Atomic operations with non-determinism in results are not allowed (default false) 
+
+--device <value>           Set default device to be used for subsequent program runs  (Default value is: 0)
+
+--parallel_devices <value> Set number of devices used for parallel runs (device 0 to parallel_devices-1)  (Default value is: 0)
+
+--outofplace               for gemm_ex C and D are stored in separate memory, for trmm B and C are stored in separate memory 
+
+--fortran <value>          Run using Fortran interface 
+
+--api <value>              Use API, supercedes fortran flag (0==C, 1==C_64, ...)  (Default value is: 0)
+
+--workspace <value>        Set fixed workspace memory size instead of using rocblas managed memory  (Default value is: 0)
+
+--log_function_name <value> Function name precedes other items. 
+
+--log_datatype <value>     Include datatypes used in output. 
+
+--use_hipblaslt <value>    Whether to use hipblaslt (default: -1, always: 1, never: 0)  (Default value is: -1)
+
+--function_filter <value>  Simple strstr filter on function name only without wildcards 
+
+--math_mode <value>        extended precision gemm math mode  (Default value is: 0)
+
+--flush_batch_count <value> number of copies of arrays to allocate for cache flushing in timing code. Functions are called iters times in a timing loop. If the problem memory footprint is small enough, then arrays will be cached. flush_batch_count can be used to prevent caching. For example, for sgemm with transA=transB=N: problem_memory_footprint = (m*k + k*n + m*n) * sizeof(float). To flush arrays before reuse set: flush_batch_count >= 1 + cache_size / problem_memory_footprint Note that in the calculation of flush_batch_count any padding from leading dimensions is not loaded to cache and not included in the problem_memory_footprint. If you specify flush_batch_count you cannot also specify flush_memory_size  (Default value is: 1)
+
+--flush_memory_size <value> bytes of memory that will be occupied by arrays. Used only in timing code for cache flushing. Set to greater than cache size so arrays are flushed from cache before they are reused. When the size of arrays (the problem_memory_footprint) is smaller than flush_memory_size, then flush_batch_count copies of arrays are allocated where: flush_batch_count = flush_memory_size / problem_memory_footprint. For sgemm with transA=transB=N problem_memory_footprint = (m*k + k*n + m*n) * sizeof(float). Note that any padding from leading dimensions is not loaded to cache and not included in the problem_memory_footprint. If you specify flush_memory_size you cannot also specify flush_batch_count  (Default value is: 0)
+
+--name_filter <value>      Simple strstr filter on test name only without wildcards, only used with --yaml or --data 
+
+--version <value>          Prints the version number 
+
+--rocblas_tensile_commit_hash <value> Prints the rocBLAS and Tensile commit-hashes 
+
+-z <value>                 Eazy way to set log_function_name and log_datatype (eye dialect form of easy) 
+
+--help |-h                 produces this help message 
+
+
+Examples : ./rocblas-bench -f gemm -r s -m 4000 -n 4000 -k 4000 --lda 4000 --ldb 4000 --ldc 4000 --transposeA N --transposeB T
+
+	   ./rocblas-bench -f gemv -r s -m 10240 -n 10240 --lda 10240
+
+	   ./rocblas-bench -f axpy -r d -n 102400000

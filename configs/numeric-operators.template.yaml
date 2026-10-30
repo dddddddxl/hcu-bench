@@ -1,0 +1,51 @@
+# 在已准备好的 Linux 容器内运行；两个工具来自镜像，不安装/替换 DTK。
+version: 1
+name: conv-gemm
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+output_dir: "${vars.workspace}/results"
+nodes:
+  node0:
+    executor: local
+    hcus: [0] # 仅填写已经确认空闲的卡。默认测试第一张已分配卡。
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  conv:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      mode: perf # check=只校验；perf=先校验，通过后预热和计时。
+      driver: auto # 现有 MIOpenDriver，也可填写绝对路径。
+      conv_suite: all # all / conv2d / conv3d
+      direction: all # all / fwd / dgrad / wgrad
+      warmup: 10
+      iters: 100
+      repeats: 3
+    matrix:
+      dtype: [fp32, fp16]
+  gemm:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      mode: perf
+      rocblas_bench: auto # 直接使用镜像工具，不需要手工复制到 bin。
+      group: all # all / square / dlrm / bert / transformer / batched
+      max_norm_error: "" # 未给阈值时仅零误差判通过；非零记未确认且不计时。
+      warmup: 10
+      iters: 100
+      repeats: 3
+    matrix:
+      dtype: [fp32, fp16, bf16]

@@ -49,8 +49,7 @@ models:
     port: 30903                           # 脚本读取 BENCH_PORT；禁止后台化。
     # tokenizer_path: /YOUR_LOCAL_MODEL  # 服务返回模型目录不可用时才需填写。
 tests:
-  # all 按顺序串行执行；某项暂不测可在该项下加 enabled: false。
-  # RCCL 单机 AllReduce，固定迭代完成后校验；不能配置 duration_s。
+  # all 按 YAML 顺序串行执行；暂不测可加 enabled: false。
   rccl_allreduce:
     suite: rccl
     adapter: command
@@ -64,9 +63,46 @@ tests:
       min_bytes: 8192                     # 8 KiB，单位字节。
       max_bytes: 67108864                 # 64 MiB，必须落在倍增序列上。
       step_factor: 2
-      datatype: half                     # half / float / double；归约操作目前为 sum。
+      datatype: half                     # half / float / double；归约操作为 sum。
       warmup_iters: 20
       iters: 50                          # 每个消息大小的测量迭代数。
+  conv:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      mode: perf # 先原生正确性检查，再计时；默认使用已分配的第一张 HCU。
+    matrix:
+      dtype: [fp32, fp16]
+  gemm:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      mode: perf
+      max_norm_error: "" # 非零误差且无阈值时不宣称正确性通过、不继续性能。
+    matrix:
+      dtype: [fp32, fp16, bf16]
+  rccl_collectives:
+    suite: rccl
+    adapter: command
+    pack: ../testpacks/rccl/manifest.yaml
+    nodes: [node0]
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: "${vars.rccl_binary}"
+      ranks: "${vars.rccl_ranks}"
+    matrix:
+      collective: [all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]
   # 五类 PCIe 路径，固定大小逐对测试；不做正确性/长期压测，不使用 duration_s。
   pcie_bandwidth:
     suite: pcie

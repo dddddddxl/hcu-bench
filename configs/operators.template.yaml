@@ -24,6 +24,33 @@ containers:
     stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
     hook_timeout_s: 120
 tests:
+  conv:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    container: operators
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      mode: perf
+    matrix:
+      dtype: [fp32, fp16]
+  gemm:
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [node0]
+    container: operators
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      mode: perf
+      max_norm_error: ""
+    matrix:
+      dtype: [fp32, fp16, bf16]
   operator_performance:
     suite: operators
     adapter: command

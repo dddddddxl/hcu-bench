@@ -1,4 +1,14 @@
 {
+  "operator-cases": {
+    "version": "feishu-revision-515-20261030",
+    "source": "User-provided Feishu Conv/GEMM attachments; public redistribution authorized on 2026-10-30",
+    "archives_sha256": {
+      "conv_test_cases.zip": "900f295a351fdb160d99f6ac59849aff0d0177c6c3e9b0dcd571418d8d5dfab8",
+      "gemm_test_cases.zip": "8ec638baf371c43ee91780d288a36e8cc751395cc30b61fa16cdb6e5c084ef21"
+    },
+    "license": "No root license supplied; original source notices retained",
+    "tree_sha256": "a27b2d6cd49d410e9b088570894e5876c3367981d40a2a87a346b7226cac429d"
+  },
   "rccl-tests": {
     "version": "ae3e6357cb3514d5649b3b5dfaa80cb2d2af3532",
     "source": "https://github.com/ROCm/rccl-tests/tree/ae3e6357cb3514d5649b3b5dfaa80cb2d2af3532",

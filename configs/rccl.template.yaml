@@ -1,0 +1,41 @@
+# 单节点 RCCL 通信集合；每个算子按需编译，不更换 RCCL/DTK。
+version: 1
+name: rccl-collectives
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]
+  ranks: 8
+output_dir: "${vars.workspace}/results"
+build:
+  dtk_root: /opt/dtk
+  mpi_home: /opt/mpi
+  arch: auto
+  jobs: 2
+  cache_dir: "${vars.workspace}/native-cache"
+nodes:
+  node0:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  rccl_collectives:
+    suite: rccl
+    adapter: command
+    pack: ../testpacks/rccl/manifest.yaml
+    nodes: [node0]
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto
+      ranks: "${vars.ranks}"
+      root: 0 # 仅 broadcast/reduce/gather/scatter 使用。
+      min_bytes: 8192
+      max_bytes: 67108864
+      datatype: half
+      warmup_iters: 20
+      iters: 50
+    matrix:
+      collective: [all_reduce, all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]

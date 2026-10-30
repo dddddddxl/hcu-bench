@@ -40,7 +40,7 @@ def pa_log():
 class FixedTemplates(unittest.TestCase):
     def test_image_selection_and_case_catalog_are_static(self):
         with patch("subprocess.Popen", side_effect=AssertionError("static check started a process")):
-            for config, count, suite in (("operators", 6, "operators"), ("migraphx", 6, "migraphx")):
+            for config, count, suite in (("operators", 11, "operators"), ("migraphx", 6, "migraphx")):
                 overrides = ["vars.image=registry.example/test@sha256:fixture"]
                 if config == "operators":
                     overrides += ["tests.operator_stress.enabled=true"]

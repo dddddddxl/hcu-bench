@@ -1,0 +1,15 @@
+case_id,group,function,M,N,K,transA,transB,lda,ldb,ldc,ldd,alpha,beta,batch_count,stride_a,stride_b,stride_c,stride_d,source,source_line
+square-1024,square,gemm,1024,1024,1024,N,N,1024,1024,1024,1024,1,0,1,,,,,added_square_sweep,
+square-2048,square,gemm,2048,2048,2048,N,N,2048,2048,2048,2048,1,0,1,,,,,added_square_sweep,
+square-4096,square,gemm,4096,4096,4096,N,N,4096,4096,4096,4096,1,0,1,,,,,added_square_sweep,
+square-8192,square,gemm,8192,8192,8192,N,N,8192,8192,8192,8192,1,0,1,,,,,added_square_sweep,
+dlrm-01,dlrm,gemm,257,1024,4096,N,N,257,4096,257,257,1,0,1,,,,,rocblas_general.yaml:sgemm_dlrm2_sizes,59
+dlrm-02,dlrm,gemm,3200,1024,2048,N,N,3200,2048,3200,3200,1,0,1,,,,,rocblas_general.yaml:sgemm_dlrm2_sizes,60
+dlrm-03,dlrm,gemm,4096,4096,1024,N,T,4096,4096,4096,4096,1,0,1,,,,,rocblas_general.yaml:sgemm_dlrm2_sizes,64
+bert-01,bert,gemm,1024,3072,1024,N,N,1024,1024,1024,1024,1,0,1,,,,,rocblas_general.yaml:sgemm_bert_big_sizes,125
+bert-02,bert,gemm,1024,1024,3072,N,T,1024,1024,1024,1024,1,0,1,,,,,rocblas_general.yaml:sgemm_bert_big_sizes,156
+bert-03,bert,gemm,1024,2048,3072,T,N,3072,3072,1024,1024,1,0,1,,,,,rocblas_general.yaml:sgemm_bert_big_sizes,183
+transformer-01,transformer,gemm,2048,1139,512,N,N,2048,512,2048,2048,1,0,1,,,,,rocblas_general.yaml:sgemm_transformer_sizes,1366
+transformer-02,transformer,gemm,2048,1184,512,N,N,2048,512,2048,2048,1,0,1,,,,,rocblas_general.yaml:sgemm_transformer_sizes,1367
+batch-01,batched,gemm_strided_batched,64,512,512,N,N,64,512,64,64,1,0,16,32768,262144,32768,32768,rocblas_general.yaml:sgemm_sb_bert_big_sizes,206
+batch-02,batched,gemm_strided_batched,512,512,64,T,N,64,64,512,512,1,0,64,32768,32768,262144,262144,rocblas_general.yaml:sgemm_sb_bert_big_sizes,215
