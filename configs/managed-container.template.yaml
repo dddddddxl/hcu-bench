@@ -20,7 +20,9 @@ vars:
   image: YOUR_APPROVED_IMAGE                         # 已确认的待测镜像，工具不自动升级。
   deepep_script: auto                                # 内置 daily 11 字段 handle 测试。
   # 下列输入均为容器内路径；只跑 deepep 时可暂不填写精度输入。
-  model_script: ./model_scripts/model_a.local.sh      # 容器内模型脚本，相对容器内仓库根目录。
+  qwen3_4b_path: /YOUR_MODELS/Qwen3-4B                # 容器内的本地模型权重路径。
+  qwen3_8b_path: /YOUR_MODELS/Qwen3-8B
+  model_hcus: [0]                                   # 默认模型BF16、TP1，单卡串行。
   dataset: auto                                      # 内置 GSM8K test.jsonl。
   iface: YOUR_ACTIVE_INTERFACE                       # 实际 socket 网卡。
   ib_hca: YOUR_ACTIVE_IB_HCA_LIST                     # e2e 的实际 RDMA HCA 列表。
@@ -45,6 +47,11 @@ nodes:
       NCCL_IB_HCA: "${vars.ib_hca}"
       NCCL_SOCKET_IFNAME: "${vars.iface}"
       GLOO_SOCKET_IFNAME: "${vars.iface}"
+  model_node:
+    executor: local
+    hcus: "${vars.model_hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
 containers:
   test_image:
     mode: managed                                   # 每用例创建/清理自有容器，不接管现有容器。
@@ -59,8 +66,15 @@ containers:
     stop: [bash, "${vars.container_hook}", stop, "${container_name}"]
     hook_timeout_s: 120                              # 每个容器脚本动作的故障时限（秒）。
 models:
-  model_a:
-    start_script: "${vars.model_script}"
+  qwen3_4b:
+    start_script: ./model_scripts/qwen3_4b.sh
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_4b_path}"
+    port: 30903
+  qwen3_8b:
+    start_script: ./model_scripts/qwen3_8b.sh
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_8b_path}"
     port: 30903
 tests:
   # all 按 YAML 顺序串行执行；暂不测可加 enabled: false。
@@ -181,25 +195,32 @@ tests:
   # 同一个模型的精度/性能共用一次服务和同一个自有容器。
   sglang_gsm8k:
     suite: e2e_acc
-    models: [model_a]
-    nodes: [node0]
-    container: test_image
-    timeout_s: 5400                                  # 包含模型加载、评测和服务清理。
-    params:
-      data_path: "${vars.dataset}"
-      num_examples: 100                             # 实际评分题数，排除 few-shot 样例。
-      num_shots: 5                                  # 前 5 条用作提示样例。
-      max_tokens: 2048                              # 单题输出 token 上限。
-      min_score: ""                                 # 只报告分数；有明确标准后再填阈值。
-  model_throughput:
-    suite: e2e_perf
-    models: [model_a]
-    nodes: [node0]
+    models: all
+    nodes: [model_node]
     container: test_image
     timeout_s: 14400
     params:
-      shapes: [[128, 128], [1024, 1024], [4096, 512]]
-      concurrency: [1, 8, 32]
+      data_path: "${vars.dataset}"
+      few_shot_path: auto                           # 训练集前5题作提示，测试集1319题全部评分。
+      num_examples: 0
+      num_shots: 5
+      max_tokens: 2048                              # 单题输出 token 上限。
+      chat_template_kwargs: {enable_thinking: false}
+      min_score: ""                                 # 只报告分数；有明确标准后再填阈值。
+  model_throughput:
+    suite: e2e_perf
+    models: all
+    nodes: [model_node]
+    container: test_image
+    timeout_s: 172800
+    params:
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
       requests: 256
       warmup_requests: 32
-      repeats: 3
+      repeats: 1
+      request_timeout_s: 1800
+      extra_body: {chat_template_kwargs: {enable_thinking: false}}

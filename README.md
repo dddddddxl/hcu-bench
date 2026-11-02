@@ -76,7 +76,7 @@ cp configs/in-container.template.yaml configs/bench.yaml
 | `vars.pcie_*_devices` | PCIe 工具的 CPU/HCU Device ID，不是 HIP 卡号 |
 | `vars.memory_hcus` | 显存测试卡号，必须属于 `hcus` |
 | `vars.iface` / `vars.ib_hca` / `vars.gid` | 实际通信网卡、RDMA 设备和 GID |
-| `vars.model_script` / `models` | 模型启动脚本路径；模型路径、TP、量化、网卡等部署参数写在脚本内 |
+| `vars.qwen3_4b_path` / `vars.qwen3_8b_path` / `vars.model_hcus` | 默认两个模型的本地权重路径及单卡；其他模型在`models`填写启动脚本 |
 | `build` | 已有 DTK/MPI 路径、架构、构建缓存；默认探测 HCU 架构 |
 
 只填写需要运行的 suite；不运行的测试块设为 `enabled: false`，不要删除公共变量定义。模板中的 `YOUR_*` 是占位符，不是可直接使用的配置。
@@ -85,12 +85,14 @@ PCIe 的 Device ID 必须先在同一执行环境运行 `rocm-bandwidth-test -e`
 
 模板中的 `*_binary`、`deepep_script`、`dataset` 默认保持 `auto`，无需另找测试源码。已有工具也可填写绝对路径，工具不会替换无效的显式路径。
 
-运行服务类模型测试时，复制一份 [SGLang 模板](model_scripts/sglang.template.sh) 或 [vLLM 模板](model_scripts/vllm.template.sh)，写入已经验证的部署命令，再把路径填入 YAML：
+默认模型为Qwen3-4B、Qwen3-8B，通用BF16/TP1脚本已提供，填好YAML里的本地权重路径和卡号即可使用。精度默认训练集5-shot、test全量1319题、非思考、只报告分数；性能按月英表已有数据，每模型31点，每点256正式请求、32预热、1轮。完整扫描可能需要数小时以上，详细参数见[端到端测试](docs/e2e.md)。
+
+新增其他模型时，复制一份 [SGLang 模板](model_scripts/sglang.template.sh) 或 [vLLM 模板](model_scripts/vllm.template.sh)，写入已经验证的部署命令，再把路径填入 YAML：
 
 ```bash
 cp model_scripts/sglang.template.sh model_scripts/model_a.local.sh
 # 编辑 model_a.local.sh：权重路径、TP、量化、EP 配置、网卡等
-# 在 bench.yaml 中填写 vars.model_script 或 models.<名称>.start_script
+# 在 bench.yaml 的 models 下新增模型，并填写 start_script
 ```
 
 脚本最后用 `exec` 前台启动服务，监听 `$BENCH_HOST:$BENCH_PORT`，不要加 `nohup` 或 `&`。`*.local.sh` 和 `configs/bench.yaml` 都被 Git 忽略。具体字段见 [端到端测试](docs/e2e.md)。
@@ -181,8 +183,8 @@ bash bench.sh report /work/bench-output/results/RUN_ID
 | Mooncake | `topology`、`duration`、`buffer_size`、`threads`、`batch_size`、`block_size`、`operation` |
 | operators | 固定配方：`recipe`、`native_timeout_s`；Conv/GEMM：`dtype`、`mode`、分组/方向/用例过滤、预热/迭代/轮次及 `max_norm_error` |
 | 服务类模型部署 | `models.<名称>.start_script`、`port`、`startup_timeout_s`；其余部署参数在启动脚本内 |
-| e2e_acc | `models`、`num_examples`、`num_shots`、`num_threads`、`max_tokens`、`min_score` |
-| EvalScope e2e_perf | `models`、`shapes`、`concurrency`、`requests`、`warmup_requests`、`repeats`、`seed`、`extra_body` |
+| e2e_acc | `models`、`num_examples`、`num_shots`、`few_shot_path`、`num_threads`、`max_tokens`、`chat_template_kwargs`、`min_score` |
+| EvalScope e2e_perf | `models`、`workloads`或`shapes`/`concurrency`、`requests`、`warmup_requests`、`repeats`、`seed`、`extra_body` |
 | migraphx | `recipe`、`batch`（1 / 32）、`model`、`numa_node`、`rocblas_dir`、`round_timeout_s` |
 
 参数通常写在测试块的 `params` 中；原生包字段以 `manifest.yaml` 为准。普通测试可用 `matrix` / 外层 `repeats`；引用 `models` 的测试不使用这两个字段，吞吐扫描使用 `params.shapes`、`params.concurrency`、`params.repeats`，见 [端到端测试](docs/e2e.md)。
@@ -217,7 +219,7 @@ bash container.sh stop NAME
 
 多节点使用已有 SSH 密钥、ssh-agent 或 SSH config，不保存密码。将这一个完整仓库部署或共享挂载到目标环境，原生工具在各节点自动准备；模型和运行库仍需在目标可见。每个测试独立配置 `nodes`，因此同一 YAML 可以让 RCCL/PCIe/memory/e2e 使用一个节点、DeepEP/Mooncake 使用多个节点；**不能仅给 e2e 增加节点就获得多机推理支持**。
 
-多模型写在顶层 `models`，精度与吞吐测试各自用 `models: [model_a, model_b]` 引用。同一模型、节点、容器及环境配置会合并为一次服务会话；改变部署配置会分开启动。旧 `suite: e2e` / profile 配置仍按精度测试解释，不会自动加吞吐负载。完整示例见 [端到端测试](docs/e2e.md)。
+多模型写在顶层`models`。模板的精度与吞吐均用`models: all`，新增模型只需填`start_script`，自动纳入两项测试；仍可用显式列表只选部分模型。同一模型、节点、容器及环境配置合并为一次服务会话。旧`suite: e2e` / profile配置仍按精度测试解释，不会自动增加吞吐。完整示例见[端到端测试](docs/e2e.md)。
 
 文档和新 YAML 字段统一使用 HCU。旧 `gpus`、`gpu_devices`、`gpu_id` 仍有兼容别名，不能和对应新字段同时填写。原生环境变量、命令参数、源码及历史结果字段保留原名，例如 `GPU_MAX_HW_QUEUES`，不可机械改名。
 

@@ -59,28 +59,64 @@ class PlanningTests(unittest.TestCase):
                 self.assertEqual(case.suite, suite)
                 self.assertEqual([t["suite"] for t in case.params["session"]["tasks"]], [suite])
 
+    def test_default_qwen_templates_match_confirmed_monthly_grid(self):
+        for template in ("e2e-multi-model", "in-container", "managed-container"):
+            with self.subTest(template=template):
+                plan = make_plan(str(ROOT / f"configs/{template}.template.yaml"), "e2e")
+                self.assertEqual([case.params["session"]["model_id"] for case in plan.cases], ["qwen3_4b", "qwen3_8b"])
+                for case in plan.cases:
+                    accuracy, perf = case.params["session"]["tasks"]
+                    self.assertEqual(accuracy["params"]["num_examples"], 0)
+                    self.assertEqual(accuracy["params"]["few_shot_path"], "auto")
+                    self.assertEqual(accuracy["params"]["num_shots"], 5)
+                    self.assertEqual(accuracy["params"]["chat_template_kwargs"], {"enable_thinking": False})
+                    self.assertEqual(perf["params"]["extra_body"], {"chat_template_kwargs": {"enable_thinking": False}})
+                    points = run.workloads(perf, 0)
+                    self.assertEqual(len(points), 31)
+                    self.assertEqual([(p["input_tokens"], p["output_tokens"]) for p in points[::8]],
+                                     [(128, 128), (1024, 1024), (2048, 128), (3500, 1000)])
+                    self.assertNotIn(256, [p["concurrency"] for p in points])
+                    self.assertNotIn(2, [p["concurrency"] for p in points if p["input_tokens"] == 128])
+                    self.assertEqual(perf["params"]["requests"], 256)
+                    self.assertEqual(perf["params"]["warmup_requests"], 32)
+                    self.assertEqual(perf["params"]["repeats"], 1)
+
     def test_disabled_task_is_not_added_to_session(self):
         plan = self.plan(changes=lambda d: d["tests"]["accuracy"].update(enabled=False))
         self.assertTrue(all(c.suite == "e2e_perf" for c in plan.cases))
+
+    def test_all_models_automatically_includes_new_launch_script(self):
+        def change(data):
+            for test in data["tests"].values():
+                test["models"] = "all"
+            data["models"]["extra_model"] = {"start_script": "model_scripts/extra.sh"}
+        plan = self.plan("e2e", changes=change)
+        self.assertEqual(len(plan.cases), 3)
+        self.assertEqual(plan.cases[-1].params["session"]["model_id"], "extra_model")
+        self.assertEqual([task["suite"] for task in plan.cases[-1].params["session"]["tasks"]],
+                         ["e2e_acc", "e2e_perf"])
+        with self.assertRaises(BenchError):
+            self.plan(changes=lambda data: (data.update(models={}),
+                [test.update(models="all") for test in data["tests"].values()]))
 
     def test_different_environments_create_separate_sessions(self):
         plan = self.plan(changes=lambda d: d["tests"]["performance"].update(env={"CACHE_MODE": "off"}))
         self.assertEqual(len(plan.cases), 4)
 
     def test_model_environment_uses_rendered_hcu_ids(self):
-        plan = self.plan(changes=lambda d: d["models"]["model_a"].update(env={"HIP_VISIBLE_DEVICES": "${hcu_ids}"}))
+        plan = self.plan(changes=lambda d: d["models"]["qwen3_4b"].update(env={"HIP_VISIBLE_DEVICES": "${hcu_ids}"}))
         case = plan.cases[0]
         spec = CommandAdapter().build(plan, case, "node0", ROOT / "runs/fixture")
-        self.assertEqual(spec["env"]["HIP_VISIBLE_DEVICES"], "0,1,2,3,4,5,6,7")
+        self.assertEqual(spec["env"]["HIP_VISIBLE_DEVICES"], "0")
         self.assertNotIn("env", case.params["session"]["model"])
 
     def test_model_node_override_and_missing_model(self):
         def change(data):
             data["nodes"]["node1"] = copy.deepcopy(data["nodes"]["node0"])
-            data["models"]["model_b"]["nodes"] = ["node1"]
+            data["models"]["qwen3_8b"]["nodes"] = ["node1"]
         self.assertEqual([c.nodes for c in self.plan(changes=change).cases], [["node0"], ["node1"]])
         with self.assertRaisesRegex(BenchError, "known models"):
-            self.plan(changes=lambda d: d["models"].pop("model_a"))
+            self.plan(changes=lambda d: d["tests"]["accuracy"].update(models=["missing_model"]))
 
     def test_legacy_suite_is_accuracy_only(self):
         plan = make_plan(str(ROOT / "configs/deepep-sglang.template.yaml"), "e2e",
@@ -118,12 +154,51 @@ class PlanningTests(unittest.TestCase):
             self.assertEqual(report["case_counts"], {"completed": 1, "invalid": 1})
             samples = [json.loads(line) for line in (store.path / "results.jsonl").read_text().splitlines()]
             self.assertEqual([s["suite"] for s in samples[:2]], ["e2e_acc", "e2e_perf"])
-            self.assertTrue(all(s["params"]["model_id"] == "model_a" for s in samples[:2]))
+            self.assertTrue(all(s["params"]["model_id"] == "qwen3_4b" for s in samples[:2]))
             self.assertTrue(all(s["measurement_status"] == "invalid" for s in samples[2:]))
             self.assertIn("not_measured", (store.path / "e2e.csv").read_text(encoding="utf-8-sig"))
 
 
 class MetricTests(unittest.TestCase):
+    def test_full_gsm8k_uses_training_shots_and_scores_all_test_rows(self):
+        params = task_params("e2e_acc", {"num_examples": 0, "few_shot_path": "auto",
+                                          "chat_template_kwargs": {"enable_thinking": False}})
+        with tempfile.TemporaryDirectory() as folder, \
+                patch.object(client.importlib.metadata, "version", return_value="0.5.12"), \
+                patch.object(client.accuracy, "evaluate", return_value=0) as evaluate:
+            self.assertEqual(client.accuracy_task({"params": params, "served_model": "fixture", "url": "http://localhost"}, Path(folder)), 0)
+            args, evidence, _, _ = evaluate.call_args.args
+            rows = [json.loads(line) for line in Path(args.data_path).read_text().splitlines()]
+            tests = [json.loads(line) for line in (ROOT / "vendor/gsm8k/test.jsonl").read_text().splitlines()]
+            shots = [json.loads(line) for line in (ROOT / "vendor/gsm8k/train-5shot.jsonl").read_text().splitlines()]
+            self.assertEqual(len(tests), 1319)
+            self.assertEqual(rows[:5], shots)
+            self.assertEqual(rows[5:], tests)
+            self.assertEqual(evidence["num_examples"], 1319)
+            self.assertEqual(args.chat_template_kwargs, {"enable_thinking": False})
+            self.assertEqual(client.accuracy.validate_dataset(args.data_path, 0, 5), 1319)
+
+    def test_accuracy_separate_shots_rejects_test_leakage(self):
+        params = task_params("e2e_acc", {"few_shot_path": "auto"})
+        with tempfile.TemporaryDirectory() as folder:
+            shots = Path(folder) / "shots.jsonl"
+            shots.write_bytes((ROOT / "vendor/gsm8k/test.jsonl").read_bytes())
+            params["few_shot_path"] = str(shots)
+            with patch.object(client.importlib.metadata, "version", return_value="0.5.12"), \
+                    patch.object(client.accuracy, "evaluate") as evaluate, self.assertRaisesRegex(ValueError, "overlap"):
+                client.accuracy_task({"params": params, "served_model": "fixture", "url": "http://localhost"}, Path(folder))
+            evaluate.assert_not_called()
+
+    def test_legacy_accuracy_without_separate_shots_keeps_old_sampling(self):
+        params = task_params("e2e_acc", {"num_examples": 0})
+        with tempfile.TemporaryDirectory() as folder, \
+                patch.object(client.importlib.metadata, "version", return_value="0.5.12"), \
+                patch.object(client.accuracy, "evaluate", return_value=0) as evaluate:
+            client.accuracy_task({"params": params, "served_model": "fixture", "url": "http://localhost"}, Path(folder))
+            args, evidence, _, _ = evaluate.call_args.args
+            self.assertEqual(evidence["num_examples"], 1314)
+            self.assertEqual(Path(args.data_path), ROOT / "vendor/gsm8k/test.jsonl")
+
     def native(self):
         summary = {key: 1.0 for key in client.SUMMARY_FIELDS}
         summary.update({"Total Requests": 4, "Success Requests": 4, "Failed Requests": 0})
@@ -168,6 +243,32 @@ class MetricTests(unittest.TestCase):
         points = run.workloads({"suite": "e2e_perf", "params": params}, 0)
         self.assertEqual(len(points), 8)
         self.assertEqual([p["dataset_offset"] for p in points], list(range(0, 48, 6)))
+
+    def test_per_shape_concurrency_and_normalization_are_stable(self):
+        params = task_params("e2e_perf", {"workloads": [
+            {"input_tokens": 128, "output_tokens": 128, "concurrency": [1, 4]},
+            {"input_tokens": 1024, "output_tokens": 1024, "concurrency": [1, 2]}],
+            "requests": 4, "warmup_requests": 1, "repeats": 1})
+        self.assertNotIn("shapes", params)
+        self.assertNotIn("concurrency", params)
+        self.assertEqual(task_params("e2e_perf", params), params)
+        points = run.workloads({"suite": "e2e_perf", "params": params}, 0)
+        self.assertEqual([(p["input_tokens"], p["concurrency"]) for p in points],
+                         [(128, 1), (128, 4), (1024, 1), (1024, 2)])
+        self.assertEqual([p["dataset_offset"] for p in points], [0, 6, 12, 18])
+
+    def test_invalid_per_shape_workloads_are_rejected(self):
+        row = {"input_tokens": 128, "output_tokens": 128, "concurrency": [1, 4]}
+        for params in ({"workloads": []}, {"workloads": None}, {"workloads": [1]},
+                       {"workloads": [{"input_tokens": 128}]},
+                       {"workloads": [{**row, "concurrency": [True]}]},
+                       {"workloads": [{**row, "concurrency": [1, 1]}]},
+                       {"workloads": [row, row]}, {"workloads": [row], "shapes": [[128, 128]]},
+                       {"workloads": [row], "concurrency": [1]},
+                       {"workloads": [row], "requests": 1},
+                       {"workloads": [row], "repeats": 4097}):
+            with self.subTest(params=params), self.assertRaises(BenchError):
+                task_params("e2e_perf", params)
 
 
 class SessionTests(unittest.TestCase):

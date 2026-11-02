@@ -54,8 +54,9 @@
   "gsm8k": {
     "version": "3101c7d5072418e28b9008a6636bde82a006892c",
     "source": "https://github.com/openai/grade-school-math/tree/3101c7d5072418e28b9008a6636bde82a006892c",
-    "split": "grade_school_math/data/test.jsonl (1319 rows)",
+    "split": "grade_school_math/data/test.jsonl (1319 rows); train-5shot.jsonl contains the first 5 rows of grade_school_math/data/train.jsonl",
+    "train_source_sha256": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
     "license": "LICENSE",
-    "tree_sha256": "f6bc82da12e58de6deb4e7d4c5432b3fd866b537a1a7f58925bdad9447ed45e9"
+    "tree_sha256": "2e4180a34b1c4b827b40a1786056ca10ba39985212ccdb0fd67d560ce6609b63"
   }
 }

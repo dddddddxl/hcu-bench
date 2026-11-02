@@ -169,6 +169,8 @@ def validate_config(data: dict) -> None:
         if "models" in test:
             require(test.get("suite") in ("e2e_acc", "e2e_perf"), f"{test_id}: models require an e2e sub-suite")
             names = test["models"]
+            if names == "all":
+                names = test["models"] = list(data.get("models", {}))
             require(isinstance(names, list) and names and all(isinstance(n, str) and n in data.get("models", {}) for n in names),
                     f"{test_id}: choose known models")
             require(len(names) == len(set(names)), f"{test_id}: duplicate models")

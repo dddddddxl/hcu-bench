@@ -15,7 +15,7 @@ from urllib.request import ProxyHandler, build_opener
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "src")]
-from hcu_bench.e2e_config import task_params, validate_models
+from hcu_bench.e2e_config import performance_grid, task_params, validate_models
 from hcu_bench.results import parse_sample
 from testpacks.native_common import CleanupError, NativeProcess, cancellation, cleanup_failure, emit, sha256, versions, write_json
 from testpacks.sglang_accuracy.run import ensure_free_port
@@ -103,8 +103,8 @@ def workloads(task, offset):
         return [None]
     params = task["params"]
     points = []
-    for (input_tokens, output_tokens), concurrency, repeat in itertools.product(
-            params["shapes"], params["concurrency"], range(params["repeats"])):
+    for (input_tokens, output_tokens, concurrency), repeat in itertools.product(
+            performance_grid(params), range(params["repeats"])):
         points.append(dict(input_tokens=input_tokens, output_tokens=output_tokens, concurrency=concurrency,
                            repeat=repeat, dataset_offset=offset))
         offset += params["requests"] + params["warmup_requests"] + 1

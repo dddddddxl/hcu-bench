@@ -147,7 +147,7 @@ class RcclNativeTests(unittest.TestCase):
         for template in ("in-container.template.yaml", "managed-container.template.yaml"):
             plan = make_plan(str(ROOT / "configs" / template))
             self.assertEqual([case.suite for case in plan.cases],
-                             ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e"])
+                             ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
             self.assertTrue(all(case.adapter == "command" for case in plan.cases))
             self.assertEqual(plan.cases[0].pack["id"], "rccl.allreduce")
 
