@@ -19,7 +19,20 @@
 
 `driver` / `rocblas_bench` 默认 `auto`，在现有 DTK 常规路径中查找，也可填写绝对路径。不下载安装工具，不修改 DTK 或频率。失败用例保留原始日志、命令和原因，其他用例继续；清理无法确认时停止整个计划。
 
-GEMM 还要求 `rocblas-bench` 的 CLI 与附件匹配，包括 `--test`、`--verify`、`--use_hipblaslt`、`--math_mode` 和 `--flush_batch_count`。2026-11-02 检查的标准 SGLang 0.5.12 / DTK-26.04-rc4 镜像内，rocBLAS 4.3.0 的工具缺少 `--test` 和 `--use_hipblaslt`，尚不能执行这份 GEMM 配方。不要删除原配方参数或放宽校验来规避版本不匹配，应提供匹配 CLI 的工具，或暂时将 `tests.gemm.enabled` 设为 `false`。工具文件本身也必须可执行。
+GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段使用 `--test 1 --verify 1`，并显式设置 `--use_hipblaslt 0`。旧版 **4.3.0** 必须选择 `gemm_profile: legacy`，仅发送该版本支持的 `--verify 1`，不发送 `--test` 和 `--use_hipblaslt`。两版校验语义分别记录，不自动回退，不把旧版一个检查称为新版两个检查均已通过。
+
+执行任何 GEMM 用例前先检查原生 `--version`、`--help` 和所选 profile 所需选项。不匹配立即失败，`cli_check.json` 和 `cli-probe.log` 保留原始输出；不会进入 GEMM 计算。两版仍要求显式有限 norm error 满足配置阈值才能继续性能，缺失校验输出不会被当成通过。两套共用 14 项 size 和三种精度，FP16/BF16 保持 FP32 累加，默认预热10次、100次计时、3轮。
+
+现场已核验 CLI 的新版环境是 `10.16.1.152:5000/hcu/base/dtk:26.10-ubuntu22.04-py3.12`；旧版可使用其完整的 DTK 26.04 环境。工具与库应来自同一环境，不混拷二进制。若原文件为0644，复制到任务自有目录并 `chmod u+x` 后，用 `rocblas_bench` 指向可执行副本。**CLI匹配只证明接口适用，两套 GEMM 的GPU正确性、输出协议及性能仍待实测。**
+
+```bash
+# 默认新版
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.gemm_profile=new
+# 显式旧版
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.gemm_profile=legacy
+```
+
+独立附件入口保存在 `vendor/operator-cases/gemm`：默认 `run_gemm_cases.py`，旧版 `run_gemm_cases_legacy.py`；`commands/new_check.sh`、`new_perf.sh`、`legacy_check.sh`、`legacy_perf.sh` 分别覆盖三种精度。完整说明见 [RUNNING.txt](../vendor/operator-cases/gemm/RUNNING.txt)。独立脚本的perf需人工先审核check日志；上面的 hcu-bench perf入口会自动先check，再决定是否计时。
 
 ```bash
 bash bench.sh operators --set tests.conv.params.mode=check --set tests.gemm.params.mode=check

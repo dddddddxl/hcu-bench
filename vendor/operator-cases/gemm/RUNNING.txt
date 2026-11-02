@@ -1,13 +1,13 @@
-GEMM 矩阵乘性能测试
+GEMM 矩阵乘测试 两套接口与运行命令
 
-测试工具：rocblas-bench（命令使用连字符）。
-测试包：run_gemm_cases.py、gemm_cases.csv；Python 3.8+，仅使用标准库。
-用例：4 组新增规则方阵，8 组从 DTK YAML 提取的模型 GEMM，2 组模型 strided-batched GEMM。
-每种精度 14 项，FP32、FP16、BF16 共 42 项。精度扩展由本测试集新增。
+默认新版：run_gemm_cases.py，rocBLAS 5.2.0，profile=new。
+显式旧版：run_gemm_cases_legacy.py，rocBLAS 4.3.0，profile=legacy。
+也可用 run_gemm_cases.py --profile legacy 选择旧版。
+两套共用 gemm_cases.csv：14 项尺寸，分别测试 FP32、FP16、BF16，每套 42 项。
 
-1. 准备环境
-将包放入安装 DTK 的 Linux 容器，在 Bash 中解压并进入目录：
-unzip gemm_test_cases.zip -d gemm_test
+1. 环境与工具准备
+将测试包上传到对应完整 DTK 容器，在 Bash 中执行：
+unzip gemm_test_cases_dual_20261102.zip -d gemm_test
 cd gemm_test
 source /opt/dtk/env.sh
 mkdir -p bin
@@ -15,72 +15,115 @@ cp /opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench ./bin/rocblas-bench
 chmod u+x ./bin/rocblas-bench
 ./bin/rocblas-bench --version
 
-nmz36 的 megatron_test 容器中，该二进制原文件权限为 0644。
-上述操作给工作副本增加执行权限；DTK 库继续由环境脚本提供。
-本地副本只用于直接参数调用，未配备 --yaml 需要的 gentest 等辅助文件。
+新版使用已核验 CLI 的镜像：
+10.16.1.152:5000/hcu/base/dtk:26.10-ubuntu22.04-py3.12
+当时的本地镜像 ID：sha256:58a7e817cefedd9a0daeb48bbb6dc1fd98578ff5b5af4a58da729ae96c2eb143
+版本：rocBLAS 5.2.0.2e172d3e3-dirty。
 
-2. 正确性检查
-确认目标卡空闲，按设备映射替换 HIP_VISIBLE_DEVICES=0，串行运行：
+旧版使用现场原 DTK-26.04-blas-nightly-1008 环境及其配套库：
+版本：rocBLAS 4.3.0.2881bc18c-dirty。
+原镜像本地 ID：sha256:fc267d255e7913046b02dae1aa7afc50df5545d8d6929d81dcf84c2f5aeb5203。
+本地镜像 ID 不是仓库 RepoDigest。二进制与运行库必须来自同一环境。
+
+Python 要求 3.8+，仅使用标准库。执行前确认目标卡空闲，按映射设置 HIP_VISIBLE_DEVICES。
+
+2. 默认新版命令
+独立检查 CLI，不执行 GEMM：
+python3 check_gemm_env.py
+
+最小尺寸检查，默认新版，对三种精度逐一校验：
+HIP_VISIBLE_DEVICES=0 bash commands/new_check.sh --case-id square-1024
+
+完整正确性检查：
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp32 --mode check
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode check
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype bf16 --mode check
 
-check 使用 --test 1 --verify 1 --cold_iters 2 --iters 1。
---test 请求 GPU/CPU 结果的相等或容差检查；--verify 请求范数误差检查。
-检查每条日志的诊断、误差和执行状态，确认正确性后再测性能。
-大尺寸 CPU 参考计算可能较慢；进程退出码为 0 不能单独当作精度通过。
-
-3. 性能测试
+确认相应 check 日志通过后运行性能测试：
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp32 --mode perf
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode perf
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype bf16 --mode perf
 
-每项独立运行 3 轮。每轮同一进程内 --cold_iters 10 预热，然后 --iters 100 正式计时。
-性能阶段关闭 CPU 结果检查：--test 0 --verify 0。
-次数可通过 --warmup 10 --iters 100 --repeats 3 修改。
+三种精度的批量入口：
+HIP_VISIBLE_DEVICES=0 bash commands/new_check.sh
+审核全部校验日志后：
+HIP_VISIBLE_DEVICES=0 bash commands/new_perf.sh
 
-4. 筛选用例
---group 可选 all、square、dlrm、bert、transformer、batched，默认 all。
---case-id 可指定 gemm_cases.csv 中的单个 case_id。
-例如先检查再测 square-4096：
-HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode check --case-id square-4096
-确认正确性后执行：
-HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode perf --case-id square-4096
-仅预览命令：
-python3 run_gemm_cases.py --dtype fp16 --mode perf --dry-run
+新版 check 参数：--test 1 --verify 1 --cold_iters 2 --iters 1。
+--test 是相等/容差检查，--verify 是范数检查。
+新版 perf 参数：--test 0 --verify 0 --cold_iters 10 --iters 100，每项 3 轮。
+新版显式使用 --use_hipblaslt 0。
 
-5. 数学与精度定义
-普通 GEMM：C = alpha * op(A) * op(B) + beta * C。
-GEMM_EX：D = alpha * op(A) * op(B) + beta * C；本套件使用默认 C/D 同址方式。
-op(A) 为 M*K，op(B) 为 K*N，输出为 M*N。
-FP32：gemm 或 gemm_strided_batched，f32_r。
-FP16：gemm_ex 或 gemm_strided_batched_ex，A/B/C/D 为 f16_r，compute_type 为 f32_r。
-BF16：gemm_ex 或 gemm_strided_batched_ex，A/B/C/D 为 bf16_r，compute_type 为 f32_r。
-全套固定 alpha=1、beta=0、initialization=trig_float、math_mode=0、use_hipblaslt=0。
-flush_batch_count=1：重复复用同一组矩阵缓冲区，允许缓存命中。
-FP32 本套件未启用 XF32 加速。BF16 的实际可用性需由目标卡及 DTK 执行验证。
+3. 旧版命令
+独立检查旧版 CLI，不执行 GEMM：
+python3 check_gemm_env.py --profile legacy
 
-6. Leading dimension 与 batch stride
-rocBLAS 按列主序解释矩阵。
-transA=N 时 lda>=M；transA=T 时 lda>=K。
-transB=N 时 ldb>=K；transB=T 时 ldb>=N。
-ldc>=M；gemm_ex 的 ldd>=M。
-stride_a/b/c/d 以元素为单位，而不是字节。本套件保留所选源用例的 stride。
-修改尺寸时必须同时检查 leading dimension 和 batch stride。
+最小尺寸检查，对三种精度逐一校验：
+HIP_VISIBLE_DEVICES=0 bash commands/legacy_check.sh --case-id square-1024
 
-7. 结果
-每次运行在 logs/ 下创建独立目录，保存逐条原始日志、execution.csv、metadata.json。
-execution.csv 记录进程状态和实际命令，不自动作出正确性判定或计算性能汇总。
-读取正式日志中的 rocblas-Gflops 和 us；us 是微秒，GFLOPS/1000 = TFLOPS。
-三轮 us 取中位数，并记录最小值和最大值。
-普通 GEMM 常用估算 FLOPs=2*M*N*K；批量 GEMM 还需乘 batch_count。
-TFLOPS = 2*M*N*K*batch_count/(time_us*1000000)。
-记录卡型号、UUID/BDF、驱动、DTK、rocBLAS 版本、容器镜像、设备占用状态。
+完整正确性检查：
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype fp32 --mode check
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype fp16 --mode check
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype bf16 --mode check
 
-8. 来源与验证范围
-源 YAML：/public/dtk/autotest_platform/dcc_cp/rocblas/rocblas_general.yaml。
-精确来源行号在 gemm_cases.csv，哈希和扩展说明在 gemm_sources.json。
-原始模型条目为 FP32；FP16/BF16 是本套件增加的测试变体。
-该集合是起始测试子集，未确认属于 nightly 实际任务，也不是理论峰值保证。
-已核查当前容器 CLI help、5.2.0.2e172d3e3-dirty 版本和参数生成。
-当前构建报告未包含 hipBLASLt。未执行 GPU 正确性或性能测试。
+确认相应 check 日志通过后运行性能测试：
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype fp32 --mode perf
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype fp16 --mode perf
+HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype bf16 --mode perf
+
+三种精度的批量入口：
+HIP_VISIBLE_DEVICES=0 bash commands/legacy_check.sh
+审核全部校验日志后：
+HIP_VISIBLE_DEVICES=0 bash commands/legacy_perf.sh
+
+旧版 check 参数：--verify 1 --cold_iters 2 --iters 1。
+现场 4.3.0 help 将 --verify 描述为 GPU 与 CPU 结果校验；保留其原生校验诊断。
+旧版 perf 参数：--verify 0 --cold_iters 10 --iters 100，每项 3 轮。
+旧版不发送不存在的 --test、--use_hipblaslt。
+两版校验语义与输出须分别审核，不把旧版 --verify 直接等同于新版两个检查均已通过。
+
+4. 共用测试配置
+FP32：gemm / gemm_strided_batched，f32_r。
+FP16：gemm_ex / gemm_strided_batched_ex，A/B/C/D 为 f16_r，compute_type=f32_r。
+BF16：gemm_ex / gemm_strided_batched_ex，A/B/C/D 为 bf16_r，compute_type=f32_r。
+alpha=1，beta=0，initialization=trig_float，math_mode=0，flush_batch_count=1。
+普通 GEMM：C=alpha*op(A)*op(B)+beta*C。
+GEMM_EX：D=alpha*op(A)*op(B)+beta*C，本套件使用默认 C/D 同址方式。
+矩阵按列主序解释，leading dimension 与 batch stride 均保留 CSV 配置；stride 单位是元素。
+4 组新增方阵 + 8 组模型 GEMM + 2 组模型 Strided Batched GEMM。
+原模型条目为 FP32，FP16/BF16 为测试集增加的精度变体，不代表完整 nightly 任务。
+
+5. 筛选与次数
+--group：all、square、dlrm、bert、transformer、batched，默认 all。
+--case-id：指定一个 CSV 用例编号。
+--warmup 10 --iters 100 --repeats 3：设置性能预热数、每轮迭代数与轮数。
+--bench：指定同一环境内的 rocblas-bench 路径。
+这些参数也可直接追加到 commands/*.sh 批量入口。
+
+仅预览，不探测 CLI、不执行 GPU：
+python3 run_gemm_cases.py --dtype fp16 --mode check --dry-run
+python3 run_gemm_cases_legacy.py --dtype fp16 --mode check --dry-run
+
+6. 结果与环境检查
+实际运行前自动核查原生 --version、--help 和所选 profile 的必需参数。
+版本或参数不匹配则退出 2，不运行 GEMM；不会自动切换 profile。
+每次运行在 logs/<profile>_<mode>_<dtype>_* 中保留 cli_check.json、metadata.json、execution.csv 与逐项日志。
+CLI 匹配不等于设备/驱动/库兼容或数值正确。探测原生警告完整保存在 cli_check.json 中。
+metadata.json 记录具体版本、profile、校验语义、CSV 哈希、命令参数和相关环境变量。
+进程退出 0 不能单独代替校验结果；perf 不自动确认以前的 check 日志通过。
+从三轮正式日志读取 us 和 rocblas-Gflops，取耗时中位数，保留最小值和最大值。
+ms=us/1000；TFLOPS=GFLOPS/1000。比较时标注版本、profile、卡型号、DTK、驱动和容器镜像。
+
+7. 生成的命令与回归检查
+commands/new_check.sh、new_perf.sh：默认新版批量命令。
+commands/legacy_check.sh、legacy_perf.sh：旧版批量命令。
+commands/raw/<profile>_<dtype>_<mode>.txt：逐尺寸完整 rocblas-bench 命令参考，共 12 份、336 条。
+raw 文件为参考，执行优先使用带日志和 CLI 检查的 Python/Bash 入口。
+命令文件由 generate_commands.py 生成，不直接修改：
+python3 generate_commands.py
+
+无 GPU 回归检查：
+python3 -m unittest discover -s validation -p "test_*.py" -v
+
+已基于现场保存的 4.3.0/5.2.0 原生 CLI 输出核对 profile 与参数，新版命令与原配方逐项比对。
+两版尚未完成实际 GPU 正确性和性能验收；旧版输出协议及数值校验仍需在目标环境执行验证。

@@ -81,6 +81,7 @@ tests:
       warmup_iters: 20
       iters: 50                          # 每个消息大小的测量迭代数。
   conv:
+    enabled: true
     suite: operators
     adapter: command
     pack: ../testpacks/operators/numeric/manifest.yaml
@@ -93,6 +94,7 @@ tests:
     matrix:
       dtype: [fp32, fp16]
   gemm:
+    enabled: true
     suite: operators
     adapter: command
     pack: ../testpacks/operators/numeric/manifest.yaml
@@ -101,6 +103,7 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       recipe: gemm
+      gemm_profile: new # rocBLAS 5.2.0; select legacy explicitly for 4.3.0.
       mode: perf
       max_norm_error: "" # 非零误差且无阈值时不宣称正确性通过、不继续性能。
     matrix:
