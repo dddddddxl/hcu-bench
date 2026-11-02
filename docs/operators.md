@@ -19,6 +19,8 @@
 
 `driver` / `rocblas_bench` 默认 `auto`，在现有 DTK 常规路径中查找，也可填写绝对路径。不下载安装工具，不修改 DTK 或频率。失败用例保留原始日志、命令和原因，其他用例继续；清理无法确认时停止整个计划。
 
+GEMM 还要求 `rocblas-bench` 的 CLI 与附件匹配，包括 `--test`、`--verify`、`--use_hipblaslt`、`--math_mode` 和 `--flush_batch_count`。2026-11-02 检查的标准 SGLang 0.5.12 / DTK-26.04-rc4 镜像内，rocBLAS 4.3.0 的工具缺少 `--test` 和 `--use_hipblaslt`，尚不能执行这份 GEMM 配方。不要删除原配方参数或放宽校验来规避版本不匹配，应提供匹配 CLI 的工具，或暂时将 `tests.gemm.enabled` 设为 `false`。工具文件本身也必须可执行。
+
 ```bash
 bash bench.sh operators --set tests.conv.params.mode=check --set tests.gemm.params.mode=check
 bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.group=batched

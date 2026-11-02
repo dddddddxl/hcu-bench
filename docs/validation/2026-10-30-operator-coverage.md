@@ -36,6 +36,8 @@ AllToAll/AllToAllv/SendRecv 的 in-place 为原生 `N/A`，只汇总经校验的
 新增 Conv/GEMM、九类新增 RCCL 的目标镜像兼容性及实际性能尚待空闲节点验证。
 软件回归通过不能替代这一步；不得将本记录用于宣称整套 `all` 已验收。
 
+后续实测见 [2026-11-02 BW1000 验证](2026-11-02-bw1000-operator-coverage.md)。
+
 ## 运行
 
 已有 Linux 容器内，从 `configs/numeric-operators.template.yaml` 或 `configs/rccl.template.yaml` 复制为 `configs/bench.yaml`，填写目录、分配卡号及已有工具路径：
