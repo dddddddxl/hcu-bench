@@ -30,7 +30,7 @@ bash bench.sh all           # YAML 中全部启用项
 
 `migraphx` 是独立 suite，不属于 `e2e` 分组；使用直接命令测试包，无需 HTTP 服务或 `models` 服务配置。固定用例见 [算子测试](docs/operators.md) 和 [ResNet50 / BERT](docs/migraphx.md)。Conv/GEMM 使用文档附件中的原始 CSV，和 BLAS 固定矩阵压测分开；百万次压测默认关闭。
 
-“已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。Conv 的 56 组配置、RCCL 的 10 类单机通信已在 BW1000 上实测；当前检查的标准 0.5.12 镜像内 GEMM 原生 CLI 与附件不匹配，该项仍需兼容工具。范围与结果见 [实机验证记录](docs/validation/2026-11-02-bw1000-operator-coverage.md)；不能据此宣称整套 `all` 已验收。
+“已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。Conv 的 56 组配置、RCCL 的 10 类单机通信已在 BW1000 上实测；GEMM 现提供默认 rocBLAS 5.2.0 和显式 legacy 4.3.0 两套接口，运行前自动检查版本与参数；接口匹配不代表 GEMM 已完成硬件验收。范围与结果见 [实机验证记录](docs/validation/2026-11-02-bw1000-operator-coverage.md)；不能据此宣称整套 `all` 已验收。
 
 ## 快速开始
 

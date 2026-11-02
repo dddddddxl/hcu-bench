@@ -1,0 +1,78 @@
+{
+  "original_path": "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench",
+  "devices": {
+    "kfd": false,
+    "render": []
+  },
+  "results": [
+    {
+      "argv": [
+        "ldd",
+        "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench"
+      ],
+      "exit_code": 0,
+      "stdout": "\tlinux-vdso.so.1 (0x00007ffe5cffd000)\n\tlibpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007f1254135000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f125404e000)\n\tlibrt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x00007f1254047000)\n\tlibrocblas.so.4 => /opt/dtk/lib/librocblas.so.4 (0x00007f1238553000)\n\tlibrocm_smi64.so.2 => /opt/hyhal/lib/librocm_smi64.so.2 (0x00007f1237f74000)\n\tlibgalaxyhip.so.5 => /opt/dtk/hip/lib/libgalaxyhip.so.5 (0x00007f1237395000)\n\tlibomp.so => /opt/dtk/llvm/lib/libomp.so (0x00007f1237297000)\n\tlibgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x00007f1236fbc000)\n\tlibquadmath.so.0 => /lib/x86_64-linux-gnu/libquadmath.so.0 (0x00007f1236f72000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f1236d46000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f1236d26000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f1236afd000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f125414b000)\n\tlibdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007f1236af8000)\n\tlibnuma.so.1 => /lib/x86_64-linux-gnu/libnuma.so.1 (0x00007f1236ae9000)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "rocBLAS version: 4.3.0.2881bc18c-dirty\n",
+      "stderr": "rocBLAS info: client (OPENMP) reduced omp_set_num_threads to 190\n"
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench",
+        "--help"
+      ],
+      "exit_code": 0,
+      "stdout": "\n/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench [ --data <path> | --yaml <path> ] <options> ...\n\n--sizem |-m <value>        Specific matrix size: sizem is only applicable to BLAS-2 & BLAS-3: the number of rows or columns in matrix.  (Default value is: 128)\n\n--sizen |-n <value>        Specific matrix/vector size: BLAS-1: the length of the vector. BLAS-2 & BLAS-3: the number of rows or columns in matrix  (Default value is: 128)\n\n--sizek |-k <value>        Specific matrix size: BLAS-2: the number of sub or super-diagonals of A. BLAS-3: the number of columns in A and rows in B.  (Default value is: 128)\n\n--kl <value>               Specific matrix size: kl is only applicable to BLAS-2: The number of sub-diagonals of the banded matrix A.  (Default value is: 32)\n\n--ku <value>               Specific matrix size: ku is only applicable to BLAS-2: The number of super-diagonals of the banded matrix A.  (Default value is: 32)\n\n--lda <value>              Leading dimension of matrix A, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)\n\n--ldb <value>              Leading dimension of matrix B, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)\n\n--ldc <value>              Leading dimension of matrix C, is only applicable to BLAS-2 & BLAS-3.  (Default value is: 128)\n\n--ldd <value>              Leading dimension of matrix D, is only applicable to BLAS-EX   (Default value is: 128)\n\n--any_stride <value>       Do not modify input strides based on leading dimensions \n\n--stride_a <value>         Specific stride of strided_batched matrix A, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)\n\n--stride_b <value>         Specific stride of strided_batched matrix B, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)\n\n--stride_c <value>         Specific stride of strided_batched matrix C, is only applicable to strided batchedBLAS-2 and BLAS-3: second dimension * leading dimension.  (Default value is: 16384)\n\n--stride_d <value>         Specific stride of strided_batched matrix D, is only applicable to strided batchedBLAS_EX: second dimension * leading dimension.  (Default value is: 16384)\n\n--stride_x <value>         Specific stride of strided_batched vector x, is only applicable to strided batchedBLAS_2: second dimension.  (Default value is: 16384)\n\n--stride_y <value>         Specific stride of strided_batched vector y, is only applicable to strided batchedBLAS_2: leading dimension.  (Default value is: 16384)\n\n--incx <value>             increment between values in x vector  (Default value is: 1)\n\n--incy <value>             increment between values in y vector  (Default value is: 1)\n\n--alpha <value>            specifies the scalar alpha  (Default value is: 1)\n\n--alphai <value>           specifies the imaginary part of the scalar alpha  (Default value is: 0)\n\n--beta <value>             specifies the scalar beta  (Default value is: 0)\n\n--betai <value>            specifies the imaginary part of the scalar beta  (Default value is: 0)\n\n--function |-f <value>     BLAS function to test. \n\n--precision |-r <value>    Precision. Options: h,s,d,c,z,f8_r, bf8_r, f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r  (Default value is: f32_r)\n\n--a_type <value>           Precision of matrix A. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r \n\n--b_type <value>           Precision of matrix B. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r \n\n--c_type <value>           Precision of matrix C. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r \n\n--d_type <value>           Precision of matrix D. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r \n\n--compute_type <value>     Precision of computation. Options: h,s,d,c,z,f16_r,f32_r,f64_r,bf16_r,f32_c,f64_c,i8_r,i32_r \n\n--composite_compute_type <value> Precision of computation. Options: f32, f8_f8_f32, f8_bf8_f32, bf8_f8_f32, bf8_bf8_f32 \n\n--initialization <value>   Initialize with random integers, trig functions sin and cos, or hpl-like input. Options: rand_int, trig_float, hpl  (Default value is: rand_int)\n\n--transposeA <value>       N = no transpose, T = transpose, C = conjugate transpose  (Default value is: N)\n\n--transposeB <value>       N = no transpose, T = transpose, C = conjugate transpose  (Default value is: N)\n\n--side <value>             L = left, R = right. Only applicable to certain routines  (Default value is: L)\n\n--uplo <value>             U = upper, L = lower. Only applicable to certain routines  (Default value is: U)\n\n--diag <value>             U = unit diagonal, N = non unit diagonal. Only applicable to certain routines  (Default value is: N)\n\n--batch_count <value>      Number of matrices. Only applicable to batched and strided_batched routines  (Default value is: 1)\n\n--HMM <value>              Parameter requesting the use of HipManagedMemory \n\n--verify |-v <value>       Validate GPU results with CPU? 0 = No, 1 = Yes (default: 0)  (Default value is: \u0000)\n\n--iters |-i <value>        Iterations to run inside timing loop  (Default value is: 10)\n\n--cold_iters |-j <value>   Cold Iterations to run before entering the timing loop  (Default value is: 2)\n\n--algo <value>             extended precision gemm algorithm  (Default value is: 0)\n\n--solution_index <value>   extended precision gemm solution index  (Default value is: 0)\n\n--flags <value>            gemm_ex flags, see rocblas_gemm_flags enum in documentation  (Default value is: 0)\n\n--geam_ex_op <value>       geam_ex_operation, 0: min_plus operation, 1: plus_min operation  (Default value is: 0)\n\n--atomics_allowed <value>  Atomic operations with non-determinism in results are allowed (default true) \n\n--atomics_not_allowed <value> Atomic operations with non-determinism in results are not allowed (default false) \n\n--device <value>           Set default device to be used for subsequent program runs  (Default value is: 0)\n\n--parallel_devices <value> Set number of devices used for parallel runs (device 0 to parallel_devices-1)  (Default value is: 0)\n\n--outofplace               for gemm_ex C and D are stored in separate memory, for trmm B and C are stored in separate memory \n\n--fortran <value>          Run using Fortran interface \n\n--api <value>              Use API, supercedes fortran flag (0==C, 1==C_64, ...)  (Default value is: 0)\n\n--workspace <value>        Set fixed workspace memory size instead of using rocblas managed memory  (Default value is: 0)\n\n--log_function_name <value> Function name precedes other items. \n\n--log_datatype <value>     Include datatypes used in output. \n\n--function_filter <value>  Simple strstr filter on function name only without wildcards \n\n--math_mode <value>        extended precision gemm math mode  (Default value is: 0)\n\n--flush_batch_count <value> number of copies of arrays to allocate for cache flushing in timing code. Functions are called iters times in a timing loop. If the problem memory footprint is small enough, then arrays will be cached. flush_batch_count can be used to prevent caching. For example, for sgemm with transA=transB=N: problem_memory_footprint = (m*k + k*n + m*n) * sizeof(float). To flush arrays before reuse set: flush_batch_count >= 1 + cache_size / problem_memory_footprint Note that in the calculation of flush_batch_count any padding from leading dimensions is not loaded to cache and not included in the problem_memory_footprint. If you specify flush_batch_count you cannot also specify flush_memory_size  (Default value is: 1)\n\n--flush_memory_size <value> bytes of memory that will be occupied by arrays. Used only in timing code for cache flushing. Set to greater than cache size so arrays are flushed from cache before they are reused. When the size of arrays (the problem_memory_footprint) is smaller than flush_memory_size, then flush_batch_count copies of arrays are allocated where: flush_batch_count = flush_memory_size / problem_memory_footprint. For sgemm with transA=transB=N problem_memory_footprint = (m*k + k*n + m*n) * sizeof(float). Note that any padding from leading dimensions is not loaded to cache and not included in the problem_memory_footprint. If you specify flush_memory_size you cannot also specify flush_batch_count  (Default value is: 0)\n\n--name_filter <value>      Simple strstr filter on test name only without wildcards, only used with --yaml or --data \n\n--version <value>          Prints the version number \n\n--rocblas_tensile_commit_hash <value> Prints the rocBLAS and Tensile commit-hashes \n\n--help |-h                 produces this help message \n\n\nExamples : ./rocblas-bench -f gemm -r s -m 4000 -n 4000 -k 4000 --lda 4000 --ldb 4000 --ldc 4000 --transposeA N --transposeB T\n\n\t   ./rocblas-bench -f gemv -r s -m 10240 -n 10240 --lda 10240\n\n\t   ./rocblas-bench -f axpy -r d -n 102400000\n",
+      "stderr": "rocBLAS info: client (OPENMP) reduced omp_set_num_threads to 190\n"
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench",
+        "--test",
+        "1"
+      ],
+      "exit_code": 255,
+      "stdout": "",
+      "stderr": "rocBLAS info: client (OPENMP) reduced omp_set_num_threads to 190\nOption --test is not defined.\n"
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "/opt/dtk/lib/rocblas/benchmark_tool/rocblas-bench",
+        "--use_hipblaslt",
+        "0"
+      ],
+      "exit_code": 255,
+      "stdout": "",
+      "stderr": "rocBLAS info: client (OPENMP) reduced omp_set_num_threads to 190\nOption --use_hipblaslt is not defined.\n"
+    }
+  ],
+  "original_mode": "0o644",
+  "sha256": "c7b645af8f18b181d2ff9048238051dba4c6b8e3aad1fb9c856a9aca2c562cfe",
+  "binary_size": 72504536,
+  "invocation": "system dynamic loader; original binary unchanged",
+  "flag_lines": {
+    "--test": [],
+    "--verify": [
+      "--verify |-v <value>       Validate GPU results with CPU? 0 = No, 1 = Yes (default: 0)  (Default value is: \u0000)"
+    ],
+    "--use_hipblaslt": [],
+    "--math_mode": [
+      "--math_mode <value>        extended precision gemm math mode  (Default value is: 0)"
+    ],
+    "--flush_batch_count": [
+      "--flush_batch_count <value> number of copies of arrays to allocate for cache flushing in timing code. Functions are called iters times in a timing loop. If the problem memory footprint is small enough, then arrays will be cached. flush_batch_count can be used to prevent caching. For example, for sgemm with transA=transB=N: problem_memory_footprint = (m*k + k*n + m*n) * sizeof(float). To flush arrays before reuse set: flush_batch_count >= 1 + cache_size / problem_memory_footprint Note that in the calculation of flush_batch_count any padding from leading dimensions is not loaded to cache and not included in the problem_memory_footprint. If you specify flush_batch_count you cannot also specify flush_memory_size  (Default value is: 1)"
+    ]
+  },
+  "/opt/dtk/.dtk_version": "DTK-26.04-blas-nightly-1008\nFri Oct 9 12:10:56 CST 2026\n"
+}

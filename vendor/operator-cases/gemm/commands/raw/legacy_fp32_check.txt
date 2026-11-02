@@ -1,0 +1,31 @@
+# Profile: legacy; dtype: fp32; mode: check
+# Command reference: run from the package root after DTK setup.
+# Prefer commands/legacy_check.sh for logged execution and automatic CLI checks.
+# square-1024 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 1024 -n 1024 -k 1024 --transposeA N --transposeB N --lda 1024 --ldb 1024 --ldc 1024 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# square-2048 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 2048 -n 2048 -k 2048 --transposeA N --transposeB N --lda 2048 --ldb 2048 --ldc 2048 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# square-4096 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 4096 -n 4096 -k 4096 --transposeA N --transposeB N --lda 4096 --ldb 4096 --ldc 4096 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# square-8192 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 8192 -n 8192 -k 8192 --transposeA N --transposeB N --lda 8192 --ldb 8192 --ldc 8192 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# dlrm-01 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 257 -n 1024 -k 4096 --transposeA N --transposeB N --lda 257 --ldb 4096 --ldc 257 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# dlrm-02 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 3200 -n 1024 -k 2048 --transposeA N --transposeB N --lda 3200 --ldb 2048 --ldc 3200 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# dlrm-03 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 4096 -n 4096 -k 1024 --transposeA N --transposeB T --lda 4096 --ldb 4096 --ldc 4096 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# bert-01 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 1024 -n 3072 -k 1024 --transposeA N --transposeB N --lda 1024 --ldb 1024 --ldc 1024 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# bert-02 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 1024 -n 1024 -k 3072 --transposeA N --transposeB T --lda 1024 --ldb 1024 --ldc 1024 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# bert-03 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 1024 -n 2048 -k 3072 --transposeA T --transposeB N --lda 3072 --ldb 3072 --ldc 1024 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# transformer-01 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 2048 -n 1139 -k 512 --transposeA N --transposeB N --lda 2048 --ldb 512 --ldc 2048 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# transformer-02 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f32_r -m 2048 -n 1184 -k 512 --transposeA N --transposeB N --lda 2048 --ldb 512 --ldc 2048 --alpha 1 --beta 0 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# batch-01 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f32_r -m 64 -n 512 -k 512 --transposeA N --transposeB N --lda 64 --ldb 512 --ldc 64 --alpha 1 --beta 0 --batch_count 16 --stride_a 32768 --stride_b 262144 --stride_c 32768 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1
+# batch-02 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f32_r -m 512 -n 512 -k 64 --transposeA T --transposeB N --lda 64 --ldb 64 --ldc 512 --alpha 1 --beta 0 --batch_count 64 --stride_a 32768 --stride_b 32768 --stride_c 262144 --device 0 --math_mode 0 --flush_batch_count 1 --initialization trig_float --verify 1 --cold_iters 2 --iters 1

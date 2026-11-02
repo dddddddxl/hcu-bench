@@ -140,7 +140,8 @@ def selected(args, module, binary):
         if args.conv_suite != "all" or args.direction != "all":
             raise ValueError("GEMM does not accept Conv filters")
         native = SimpleNamespace(cases=SOURCE / "gemm/gemm_cases.csv", group=args.group, case_id=args.case_id,
-                                 bench=Path(binary), dtype=args.dtype, mode="check", warmup=args.warmup, iters=args.iters)
+                                 bench=Path(binary), dtype=args.dtype, mode="check", profile=args.gemm_profile,
+                                 warmup=args.warmup, iters=args.iters)
         cases = [dict(id=row["case_id"], row=row) for row in module.load_cases(native)]
     if not cases:
         raise ValueError("No selected native cases")
@@ -170,18 +171,29 @@ def run(args, stopped):
         manifest = json.loads((ROOT / "vendor/sources.json").read_text())
         if tree_hash(SOURCE) != manifest["operator-cases"]["tree_sha256"]:
             raise ValueError("Bundled operator case checksum mismatch")
+        binary = executable(args.driver if args.recipe == "conv" else args.rocblas_bench, args.recipe)
+        module = native_module(args.recipe)
+        native, cases = selected(args, module, binary)
+        cli = None
+        if args.recipe == "gemm":
+            try:
+                execute([sys.executable, str(SOURCE / "gemm/check_gemm_env.py"), "--bench", binary,
+                         "--profile", args.gemm_profile, "--output", str(out / "cli")],
+                        "cli-probe", out, env, stopped, executions, min(65, args.native_timeout_s))
+            finally:
+                # Keep failed preflight evidence in the pack's top-level artifact glob.
+                for path in (out / "cli").glob("*/cli_check.json"):
+                    cli = json.loads(path.read_text(encoding="utf-8"))
+                    write_json(out / "cli_check.json", cli)
         probe = execute([sys.executable, str(Path(__file__).with_name("probe.py"))], "device-probe", out,
                         env, stopped, executions, min(60, args.native_timeout_s))
         devices = [json.loads(line[len("BENCH_DEVICE "):]) for line in probe.splitlines() if line.startswith("BENCH_DEVICE ")]
         if len(devices) != 1 or devices[0].get("visible_count") != 1 or not devices[0].get("pci_bus"):
             raise ValueError("Missing or ambiguous HIP device identity")
         write_json(out / "device.json", devices[0])
-        binary = executable(args.driver if args.recipe == "conv" else args.rocblas_bench, args.recipe)
-        module = native_module(args.recipe)
-        native, cases = selected(args, module, binary)
         write_json(out / "plan.json", dict(params=vars(args), cases=cases, binary=binary,
                    binary_sha256=sha256(binary), wrapper_sha256=sha256(__file__), source=manifest["operator-cases"],
-                   environment=environment_record(env)))
+                   environment=environment_record(env), cli=cli))
         for case in cases:
             case_id = case["id"]
             def launch(argv, stage):
@@ -199,6 +211,9 @@ def run(args, stopped):
                     check = parse_gemm(launch(module.command(native, case["row"]), "check"), True, args.max_norm_error, case["row"])
                 row = dict(recipe=args.recipe, case_id=case_id, dtype=args.dtype, mode=args.mode,
                            correctness="passed", check=check, measurement_status="measured")
+                if cli is not None:
+                    row.update(gemm_profile=cli["profile"], rocblas_version=cli["rocblas_version"],
+                               check_semantics=cli["check_semantics"])
                 if args.mode == "check":
                     row["metrics"] = [dict(name=f"{case_id}_checked", value=1, unit="cases", statistic="count")]
                 else:
@@ -255,6 +270,7 @@ def main():
     parser.add_argument("--mode", choices=("check", "perf"), default="perf")
     parser.add_argument("--driver", default="auto")
     parser.add_argument("--rocblas-bench", default="auto")
+    parser.add_argument("--gemm-profile", choices=("new", "legacy"), default="new")
     parser.add_argument("--group", default="all")
     parser.add_argument("--conv-suite", choices=("all", "conv2d", "conv3d"), default="all")
     parser.add_argument("--direction", choices=("all", "fwd", "dgrad", "wgrad"), default="all")

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run gemm_cases.csv with rocblas-bench. Requires Python 3.8+ standard library.
 
-Check mode requests both tolerance and norm checks. Inspect tool diagnostics;
-process exit codes alone are not a correctness verdict. Perf mode requires
-prior successful checks of the selected cases and precision.
+Default profile: new (rocBLAS 5.2.0); legacy profile: rocBLAS 4.3.0.
+Inspect native validation diagnostics; process exit codes alone are not a
+correctness verdict. Perf mode requires prior successful checks.
 """
 import argparse
 import csv
@@ -15,6 +15,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
@@ -81,17 +82,27 @@ def command(args, r):
             cmd.extend(["--" + column, r[column]])
         if extended:
             cmd.extend(["--stride_d", r["stride_d"]])
-    cmd.extend(["--device", "0", "--math_mode", "0", "--use_hipblaslt", "0",
-                "--flush_batch_count", "1", "--initialization", "trig_float"])
+    cmd.extend(["--device", "0", "--math_mode", "0"])
+    if args.profile == "new":
+        cmd.extend(["--use_hipblaslt", "0"])
+    cmd.extend(["--flush_batch_count", "1", "--initialization", "trig_float"])
     if args.mode == "check":
-        cmd.extend(["--test", "1", "--verify", "1", "--cold_iters", "2", "--iters", "1"])
+        if args.profile == "new":
+            cmd.extend(["--test", "1"])
+        cmd.extend(["--verify", "1", "--cold_iters", "2", "--iters", "1"])
     else:
-        cmd.extend(["--test", "0", "--verify", "0", "--cold_iters", str(args.warmup), "--iters", str(args.iters)])
+        if args.profile == "new":
+            cmd.extend(["--test", "0"])
+        cmd.extend(["--verify", "0", "--cold_iters", str(args.warmup), "--iters", str(args.iters)])
     return cmd
 
 
-def main():
+def main(profile=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    if profile is None:
+        parser.add_argument("--profile", choices=("new", "legacy"), default="new")
+    else:
+        parser.set_defaults(profile=profile)
     parser.add_argument("--dtype", required=True, choices=TYPES)
     parser.add_argument("--mode", required=True, choices=("check", "perf"))
     parser.add_argument("--cases", type=Path, default=ROOT / "gemm_cases.csv")
@@ -107,7 +118,7 @@ def main():
     args.bench = args.bench.resolve()
     rows = load_cases(args)
     rounds = 1 if args.mode == "check" else args.repeats
-    print("Selected %d cases; %d round(s) per case" % (len(rows), rounds))
+    print("Profile %s; selected %d cases; %d round(s) per case" % (args.profile, len(rows), rounds))
     if args.dry_run:
         for row in rows:
             for i in range(1, rounds + 1):
@@ -116,12 +127,25 @@ def main():
     if not args.bench.is_file() or not os.access(args.bench, os.X_OK):
         parser.error("rocblas-bench is missing or not executable: " + str(args.bench))
     args.output.mkdir(parents=True, exist_ok=True)
-    prefix = "%s_%s_%s_" % (args.mode, args.dtype, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    prefix = "%s_%s_%s_%s_" % (args.profile, args.mode, args.dtype, datetime.now().strftime("%Y%m%d_%H%M%S"))
     run_dir = Path(tempfile.mkdtemp(prefix=prefix, dir=str(args.output)))
+    from check_gemm_env import assess_interface, probe_cli
+    required = {option for row in rows for option in command(args, row)[1::2]}
+    probes = probe_cli(args.bench)
+    cli_report = assess_interface(probes, required, args.profile)
+    cli_report.update(probes=probes, gpu_tested=False)
+    (run_dir / "cli_check.json").write_text(json.dumps(cli_report, indent=2), encoding="utf-8")
+    if cli_report["errors"]:
+        for error in cli_report["errors"]:
+            print("INCOMPATIBLE: " + error, file=sys.stderr)
+        print("CLI evidence: " + str(run_dir / "cli_check.json"), file=sys.stderr)
+        return 2
     metadata = {
         "started_at": datetime.now().astimezone().isoformat(),
         "arguments": {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
         "case_count": len(rows),
+        "rocblas_version": cli_report["rocblas_version"],
+        "check_semantics": cli_report["check_semantics"],
         "cases_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
         "environment": {key: value for key, value in os.environ.items()
                         if key in ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES", "LD_LIBRARY_PATH")
@@ -154,9 +178,13 @@ def main():
     return 1 if failed else 0
 
 
-if __name__ == "__main__":
+def entrypoint(profile=None):
     try:
-        sys.exit(main())
-    except (OSError, ValueError, KeyError) as exc:
+        return main(profile)
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as exc:
         print("ERROR: " + str(exc), file=sys.stderr)
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(entrypoint())
