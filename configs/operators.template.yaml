@@ -66,7 +66,7 @@ tests:
     env:
       BENCH_IMAGE: "${vars.image}"
   operator_stress:
-    enabled: false # 原生 100 万次；只在已安排完整压测窗口时开启。超时不能算通过。
+    enabled: false # 默认100万次；短测可将stress_iterations设为100。超时不能算通过。
     suite: operators
     adapter: command
     pack: ../testpacks/operators/manifest.yaml
@@ -76,6 +76,7 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       native_timeout_s: 86400
+      stress_iterations: 1000000 # 100 为功能短测(smoke)，1000000 才是完整压力测试。
     matrix:
       recipe: [blas_fp16_stress, fa_fp16_stress, fa_bf16_stress]
     env:

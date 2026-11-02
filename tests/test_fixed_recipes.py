@@ -64,6 +64,19 @@ class FixedTemplates(unittest.TestCase):
         self.assertEqual({c.suite for c in make_plan(demo, "e2e").cases}, {"e2e_acc", "e2e_perf"})
         self.assertIn("migraphx", {c.suite for c in make_plan(demo, "all").cases})
 
+    def test_stress_smoke_count_is_forwarded_and_bounded(self):
+        config = str(ROOT / "configs/operators.template.yaml")
+        overrides = ["tests.operator_stress.enabled=true", "tests.operator_stress.params.stress_iterations=100"]
+        plan = make_plan(config, overrides=overrides)
+        stress = [case for case in plan.cases if case.test_id == "operator_stress"]
+        self.assertEqual(len(stress), 3)
+        self.assertTrue(all(case.params["stress_iterations"] == 100 for case in stress))
+        self.assertIn("--stress-iterations", json.dumps(preview(plan)))
+        for value in ("0", "1000001", "true"):
+            with self.subTest(value=value), self.assertRaises(BenchError):
+                make_plan(config, overrides=["tests.operator_stress.enabled=true",
+                    "tests.operator_stress.params.stress_iterations=" + value])
+
     def test_rejects_unfixed_params_and_framework_duration(self):
         config = str(ROOT / "configs/migraphx.template.yaml")
         for override in ("tests.resnet50.matrix.batch=[2]", "tests.resnet50.matrix.recipe=[resnet50_fp32]",
@@ -79,7 +92,7 @@ class FixedTemplates(unittest.TestCase):
             ast.parse((op.ROOT / "native" / record["file"]).read_text(encoding="utf-8"))
         pressure = (op.ROOT / "native/fa_fwd_pressure.py").read_text(encoding="utf-8")
         self.assertIn('os.environ["BENCH_FA_CACHE_DIR"]', pressure)
-        self.assertIn("pressure_count = 1000000", pressure)
+        self.assertIn('os.environ.get("BENCH_STRESS_ITERATIONS", "1000000")', pressure)
         self.assertNotIn(" = eval(", pressure)
 
 
@@ -157,10 +170,35 @@ class FixedParsers(unittest.TestCase):
             self.assertEqual(row["repeatability"], "passed")
             self.assertEqual(row["correctness"], "not_checked")
             self.assertEqual(row["metrics"][0]["value"], 1000000)
+            self.assertEqual(row["stress_mode"], "full")
+            self.assertTrue(row["full_stress_completed"])
         for bad in ("PASS", text.replace("1000000/", "999999/"), text.replace("Inf: PASS", "Inf: FAIL"),
                     text + "Traceback (most recent call last)", text.replace("CHECK NaN: PASS", "")):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 op.parse("fa_fp16_stress", bad, self.root)
+
+    def test_smoke_requires_requested_count_and_is_not_full_stress(self):
+        text = "CHECK NaN: PASS\nCHECK Inf: PASS\nPressure Test: 100/100 PASS\n"
+        for recipe in ("blas_fp16_stress", "fa_fp16_stress", "fa_bf16_stress"):
+            row, = op.parse(recipe, text, self.root, 100)
+            self.assertEqual(row["stress_mode"], "smoke")
+            self.assertFalse(row["full_stress_completed"])
+            self.assertEqual(row["requested_iterations"], 100)
+            self.assertEqual(row["metrics"][0]["value"], 100)
+            self.assertEqual(row["correctness"], "not_checked")
+            with self.assertRaises(ValueError):
+                op.parse(recipe, text, self.root)
+            with self.assertRaises(ValueError):
+                op.parse(recipe, text.replace("100/100", "99/100"), self.root, 100)
+        with self.assertRaises(ValueError):
+            op.parse("fa_fp16_stress", text.replace("CHECK Inf: PASS", ""), self.root, 100)
+
+    def test_iteration_count_rejects_invalid_or_unrelated_overrides(self):
+        for value in (0, -1, 1000001, True, 100.0, "100"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                op.iteration_count("blas_fp16_stress", value)
+        with self.assertRaises(ValueError):
+            op.iteration_count("pa_decode", 100)
 
     def test_pa_requires_all_40_distinct_shapes_and_ignores_summary(self):
         rows = op.parse("pa_decode", pa_log() + "\nTotal Statistics:\nPerformance: summary", self.root)
@@ -209,6 +247,11 @@ class FixedParsers(unittest.TestCase):
         env = op.environment("fa_fp16_stress", args, self.root)
         self.assertEqual(env["HIP_VISIBLE_DEVICES"], "6")
         self.assertEqual(env["FA_FWD_NO_MLS"], "1")
+        self.assertEqual(env["BENCH_STRESS_ITERATIONS"], "1000000")
+        args.stress_iterations = 100
+        self.assertEqual(op.environment("fa_fp16_stress", args, self.root)["BENCH_STRESS_ITERATIONS"], "100")
+        with patch.dict(os.environ, {"BENCH_STRESS_ITERATIONS": "1000000"}, clear=True), self.assertRaises(ValueError):
+            op.environment("fa_fp16_stress", args, self.root)
         for update in ({"HIP_VISIBLE_DEVICES": "0"}, {"ROCR_VISIBLE_DEVICES": "6"}, {"PYTHONOPTIMIZE": "1"}):
             with self.subTest(update=update), self.assertRaises(ValueError):
                 fixed_common.single_device(args, update)

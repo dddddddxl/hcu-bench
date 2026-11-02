@@ -247,7 +247,9 @@ if __name__ == "__main__":
         print("Performance: \x1b[35m{:.1f}\x1b[0m TFLOPS".format(tflops))
 
         # 压力测试
-        pressure_count = 1000000
+        pressure_count = int(os.environ.get("BENCH_STRESS_ITERATIONS", "1000000"))
+        if not 1 <= pressure_count <= 1000000:
+            raise ValueError("BENCH_STRESS_ITERATIONS must be from 1 to 1000000")
         for p in range(pressure_count):
             torch.cuda.empty_cache()
             pressure_query_layer = query_layer.clone()

@@ -71,7 +71,28 @@ bash bench.sh operators --set tests.operator_performance.enabled=false \
   --set tests.operator_stress.enabled=true
 ```
 
-`native_timeout_s` 为故障上限，外层 `timeout_s` 应额外留出清理时间。不缩短百万次循环，不支持框架 `duration_s`；未跑完、超时或取消均无有效完成指标。`PYTHONOPTIMIZE` 不得禁用原生 assert。
+`stress_iterations` 默认 `1000000`，可设为 `100` 先检查脚本能否运行。少于100万次的结果标记 `stress_mode: smoke`、`full_stress_completed: false`，不能当作完整压力测试通过。一致性检查和FA的NaN/Inf检查保持不变，必须完成指定次数并出现原生终态PASS才有完成指标。
+
+```yaml
+  operator_stress:
+    enabled: true
+    # 其余字段沿用模板；本例只显示需要修改的部分。
+    params:
+      stress_iterations: 100
+```
+
+只执行三项100次短测（当前YAML需要包含这些测试块）：
+
+```bash
+bash bench.sh operators --set tests.operator_performance.enabled=false \
+  --set tests.conv.enabled=false --set tests.gemm.enabled=false \
+  --set tests.operator_stress.enabled=true \
+  --set tests.operator_stress.params.stress_iterations=100
+```
+
+`native_timeout_s` 为故障上限，外层 `timeout_s` 应额外留出清理时间。不支持框架 `duration_s`；未跑完、超时或取消均无有效完成指标。`PYTHONOPTIMIZE` 不得禁用原生 assert。独立调用原生脚本时，可用 `BENCH_STRESS_ITERATIONS=100` 选择短测；框架执行必须通过YAML参数选择，不允许冲突的环境变量偷偷缩短循环。
+
+2026-11-02在BW1000 / gfx936、标准SGLang 0.5.12 / DTK26.04镜像验证：BLAS FP16、FA FP16、FA BF16各100次均完成，原生重复一致性检查通过，两项FA的NaN/Inf检查通过。结果均为smoke，不代表百万次压力或独立数值精度验收通过。
 
 ## PA decode 性能
 

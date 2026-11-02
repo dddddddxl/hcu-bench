@@ -36,6 +36,14 @@ def probe_command(recipe):
     return [sys.executable, "-u", str(ROOT / "probe.py"), recipe]
 
 
+def iteration_count(recipe, value):
+    if type(value) is not int or not 1 <= value <= STRESS_COUNT:
+        raise ValueError("stress_iterations must be an integer from 1 to 1000000")
+    if not recipe.endswith("_stress") and value != STRESS_COUNT:
+        raise ValueError("stress_iterations only applies to stress recipes")
+    return value
+
+
 def parse_probe(text):
     records = [json.loads(line[len("BENCH_DEVICE "):]) for line in text.splitlines()
                if line.startswith("BENCH_DEVICE ")]
@@ -47,6 +55,12 @@ def parse_probe(text):
 def environment(recipe, args, out):
     env = single_device(args, dict(os.environ))
     required = RECIPES[recipe][2]
+    count = iteration_count(recipe, getattr(args, "stress_iterations", STRESS_COUNT))
+    if "BENCH_STRESS_ITERATIONS" in env and (
+            not recipe.endswith("_stress") or env["BENCH_STRESS_ITERATIONS"] != str(count)):
+        raise ValueError("BENCH_STRESS_ITERATIONS conflicts with stress_iterations")
+    if recipe.endswith("_stress"):
+        env["BENCH_STRESS_ITERATIONS"] = str(count)
     # These switches alter the documented operation, stress loop or timer.
     for key in ("FA_DEBUG", "PA_USE_CUDAGRAPH_BENCH", "PA_NO_SPLITKV", "PA_PARTITION_SIZE"):
         if key in env:
@@ -65,21 +79,24 @@ def metric(name, value, unit, statistic="native_reported"):
     return dict(name=name, value=positive(value), unit=unit, statistic=statistic)
 
 
-def parse(recipe, text, out):
+def parse(recipe, text, out, stress_iterations=STRESS_COUNT):
+    count = iteration_count(recipe, stress_iterations)
     text = ANSI.sub("", text)
     if "Traceback (most recent call last)" in text or re.search(r"\bFAIL(?:ED)?\b", text):
         raise ValueError("Native failure marker; inspect native.log")
     if recipe.endswith("_stress"):
         completed = re.findall(r"Pressure Test: (\d+)/(\d+)\s+PASS\s*$", text)
-        if completed != [(str(STRESS_COUNT), str(STRESS_COUNT))]:
-            raise ValueError("Stress requires all 1000000 iterations and terminal PASS")
+        if completed != [(str(count), str(count))]:
+            raise ValueError(f"Stress requires all {count} iterations and terminal PASS")
         if recipe.startswith("fa_"):
             for check in ("NaN", "Inf"):
                 if len(re.findall(rf"CHECK {check}:\s+PASS", text)) != 1:
                     raise ValueError(f"Missing FA {check} check")
         return [dict(repeatability="passed", correctness="not_checked",
+                     stress_mode="full" if count == STRESS_COUNT else "smoke",
+                     full_stress_completed=count == STRESS_COUNT, requested_iterations=count,
                      correctness_scope="native equality to first result, not independent numerical accuracy",
-                     metrics=[metric("completed_iterations", STRESS_COUNT, "iterations", "count")])]
+                     metrics=[metric("completed_iterations", count, "iterations", "count")])]
     if recipe == "fa_fp16_forward":
         times = re.findall(rf"^Time:\s*({NUMBER})\s*$", text, re.M)
         rates = re.findall(rf"^Performance:\s*({NUMBER})\s+TFLOPS\s*$", text, re.M)
@@ -175,13 +192,15 @@ def run(args, stopped):
                            min(60, args.native_timeout_s))
         write_json(out / "device.json", parse_probe(hardware))
         text = execute(command(args.recipe), "native", out, env, stopped, executions, args.native_timeout_s)
-        rows = parse(args.recipe, text, out)
+        rows = parse(args.recipe, text, out, getattr(args, "stress_iterations", STRESS_COUNT))
         if stopped.is_set():
             raise RuntimeError("Cancelled before publishing complete results")
         for row in rows:
             row.update(measurement_status="measured", correctness="not_checked", recipe=args.recipe)
         write_json(out / "measurements.json", rows)
-        write_json(out / "assessment.json", dict(complete=True, correctness="not_checked", measurements=len(rows)))
+        scope = {key: rows[0][key] for key in ("stress_mode", "full_stress_completed", "requested_iterations")
+                 if key in rows[0]}
+        write_json(out / "assessment.json", dict(complete=True, correctness="not_checked", measurements=len(rows), **scope))
         for row in rows:
             emit(row)
         return 0
@@ -197,6 +216,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recipe", required=True, choices=RECIPES)
     parser.add_argument("--native-timeout-s", type=int, default=1800)
+    parser.add_argument("--stress-iterations", type=int, default=STRESS_COUNT)
     parser.add_argument("--hcu-ids", required=True)
     parser.add_argument("--nnodes", type=int, default=1)
     parser.add_argument("--node-rank", type=int, default=0)
