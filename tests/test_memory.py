@@ -198,7 +198,8 @@ class MemoryTests(unittest.TestCase):
             plan = make_plan(str(ROOT / "configs" / name), "all")
             self.assertIn("memory", [case.suite for case in plan.cases])
             if name != "memory.template.yaml":
-                self.assertEqual([case.suite for case in plan.cases], ["rccl", "pcie", "memory", "deepep", "e2e"])
+                self.assertEqual([case.suite for case in plan.cases],
+                                 ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
 
     def test_planner_rejects_duration_multinode_and_bad_params(self):
         data = yaml.safe_load((ROOT / "configs/memory.template.yaml").read_text(encoding="utf-8"))

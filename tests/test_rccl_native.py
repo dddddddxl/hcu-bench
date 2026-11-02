@@ -179,11 +179,17 @@ class RcclNativeTests(unittest.TestCase):
     def test_all_templates_include_real_rccl_first(self):
         for template in ("in-container.template.yaml", "managed-container.template.yaml"):
             plan = make_plan(str(ROOT / "configs" / template))
-            self.assertEqual([case.suite for case in plan.cases], ["rccl", "pcie", "memory", "deepep", "e2e"])
+            self.assertEqual([case.suite for case in plan.cases],
+                             ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
             self.assertTrue(all(case.adapter == "command" for case in plan.cases))
             self.assertEqual(plan.cases[0].pack["id"], "rccl.allreduce")
             self.assertEqual((plan.cases[0].params["ranks"], plan.cases[0].params["min_bytes"],
                               plan.cases[0].params["max_bytes"]), (8, 17179869184, 17179869184))
+            other_collectives = [case for case in plan.cases[1:] if case.suite == "rccl"]
+            self.assertEqual(len(other_collectives), 9)
+            for case in other_collectives:
+                self.assertEqual((case.params["ranks"], case.params["min_bytes"], case.params["max_bytes"]),
+                                 (8, 17179869184, 17179869184))
             for key in ("ranks", "min_bytes", "max_bytes"):
                 self.assertEqual(plan.cases[0].pack["parameters"][key]["default"],
                                  rccl.RcclAllReduce.schema[key]["default"])

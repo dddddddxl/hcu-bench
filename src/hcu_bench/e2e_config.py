@@ -6,10 +6,19 @@ from pathlib import Path
 from .models import ID_PATTERN, keys, positive, require
 
 ACC_DEFAULTS = dict(dataset="gsm8k", data_path="auto", num_examples=100, num_shots=5,
-                    num_threads=128, max_tokens=2048, api="chat", min_score="")
+                    num_threads=128, max_tokens=2048, api="chat", min_score="",
+                    few_shot_path="", chat_template_kwargs={})
 PERF_DEFAULTS = dict(shapes=[[128, 128], [1024, 1024], [4096, 512]], concurrency=[1, 8, 32],
                      requests=256, warmup_requests=32, repeats=3, seed=42, request_timeout_s=600,
                      extra_body={}, python="auto")
+
+
+def performance_grid(params):
+    if "workloads" in params:
+        return [(row["input_tokens"], row["output_tokens"], concurrency)
+                for row in params["workloads"] for concurrency in row["concurrency"]]
+    return [(shape[0], shape[1], concurrency)
+            for shape in params["shapes"] for concurrency in params["concurrency"]]
 
 
 def validate_models(models):
@@ -34,7 +43,7 @@ def validate_models(models):
 def task_params(suite, supplied):
     require(suite in ("e2e_acc", "e2e_perf"), "Unknown end-to-end task suite")
     defaults = ACC_DEFAULTS if suite == "e2e_acc" else PERF_DEFAULTS
-    keys(supplied, set(defaults), suite + " params")
+    keys(supplied, set(defaults) | ({"workloads"} if suite == "e2e_perf" else set()), suite + " params")
     params = {**defaults, **supplied}
     integer_fields = (("num_examples", "num_shots", "num_threads", "max_tokens") if suite == "e2e_acc"
                       else ("requests", "warmup_requests", "repeats", "seed", "request_timeout_s"))
@@ -45,6 +54,9 @@ def task_params(suite, supplied):
         require(params["dataset"] == "gsm8k", "e2e_acc currently supports gsm8k only")
         require(params["api"] in ("chat", "completion"), "api must be chat or completion")
         require(isinstance(params["data_path"], str) and params["data_path"], "data_path must be a path or auto")
+        require(isinstance(params["few_shot_path"], str), "few_shot_path must be a path, auto or empty")
+        require(isinstance(params["chat_template_kwargs"], dict), "chat_template_kwargs must be an object")
+        require(not params["chat_template_kwargs"] or params["api"] == "chat", "chat_template_kwargs requires api: chat")
         threshold = params["min_score"]
         require(isinstance(threshold, str), "min_score must be a string or empty")
         if threshold:
@@ -54,14 +66,32 @@ def task_params(suite, supplied):
                 score = -1
             require(0 <= score <= 1, "min_score must be in [0, 1]")
     else:
-        shapes, concurrency = params["shapes"], params["concurrency"]
-        require(isinstance(shapes, list) and shapes and all(isinstance(s, list) and len(s) == 2
-                and all(type(n) is int and n > 0 for n in s) for s in shapes), "shapes must be [[input_tokens, output_tokens], ...]")
-        require(isinstance(concurrency, list) and concurrency and all(type(n) is int and n > 0 for n in concurrency),
-                "concurrency must be positive integers")
-        require(len(concurrency) == len(set(concurrency)) and len(shapes) == len({tuple(s) for s in shapes}), "Duplicate performance combinations")
-        require(params["requests"] >= max(concurrency), "requests must be >= maximum concurrency")
-        require(len(shapes) * len(concurrency) * params["repeats"] <= 4096, "Performance sweep exceeds 4096 points")
+        if "workloads" in supplied:
+            require(not {"shapes", "concurrency"} & set(supplied), "Use workloads or shapes/concurrency, not both")
+            rows = params["workloads"]
+            require(isinstance(rows, list) and rows, "workloads must be a nonempty list")
+            for row in rows:
+                require(isinstance(row, dict), "Each workload must be a mapping")
+                keys(row, {"input_tokens", "output_tokens", "concurrency"}, "performance workload")
+                require(all(type(row.get(k)) is int and row[k] > 0 for k in ("input_tokens", "output_tokens")),
+                        "Workload input_tokens/output_tokens must be positive integers")
+                concurrency = row.get("concurrency")
+                require(isinstance(concurrency, list) and concurrency and all(type(n) is int and n > 0 for n in concurrency),
+                        "Workload concurrency must be positive integers")
+                require(len(concurrency) == len(set(concurrency)), "Duplicate performance concurrency")
+            require(len(rows) == len({(r["input_tokens"], r["output_tokens"]) for r in rows}), "Duplicate performance shapes")
+            params.pop("shapes")
+            params.pop("concurrency")
+        else:
+            shapes, concurrency = params["shapes"], params["concurrency"]
+            require(isinstance(shapes, list) and shapes and all(isinstance(s, list) and len(s) == 2
+                    and all(type(n) is int and n > 0 for n in s) for s in shapes), "shapes must be [[input_tokens, output_tokens], ...]")
+            require(isinstance(concurrency, list) and concurrency and all(type(n) is int and n > 0 for n in concurrency),
+                    "concurrency must be positive integers")
+            require(len(concurrency) == len(set(concurrency)) and len(shapes) == len({tuple(s) for s in shapes}), "Duplicate performance combinations")
+        grid = performance_grid(params)
+        require(params["requests"] >= max(row[2] for row in grid), "requests must be >= maximum concurrency")
+        require(len(grid) * params["repeats"] <= 4096, "Performance sweep exceeds 4096 points")
         positive(params["request_timeout_s"], "request_timeout_s")
         require(isinstance(params["python"], str) and params["python"], "python must be auto or a prepared client interpreter")
         require(isinstance(params["extra_body"], dict), "extra_body must be an object")

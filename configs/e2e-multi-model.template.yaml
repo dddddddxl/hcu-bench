@@ -6,6 +6,8 @@ failure_policy: continue       # 服务健康才继续下一任务；清理失�
 vars:
   workspace: /YOUR_WRITABLE_WORKSPACE
   bench_root: /YOUR_BENCH_REPO  # 执行环境内完整仓库的绝对路径。
+  qwen3_4b_path: /YOUR_MODELS/Qwen3-4B
+  qwen3_8b_path: /YOUR_MODELS/Qwen3-8B
 output_dir: "${vars.workspace}/results"
 build:
   cache_dir: "${vars.workspace}/client-cache" # 独立客户端 Python，不升级服务镜像的库。
@@ -13,46 +15,57 @@ build:
 nodes:
   node0:
     executor: local
-    hcus: [0, 1, 2, 3, 4, 5, 6, 7]
+    hcus: [0]                # 两个默认模型均为BF16、TP1，串行复用这张卡。
     env:
       HIP_VISIBLE_DEVICES: "${hcu_ids}"
 models:
-  model_a:
-    start_script: ./model_scripts/model_a.local.sh # 相对目标仓库根目录，不是控制机路径。
+  qwen3_4b:
+    start_script: ./model_scripts/qwen3_4b.sh # 默认脚本随仓库提供，其他部署参数放脚本。
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_4b_path}"
     port: 30000              # 脚本读取 BENCH_PORT，前台 exec，不用 nohup/&。
     startup_timeout_s: 1800
     # tokenizer_path: /models/model-a # 服务返回的目录不可用时填写，不自动下载。
     # model_name: model-a            # 服务发布多个模型名时填写精确 ID。
     # before_perf_script: ./model_scripts/reset-cache.local.sh # 可选的缓存重置脚本。
-  model_b:
-    start_script: ./model_scripts/model_b.local.sh
+  qwen3_8b:
+    start_script: ./model_scripts/qwen3_8b.sh
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_8b_path}"
     port: 30000              # 串行运行，前一模型退出后复用端口。
     # nodes: [node0]         # 可覆盖测试项的 nodes/container，仍仅支持单节点服务。
     # container: another_image
 tests:
   accuracy:
     suite: e2e_acc
-    models: [model_a, model_b]
+    models: all              # 新模型只需添加到顶层models；也可写[qwen3_4b]只测一个。
     nodes: [node0]
-    timeout_s: 5400
+    timeout_s: 14400
     params:
       dataset: gsm8k
-      num_examples: 100
+      data_path: auto        # 内置test集全部1319题；不从评分题中扣few-shot。
+      few_shot_path: auto    # 内置训练集前5题。
+      num_examples: 0        # 0=全量评分。
       num_shots: 5
       max_tokens: 2048
+      chat_template_kwargs: {enable_thinking: false}
       min_score: ""          # 只报分数，不默认判定精度通过。
   performance:
     suite: e2e_perf
-    models: [model_a, model_b]
+    models: all
     nodes: [node0]
-    timeout_s: 14400         # 每个模型的全部性能组合总时限，不是单次请求时限。
+    timeout_s: 172800        # 每模型31点的总故障时限；完整扫描可能需要数小时以上。
     params:
-      shapes: [[128, 128], [1024, 1024], [4096, 512]] # 目标输入/输出 token，另记实际长度。
-      concurrency: [1, 8, 32]
+      # 月英表已有数据：每模型31点；128/128不含并发2，各组均不含256。
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
       requests: 256          # 每个组合的正式请求数，至少等于最大并发。
       warmup_requests: 32    # 每个组合独立预热，排除在正式统计之外。
-      repeats: 3            # 同一服务内复测，不重复加载模型。
+      repeats: 1            # 用户确认的默认轮数，不是表中给出的原始轮数。
       seed: 42
-      request_timeout_s: 600
-      extra_body: {}        # 例如经验证支持的 ignore_eos，不猜思考模式。
+      request_timeout_s: 1800
+      extra_body: {chat_template_kwargs: {enable_thinking: false}}
       python: auto          # 自动准备固定 EvalScope，也可填已有 1.13.0 客户端 Python。

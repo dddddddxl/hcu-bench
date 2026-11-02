@@ -25,10 +25,30 @@ def accuracy_task(config, output):
     params.pop("dataset")
     path = params["data_path"]
     path = ROOT / "vendor/gsm8k/test.jsonl" if path == "auto" else ROOT / path
+    shots = params.pop("few_shot_path", "")
+    evidence = dict(dataset_sha256=sha256(path), num_shots=params["num_shots"], client_version=version,
+                    chat_template_kwargs=params.get("chat_template_kwargs", {}))
+    if shots:
+        shot_path = ROOT / "vendor/gsm8k/train-5shot.jsonl" if shots == "auto" else ROOT / shots
+        evidence["num_examples"] = accuracy.validate_dataset(path, params["num_examples"], 0)
+        if params["num_shots"]:
+            accuracy.validate_dataset(shot_path, params["num_shots"], 0)
+            examples = [json.loads(line) for line in shot_path.read_text(encoding="utf-8").splitlines()][:params["num_shots"]]
+            tests = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+            questions = {row["question"] for row in tests}
+            if any(row["question"] in questions for row in examples):
+                raise ValueError("Few-shot questions overlap the scored test dataset")
+            merged = output / "evaluation-input.jsonl"
+            merged.write_text("".join(json.dumps(row, ensure_ascii=True) + "\n" for row in examples + tests), encoding="utf-8")
+            path = merged
+            evidence.update(few_shot_sha256=sha256(shot_path), few_shot_source=str(shot_path))
+        evidence["few_shot_policy"] = "separate_examples_then_all_test_rows"
+    else:
+        evidence["num_examples"] = accuracy.validate_dataset(path, params["num_examples"], params["num_shots"])
+        evidence["few_shot_policy"] = "legacy_test_prefix"
     params["data_path"] = str(path)
     args = SimpleNamespace(**params, model_path=config["served_model"])
-    evidence = dict(num_examples=accuracy.validate_dataset(path, args.num_examples, args.num_shots),
-                    dataset_sha256=sha256(path), num_shots=args.num_shots, client_version=version)
+    evidence["evaluation_input_sha256"] = sha256(path)
     return accuracy.evaluate(args, evidence, config["url"], output)
 
 

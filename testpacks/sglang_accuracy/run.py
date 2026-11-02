@@ -226,7 +226,7 @@ def evaluate(args, evidence, url, output):
     evaluator = GSM8KEval(num_examples=evidence["num_examples"], num_threads=args.num_threads,
                          num_shots=args.num_shots, data_path=args.data_path)
     settings = SimpleNamespace(model=args.model_path, max_tokens=args.max_tokens, api=args.api,
-                               temperature=0.0, top_p=1.0, chat_template_kwargs={})
+                               temperature=0.0, top_p=1.0, chat_template_kwargs=getattr(args, "chat_template_kwargs", {}))
     result, latency, sampler = run_eval_once(settings, url + "/v1", evaluator)
     (output / "answers.json").write_text(json.dumps(result.convos, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
     (output / "report.html").write_text(make_report(result), encoding="utf-8")

@@ -4,16 +4,19 @@
     {
       "file": "blas_pressure.py",
       "original_sha256": "cc749d691d93faff34aadd21f7ce25a151dc2376a61a8f7d9df4445e09b4bd07",
-      "bundled_sha256": "cc749d691d93faff34aadd21f7ce25a151dc2376a61a8f7d9df4445e09b4bd07",
-      "adaptations": []
+      "bundled_sha256": "ea99c6413a7b1cb77a1e31264ee0d5ce5652b47dc80dbfbab69f64f71f64c72b",
+      "adaptations": [
+        "Allow explicit BENCH_STRESS_ITERATIONS from 1 to 1000000; default remains 1000000. Short runs are reported as smoke, not full stress."
+      ]
     },
     {
       "file": "fa_fwd_pressure.py",
       "original_sha256": "6021f2eb864fe16d6ad0b6a0eebf291e44d495951348e1cf8e75d4713e2228cb",
-      "bundled_sha256": "aa009e290a48a78d40c2fd4be9433c08b9cee6a8ac50178aced7f79482fa7545",
+      "bundled_sha256": "b9b678c4850307c5ed5c5d6e127c17e9bd3a5ad945f83cca46b72d0da9360606",
       "adaptations": [
         "Use ast.literal_eval for literal window arguments.",
         "Require private per-case BENCH_FA_CACHE_DIR instead of shared /fa_debug.",
+        "Allow explicit BENCH_STRESS_ITERATIONS from 1 to 1000000; default remains 1000000. Preserve per-iteration equality and NaN/Inf checks.",
         "Remove trailing whitespace and extra blank lines at EOF; benchmark logic unchanged."
       ]
     },

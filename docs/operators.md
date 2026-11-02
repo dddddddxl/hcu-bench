@@ -1,6 +1,30 @@
 # 固定算子用例
 
-来源为用户提供的 `hcu-bench用例收集.pdf` 和 `yy_script` 脚本目录。脚本已放入 `testpacks/operators/native`，原始 SHA256、仓库版本 SHA256 和适配记录在 `testpacks/operators/provenance.json`。Conv 和通用 GEMM 不在本次范围。
+固定配方来自用户提供的 `hcu-bench用例收集.pdf` 和 `yy_script`，保留在 `testpacks/operators/native`。新增 Conv/GEMM 来自飞书测试指导的附件，原始脚本、CSV 和来源文件保存在 `vendor/operator-cases`；校验和见 `vendor/sources.json`。均属于 `operators` suite。
+
+## Conv / GEMM
+
+在已有 Linux 容器内复制 `configs/numeric-operators.template.yaml` 为 `configs/bench.yaml`，填写仓库、输出目录及允许使用的卡，然后执行 `bash bench.sh operators`。综合容器模板也已包含这两项；已有个人 YAML 需要手动合并对应测试块。
+
+| recipe | 精度 | 用例范围 | 原生工具 |
+| --- | --- | --- | --- |
+| `conv` | fp32 / fp16 | Conv2D 13 项、Conv3D 15 项，含普通/分组/Depthwise、前向/dgrad/wgrad；共 56 组精度配置 | 镜像已有 MIOpenDriver |
+| `gemm` | fp32 / fp16 / bf16 | 方阵 4、DLRM 3、BERT 3、Transformer 2、Strided Batched 2；共 42 组精度配置 | 镜像已有 rocblas-bench |
+
+`mode: check` 只校验；`mode: perf` 对每个用例先执行原生校验，确认后才计时。Conv 采用 MIOpen 明确的 `Verifies OK` 及其原生容差；GEMM 要求存在有限的 `norm_error`。默认 `max_norm_error: ""` 仅将零误差判为通过，非零记为未确认并跳过该项性能，不把退出码 0 当正确性通过。用户有验收标准时可按测试精度配置字符串阈值，如 `max_norm_error: "0.001"`，这不是工具默认推荐值。
+
+默认预热 10 次、每轮原生计时 100 次、3 轮。Conv 记录 GPU Kernel Time，GEMM 记录原生 us 和 rocblas-Gflops；统一指标是三轮原生平均值的中位数，逐轮值也保留。
+
+可调参数：`dtype`、`mode`、`device`、`warmup`、`iters`、`repeats`、`native_timeout_s`；Conv 可调 `conv_suite`、`direction`，GEMM 可调 `group`，两者可用 `case_id` 选择单项。`device: auto` 使用本次已分配的第一张卡，不寻找或抢占其他卡；可显式指定已分配集合中的某一张。每个原生进程只可见一张卡，并记录 HIP 逻辑编号及 PCI 地址。
+
+`driver` / `rocblas_bench` 默认 `auto`，在现有 DTK 常规路径中查找，也可填写绝对路径。不下载安装工具，不修改 DTK 或频率。失败用例保留原始日志、命令和原因，其他用例继续；清理无法确认时停止整个计划。
+
+GEMM 还要求 `rocblas-bench` 的 CLI 与附件匹配，包括 `--test`、`--verify`、`--use_hipblaslt`、`--math_mode` 和 `--flush_batch_count`。2026-11-02 检查的标准 SGLang 0.5.12 / DTK-26.04-rc4 镜像内，rocBLAS 4.3.0 的工具缺少 `--test` 和 `--use_hipblaslt`，尚不能执行这份 GEMM 配方。不要删除原配方参数或放宽校验来规避版本不匹配，应提供匹配 CLI 的工具，或暂时将 `tests.gemm.enabled` 设为 `false`。工具文件本身也必须可执行。
+
+```bash
+bash bench.sh operators --set tests.conv.params.mode=check --set tests.gemm.params.mode=check
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.group=batched
+```
 
 ## 配置与执行
 
@@ -43,10 +67,32 @@ HIP_VISIBLE_DEVICES=0 FA_FWD_NO_MLS=1 python fa_fwd_pressure.py \
 
 ```bash
 bash bench.sh operators --set tests.operator_performance.enabled=false \
+  --set tests.conv.enabled=false --set tests.gemm.enabled=false \
   --set tests.operator_stress.enabled=true
 ```
 
-`native_timeout_s` 为故障上限，外层 `timeout_s` 应额外留出清理时间。不缩短百万次循环，不支持框架 `duration_s`；未跑完、超时或取消均无有效完成指标。`PYTHONOPTIMIZE` 不得禁用原生 assert。
+`stress_iterations` 默认 `1000000`，可设为 `100` 先检查脚本能否运行。少于100万次的结果标记 `stress_mode: smoke`、`full_stress_completed: false`，不能当作完整压力测试通过。一致性检查和FA的NaN/Inf检查保持不变，必须完成指定次数并出现原生终态PASS才有完成指标。
+
+```yaml
+  operator_stress:
+    enabled: true
+    # 其余字段沿用模板；本例只显示需要修改的部分。
+    params:
+      stress_iterations: 100
+```
+
+只执行三项100次短测（当前YAML需要包含这些测试块）：
+
+```bash
+bash bench.sh operators --set tests.operator_performance.enabled=false \
+  --set tests.conv.enabled=false --set tests.gemm.enabled=false \
+  --set tests.operator_stress.enabled=true \
+  --set tests.operator_stress.params.stress_iterations=100
+```
+
+`native_timeout_s` 为故障上限，外层 `timeout_s` 应额外留出清理时间。不支持框架 `duration_s`；未跑完、超时或取消均无有效完成指标。`PYTHONOPTIMIZE` 不得禁用原生 assert。独立调用原生脚本时，可用 `BENCH_STRESS_ITERATIONS=100` 选择短测；框架执行必须通过YAML参数选择，不允许冲突的环境变量偷偷缩短循环。
+
+2026-11-02在BW1000 / gfx936、标准SGLang 0.5.12 / DTK26.04镜像验证：BLAS FP16、FA FP16、FA BF16各100次均完成，原生重复一致性检查通过，两项FA的NaN/Inf检查通过。结果均为smoke，不代表百万次压力或独立数值精度验收通过。
 
 ## PA decode 性能
 
@@ -88,6 +134,6 @@ batch=8、heads=16、groups=8、seq=16384、dim=128、FP8 e4m3、scale=0.088、c
 
 先在相同子进程环境只读检查 HIP PyTorch 与唯一可见设备，保存 `device.json` 和 `device-probe.log`。PA 原脚本按工具链路径选择分支；如果会误入 CUDA 的 page=16 分支则提前失败，防止把它记作 HCU page=128 的固定用例。
 
-每个 case 保留 `plan.json`（脚本哈希、环境、版本、命令）、`execution.json`（时间、退出码、中断及清理）、`native.log`、`measurements.json` 和 `assessment.json`；FP8 另有 `fp8.csv`。全流程使用 `correctness: not_checked`，压力用例另记录 `repeatability: passed`。指标完整且进程正常结束才发布测量值；清理无法确认时返回保留码 125。
+每个固定 PA/FA/BLAS case 保留 `plan.json`（脚本哈希、环境、版本、命令）、`execution.json`（时间、退出码、中断及清理）、`native.log`、`measurements.json` 和 `assessment.json`；FP8 另有 `fp8.csv`。这部分固定脚本使用 `correctness: not_checked`，压力用例另记录 `repeatability: passed`；Conv/GEMM 使用前述独立校验规则。指标完整且进程正常结束才发布测量值；清理无法确认时返回保留码 125。
 
 接入回归只证明命令、解析、编排与失败处理；实际性能和镜像 ABI 仍需在空闲目标 HCU 上验证。

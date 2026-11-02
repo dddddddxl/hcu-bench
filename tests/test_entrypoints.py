@@ -50,7 +50,7 @@ class PublicTemplateTests(unittest.TestCase):
     def test_multi_model_template_reuses_server_for_accuracy_and_performance(self):
         plan = make_plan(str(ROOT / "configs/e2e-multi-model.template.yaml"), "e2e")
         sessions = [c.params["session"] for c in plan.cases]
-        self.assertEqual([s["model_id"] for s in sessions], ["model_a", "model_b"])
+        self.assertEqual([s["model_id"] for s in sessions], ["qwen3_4b", "qwen3_8b"])
         self.assertNotEqual(sessions[0]["model"]["start_script"], sessions[1]["model"]["start_script"])
         for case, session in zip(plan.cases, sessions):
             self.assertEqual(case.nodes, ["node0"])

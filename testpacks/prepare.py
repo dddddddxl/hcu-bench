@@ -16,6 +16,7 @@ from testpacks.native_common import CleanupError, NativeProcess, cancellation, c
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {"rccl": "rccl-tests", "pcie": "rocm-bandwidth-test", "memory": "hcu-stream", "mooncake": "mooncake"}
+RCCL_COLLECTIVES = ("all_reduce", "all_gather", "reduce_scatter", "broadcast", "reduce", "alltoall", "alltoallv", "gather", "scatter", "sendrecv")
 
 
 def tree_hash(directory):
@@ -82,7 +83,11 @@ def settings_for(suite, settings):
     libraries = []
     for directory in (dtk / "lib", dtk / "rccl/lib", mpi / "lib"):
         libraries += [fingerprint_file(path) for path in sorted(directory.glob("*.so*"))]
+    collective = settings.get("rccl_collective", "all_reduce")
+    if collective not in RCCL_COLLECTIVES:
+        raise ValueError("Unknown RCCL collective")
     return {"dtk_root": str(dtk), "mpi_home": str(mpi), "arch": arch, "arch_num": arch_num,
+            **({"rccl_collective": collective} if suite == "rccl" else {}),
             "compiler": compiler, "compiler_version": compiler_version, "compiler_file": fingerprint_file(compiler),
             "jobs": jobs, "platform": platform.platform(), "libc": list(platform.libc_ver()),
             "runtime": {str(path): sha256(path) for path in files if path.is_file()},
@@ -103,7 +108,7 @@ def commands_for(suite, source, build, settings):
         flags = shlex.join(["-std=c++14", "-O3", "--offload-arch=" + arch,
                             "--gpu-max-threads-per-block=512", "-DMPI_SUPPORT",
                             "-I" + mpi + "/include", "-I" + dtk + "/rccl/include", "-I" + dtk + "/include/hip"])
-        binary = build / "all_reduce_perf"
+        binary = build / (settings.get("rccl_collective", "all_reduce") + "_perf")
         return [["make", "-C", str(source / "src"), str(binary), "BUILDDIR=" + str(build),
                  "ROCM_PATH=" + dtk, "MPI=1", "MPI_HOME=" + mpi, "NCCL_HOME=" + dtk + "/rccl",
                  "CUSTOM_RCCL_LIB=" + dtk + "/rccl/lib", "HIPCC=" + compiler, "HIPCUFLAGS=" + flags,
@@ -199,6 +204,7 @@ def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("suite", choices=SOURCES)
     cli.add_argument("--binary", default="auto")
+    cli.add_argument("--collective", choices=RCCL_COLLECTIVES, default="all_reduce")
     cli.add_argument("--output-dir", required=True)
     cli.add_argument("--rendezvous", default="")
     cli.add_argument("--node-rank", type=int, default=0)
@@ -219,7 +225,10 @@ def main():
             with (rendezvous / ("rank-%d.claim" % args.node_rank)).open("x"):
                 pass
             claimed = True
-        record = prepare(args.suite, args.binary, output, json.loads(os.environ.get("HCU_BENCH_BUILD_CONFIG", "{}")), stopped)
+        settings = json.loads(os.environ.get("HCU_BENCH_BUILD_CONFIG", "{}"))
+        if args.suite == "rccl":
+            settings["rccl_collective"] = args.collective
+        record = prepare(args.suite, args.binary, output, settings, stopped)
         write_json(output / "prepared.json", record)
         if rendezvous:
             write_json(rendezvous / ("rank-%d.ready.json" % args.node_rank), {"ready": True})

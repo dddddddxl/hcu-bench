@@ -4,16 +4,16 @@
 
 ```bash
 cp configs/e2e-multi-model.template.yaml configs/bench.yaml
-cp model_scripts/sglang.template.sh model_scripts/model_a.local.sh
-cp model_scripts/vllm.template.sh model_scripts/model_b.local.sh
-# 修改两个启动脚本和 bench.yaml 的路径、卡号及测试参数
+# 在bench.yaml填写工作目录、仓库目录、两份本地权重路径和可用单卡
 bash bench.sh check -c configs/bench.yaml --suite e2e
 bash bench.sh e2e_acc       # 只测精度
 bash bench.sh e2e_perf      # 只测吞吐
 bash bench.sh e2e           # 两项都测
 ```
 
-不需要多个模型时，删除 `model_b` 及测试块中的对应引用。集成到其他 suite 时，把 `models` 和两个测试块合并进同一份 YAML，入口仍为 `bash bench.sh all`。
+默认模型是Qwen3-4B、Qwen3-8B，使用仓库中的两份通用BF16、TP1启动脚本，串行复用单卡。权重不下载，路径填入`vars.qwen3_4b_path`、`vars.qwen3_8b_path`。具体attention backend、显存比例等优化按目标节点验证后写入对应启动脚本；默认不强塞硬件专用开关，不改宿主机设置。
+
+两项测试默认`models: all`，按顶层`models`的声明顺序运行全部模型。新增模型只要在`models`下添加`start_script`，不用再改两份引用列表；也可继续写`models: [qwen3_4b]`只选指定模型。集成其他suite时，把模型和两个测试块放进同一YAML，入口仍为`bash bench.sh all`。旧个人配置不会自动迁移。
 
 `e2e` 是选择分组，不是新增的一轮测试。两项都启用时执行：模型 A 启动 → 精度 → 吞吐全部组合 → 清理 → 模型 B。只选择其中一项，就不会启动另一项。模型按所选测试块首次引用的顺序运行，同一会话内始终先精度后吞吐。
 
@@ -39,8 +39,10 @@ Bench 注入 `BENCH_HOST`（当前为 127.0.0.1）、`BENCH_PORT`、`BENCH_MODEL
 
 ```yaml
 models:
-  model_a:
-    start_script: model_scripts/model_a.local.sh
+  qwen3_4b:
+    start_script: model_scripts/qwen3_4b.sh
+    env:
+      BENCH_MODEL_PATH: /models/Qwen3-4B
     port: 30000
     startup_timeout_s: 1800
     # tokenizer_path: /models/your-model
@@ -49,6 +51,12 @@ models:
     # before_perf_script: model_scripts/reset-cache.local.sh
     # nodes: [node0]
     # container: existing_image
+  qwen3_8b:
+    start_script: model_scripts/qwen3_8b.sh
+    env:
+      BENCH_MODEL_PATH: /models/Qwen3-8B
+  another_model:               # 新模型只加这一段，启动命令放进自己的脚本。
+    start_script: model_scripts/another_model.local.sh
 ```
 
 脚本路径相对**执行环境的仓库根目录**解析，也可以使用绝对路径，不相对 YAML。`vars.bench_root` 必须指向目标仓库。SSH 或容器模式需要该仓库、脚本及权重在目标可见。
@@ -65,34 +73,43 @@ models:
 tests:
   accuracy:
     suite: e2e_acc
-    models: [model_a, model_b]
-    nodes: [node0]
-    timeout_s: 5400
-    params:
-      data_path: auto
-      num_examples: 100
-      num_shots: 5
-      num_threads: 128
-      max_tokens: 2048
-      min_score: ""
-  throughput:
-    suite: e2e_perf
-    models: [model_a, model_b]
+    models: all
     nodes: [node0]
     timeout_s: 14400
     params:
-      shapes: [[128, 128], [1024, 1024], [4096, 512]]
-      concurrency: [1, 8, 32]
+      data_path: auto
+      few_shot_path: auto
+      num_examples: 0
+      num_shots: 5
+      num_threads: 128
+      max_tokens: 2048
+      chat_template_kwargs: {enable_thinking: false}
+      min_score: ""
+  throughput:
+    suite: e2e_perf
+    models: all
+    nodes: [node0]
+    timeout_s: 172800
+    params:
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
       requests: 256
       warmup_requests: 32
-      repeats: 3
+      repeats: 1
       seed: 42
-      request_timeout_s: 600
-      extra_body: {}
+      request_timeout_s: 1800
+      extra_body: {chat_template_kwargs: {enable_thinking: false}}
       python: auto
 ```
 
-精度仍使用执行环境中 SGLang 0.5.12 的 GSM8K 评测接口，默认前 5 题作提示，随后 100 题评分。`num_examples: 0` 使用提示之外全部样本；`min_score: ""` 只报分数，非空字符串如 `"0.90"` 才判定阈值。只安装 vLLM 的镜像不保证具备这个精度客户端，可以先只跑 `e2e_perf`。
+精度使用执行环境中SGLang 0.5.12的GSM8K评测接口。新版模板默认`data_path: auto`、`few_shot_path: auto`、`num_examples: 0`：训练集前5题作为提示，test集1319题全部评分，不会少评5题；两份数据及许可随仓库提供，无需另拉代码或数据。可填自有`few_shot_path`，若提示问题与评分集重叠则拒绝运行。`num_examples`可选评分数量，`0`表示全量。
+
+为了兼容旧配置，未设置`few_shot_path`或设为空时仍沿用“同一文件前num_shots题作提示、剩余题评分”，此时内置test集5-shot的全量只有1314题。原生模型/评测默认值不偷偷改变，推荐从新版模板迁移。`min_score: ""`只报分数，不把参考表的vLLM历史成绩当成SGLang通过阈值。
+
+默认精度温度0、top_p=1、输出上限2048，精度和性能都显式请求`chat_template_kwargs.enable_thinking: false`。`--reasoning-parser qwen3`是服务解析设置，不等于关闭思考。新增模型沿用所选测试参数；其服务不支持对应请求字段时应调整YAML，不自动猜测模式。只安装vLLM的镜像不保证具备SGLang精度客户端，可先只跑`e2e_perf`。
 
 吞吐使用固定版 EvalScope 1.13.0 的 OpenAI 流式 chat 接口：
 
@@ -100,6 +117,7 @@ tests:
 | --- | --- |
 | `shapes` | 每对为目标输入 / 输出 token 数，不是字节或字符长度 |
 | `concurrency` | 每个测试点的最大并发；闭环请求，不按固定 QPS 发送 |
+| `workloads` | 每个长度单独指定并发列表，与`shapes`/`concurrency`二选一，避免无意补出表中没有的测试点 |
 | `requests` | 每个测试点的正式请求数，必须不少于最大并发 |
 | `warmup_requests` | 每点额外预热请求数；不计入正式指标 |
 | `repeats` | 每个长度 × 并发组合的测量轮次，不重复加载模型 |
@@ -108,7 +126,9 @@ tests:
 | `extra_body` | 该测试的附加请求字段，如框架支持的 `ignore_eos` 或思考模式；不覆盖模型名、prompt、stream、token 上限 |
 | `python` | `auto` 准备隔离客户端；也可填已安装 EvalScope 1.13.0 的解释器路径，只检查，不往该解释器安装 |
 
-示例产生每模型 3 × 3 × 3 = 27 个吞吐测试点。测试块的 `timeout_s` 是一个模型完成该测试全部点的总预算，模型启动另算 `startup_timeout_s`，客户端安装另算 `build.timeout_s`。模型测试不用外层 `matrix`、`repeats`、`duration_s`、`pack` 或 `adapter`。
+默认性能组合来自[月英性能数据的sglang llm表](https://kcnm6g5dkw5p.feishu.cn/sheets/PcLIsjCPOhMLRMtGVi9cCYRDnse?sheet=IpWVtW)（读取revision 2000）：BF16、TP1，每模型31点，不含并发256，128/128不含并发2。表没有给请求数、预热、轮数及EvalScope版本；256正式请求、32预热、1轮、固定客户端1.13.0是本次确认的配置，不宣称与原表原始命令完全一致。
+
+两个默认模型共62个性能点、15872个正式请求，完整扫描可能需要数小时以上，应安排足够的空闲窗口。模板的性能总故障时限是每模型48小时，并非要求连续压测48小时；单请求故障时限1800秒。可按环境调整，不影响请求数和测试组合。测试块`timeout_s`是该模型完成全部测试点的总预算，模型启动另算`startup_timeout_s`，客户端安装另算`build.timeout_s`。模型测试不用外层`matrix`、`repeats`、`duration_s`、`pack`或`adapter`。
 
 随机输入长度在 tokenizer 层生成，chat 模板、服务端计数及提前 EOS 可能使实际长度不同。结果同时记录目标长度与实际平均 token 数；对比性能时检查两者，以及缓存、思考模式、流式返回策略是否一致。`min_tokens` 等请求字段也需要目标服务支持。
 
@@ -128,7 +148,7 @@ TTFT/TPOT/ITL 单位为 ms，端到端请求延迟单位为 s。吞吐是正式�
 
 正式请求未全部成功、结果为空或缺少必要指标时，记录为无效/失败，不给出伪成功结论；仍保留原始结果。普通失败默认清理后继续；`failure_policy: stop` 停止后续项。服务退出、超时或取消都执行本次进程清理，清理无法确认则停止整个计划。模型会话失败时，已完成的子项指标仍保留，会话状态与测量状态分别列出。
 
-本次新增流水线以本地 CPU 测试验证编排和 HTTP 客户端，尚未完成真实 HCU 多模型性能验证；启动脚本模板不是经过目标模型实测的配方。本机 Windows 客户端验证使用同版本官方 wheel；源码包自动安装尚需在目标 Linux 环境复核。
+新默认模型和全量参数需在目标镜像验证。软件回归、原生评测器数据切分检查、HTTP客户端检查不等于已取得两模型1319题和31点完整实测结果；通用启动脚本也不宣称复现原表的硬件优化配置。部署参考见[Qwen3启动文档](https://github.com/HYGON-AI/inference-cookbook-das/blob/main/docs/model-deployment/sglang/qwen3.md)。
 
 ## 旧配置
 
