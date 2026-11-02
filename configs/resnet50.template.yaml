@@ -1,0 +1,28 @@
+# Run inside the prepared MIGraphX container; no Docker socket or container hook.
+version: 1
+name: resnet50-migraphx
+output_dir: /work/results
+failure_policy: stop
+vars:
+  bench_root: /workspace/hcu-bench
+  model: /models/resnet50-torch-fp32.onnx
+  numa_node: 0
+  hcus: [0] # Logical ID after isolating/verifying the intended physical device.
+nodes:
+  local:
+    executor: local
+    hcus: "${vars.hcus}"
+tests:
+  resnet50:
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [local]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      model: "${vars.model}"
+      numa_node: "${vars.numa_node}"
+    matrix:
+      recipe: [resnet50_fp16, resnet50_int8]
+      batch: [1, 32]

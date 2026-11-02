@@ -4,24 +4,18 @@ import csv
 import os
 from pathlib import Path
 import re
-import shutil
 import statistics
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from native_common import CleanupError, cancellation, cleanup_failure, emit, sha256, versions, write_json
 from fixed_common import claim_output, environment_record, execute, positive, single_device
+from testpacks.migraphx.dependencies import executable, shared_libraries
 
 RECIPES = ("resnet50_fp16", "resnet50_int8", "bert_large_fp16")
 ROUNDS, ITERATIONS = 3, 20
 NUMBER = r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
-
-
-def executable(value):
-    path = shutil.which(value)
-    if not path:
-        raise ValueError(f"Prepared executable is missing: {value}")
-    return str(Path(path).resolve())
 
 
 def command(args):
@@ -45,7 +39,7 @@ def validate(args, env):
     args.model = str(Path(args.model).resolve())
     if not Path(args.model).is_file():
         raise ValueError("Local ONNX model missing; no model is downloaded")
-    args.binary, args.numactl = executable(args.binary), executable(args.numactl)
+    args.binary, args.numactl = executable(args.binary, env), executable(args.numactl, env)
     if args.recipe == "bert_large_fp16":
         if not args.rocblas_dir or not (Path(args.rocblas_dir) / "lib").is_dir():
             raise ValueError("BERT requires rocblas_dir with the matching prepared lib directory")
@@ -53,6 +47,7 @@ def validate(args, env):
         env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     elif args.rocblas_dir:
         raise ValueError("rocblas_dir is only part of the BERT recipe")
+    shared_libraries(args.binary, env)
     return env
 
 
