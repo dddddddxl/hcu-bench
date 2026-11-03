@@ -126,7 +126,7 @@ class BertPublicEntrypoint(unittest.TestCase):
         result = subprocess.run(["bash", str(ROOT / "bench.sh"), str(path), "migraphx", "--quiet"],
                                 cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, timeout=60)
-        runs = list((self.root / "results").iterdir())
+        runs = [path for path in (self.root / "results").iterdir() if (path / "state.json").is_file()]
         self.assertEqual(len(runs), 1, result.stdout)
         return result, runs[0]
 
