@@ -15,6 +15,7 @@ nodes:
     hcus: "${vars.hcus}"
 tests:
   bert_large:
+    enabled: false # 标准 SGLang 镜像没有 MIGraphX driver；兼容环境中准备模型后开启。
     suite: migraphx
     adapter: command
     pack: ../testpacks/migraphx/manifest.yaml

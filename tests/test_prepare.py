@@ -204,7 +204,8 @@ class PreparationStageTests(unittest.TestCase):
             self.assertEqual(agent.run(self.spec)["status"], "failed")
 
     def test_container_prepares_inside_only_and_allows_build_budget(self):
-        plan = make_plan(str(ROOT / "configs/managed-container.template.yaml"), "memory")
+        plan = make_plan(str(ROOT / "configs/managed-container.template.yaml"), "memory",
+                         ["tests.memory_bandwidth.enabled=true"])
         case = plan.cases[0]
         outer = CommandAdapter().build(plan, case, case.nodes[0], Path(self.spec["work_dir"]) / "run")
         inner = json.loads(base64.b64decode(outer["argv"][-1]))

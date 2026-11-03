@@ -39,7 +39,7 @@ tests:
     matrix:
       dtype: [fp32, fp16]
   gemm:
-    enabled: true
+    enabled: false # 标准 SGLang 镜像的 rocblas-bench 接口不匹配；匹配工具及误差标准后开启。
     suite: operators
     adapter: command
     pack: ../testpacks/operators/numeric/manifest.yaml
@@ -65,7 +65,21 @@ tests:
       bench_root: "${vars.bench_root}"
       native_timeout_s: 1800
     matrix:
-      recipe: [pa_decode, fa_fp16_forward, fa_fp8_forward]
+      recipe: [pa_decode, fa_fp16_forward]
+    env:
+      BENCH_IMAGE: "${vars.image}"
+  fa_fp8_performance:
+    enabled: false # 标准 SGLang 镜像的 FP8 扩展接口不匹配；准备匹配的 FA 扩展后开启。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [node0]
+    container: operators
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: fa_fp8_forward
+      native_timeout_s: 1800
     env:
       BENCH_IMAGE: "${vars.image}"
   operator_stress:

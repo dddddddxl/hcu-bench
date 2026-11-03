@@ -96,7 +96,7 @@ class BertRuntimeTests(unittest.TestCase):
         self.assertIn("empty", json.loads((output / "assessment.json").read_text())["error"])
 
     def test_bert_template_has_two_batches_and_no_required_override(self):
-        plan = make_plan(str(ROOT / "configs/bert.template.yaml"), "migraphx")
+        plan = make_plan(str(ROOT / "configs/bert.template.yaml"), "migraphx", ["tests.bert_large.enabled=true"])
         self.assertEqual(len(plan.cases), 2)
         self.assertEqual({case.params["batch"] for case in plan.cases}, {1, 32})
         self.assertTrue(all(case.params["recipe"] == "bert_large_fp16" for case in plan.cases))

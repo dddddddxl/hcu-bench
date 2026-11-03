@@ -113,6 +113,7 @@ class BertPublicEntrypoint(unittest.TestCase):
         config["output_dir"] = str(self.root / "results")
         config["vars"].update(bench_root=str(ROOT), model=str(self.model))
         test = config["tests"]["bert_large"]
+        test["enabled"] = True
         test["pack"] = str(ROOT / "testpacks/migraphx/manifest.yaml")
         test["params"].update(binary=str(self.driver), numactl=str(self.numactl))
         if fail:

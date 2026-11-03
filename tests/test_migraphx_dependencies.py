@@ -45,7 +45,7 @@ class DiscoveryTests(unittest.TestCase):
                 dep.executable(dep.DRIVER)
 
     def test_resnet_template_selects_only_four_resnet_cases(self):
-        plan = make_plan(str(ROOT / "configs/resnet50.template.yaml"), "migraphx")
+        plan = make_plan(str(ROOT / "configs/resnet50.template.yaml"), "migraphx", ["tests.resnet50.enabled=true"])
         self.assertEqual(len(plan.cases), 4)
         self.assertEqual({case.params["recipe"] for case in plan.cases}, {"resnet50_fp16", "resnet50_int8"})
         self.assertTrue(all(case.container is None for case in plan.cases))

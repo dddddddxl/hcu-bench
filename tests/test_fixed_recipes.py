@@ -43,7 +43,10 @@ class FixedTemplates(unittest.TestCase):
             for config, count, suite in (("operators", 11, "operators"), ("migraphx", 6, "migraphx")):
                 overrides = ["vars.image=registry.example/test@sha256:fixture"]
                 if config == "operators":
-                    overrides += ["tests.operator_stress.enabled=true"]
+                    overrides += ["tests.operator_stress.enabled=true", "tests.gemm.enabled=true",
+                                  "tests.fa_fp8_performance.enabled=true"]
+                else:
+                    overrides += ["tests.resnet50.enabled=true", "tests.bert_large.enabled=true"]
                 plan = make_plan(str(ROOT / f"configs/{config}.template.yaml"), overrides=overrides)
                 self.assertEqual(len(plan.cases), count)
                 self.assertEqual({c.suite for c in plan.cases}, {suite})
@@ -55,7 +58,7 @@ class FixedTemplates(unittest.TestCase):
 
     def test_migraphx_selection_is_separate_from_e2e(self):
         config = str(ROOT / "configs/migraphx.template.yaml")
-        plan = make_plan(config, "migraphx")
+        plan = make_plan(config, "migraphx", ["tests.resnet50.enabled=true", "tests.bert_large.enabled=true"])
         self.assertEqual(len(plan.cases), 6)
         self.assertEqual({c.suite for c in plan.cases}, {"migraphx"})
         with self.assertRaisesRegex(BenchError, "No enabled tests"):
@@ -82,7 +85,7 @@ class FixedTemplates(unittest.TestCase):
         for override in ("tests.resnet50.matrix.batch=[2]", "tests.resnet50.matrix.recipe=[resnet50_fp32]",
                          "tests.resnet50.duration_s=10", "tests.resnet50.params.rounds=1"):
             with self.subTest(override=override), self.assertRaises(BenchError):
-                make_plan(config, overrides=[override])
+                make_plan(config, overrides=["tests.resnet50.enabled=true", override])
 
     def test_native_source_hashes_and_safe_adaptations(self):
         provenance = json.loads((op.ROOT / "provenance.json").read_text(encoding="utf-8"))

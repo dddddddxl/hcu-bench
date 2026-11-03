@@ -10,7 +10,7 @@
 cp configs/memory.template.yaml configs/bench.yaml
 ```
 
-改 YAML 中的工作目录、仓库路径和 `hcus`，`memory_binary: auto` 保持默认，然后：
+改 YAML 中的工作目录、仓库路径和 `hcus`，`memory_binary: auto` 保持默认。确认 hcu-stream 工具链匹配后，将 `tests.memory_bandwidth.enabled` 从 `false` 改为 `true`，然后：
 
 ```bash
 bash bench.sh check -c configs/bench.yaml --suite memory
@@ -19,7 +19,7 @@ bash bench.sh memory
 
 `check` 只检查配置，不会检查远端二进制、占卡或启动负载。运行前自行确认所选卡空闲、编译架构与设备匹配。Python 3.10+、PyYAML、psutil 及原生运行库须已有，不会自动安装。
 
-综合容器模板已加入 memory，填写 `memory_binary`、`memory_hcus` 后，`bash bench.sh all` 会按 YAML 顺序一起运行。旧配置不会被覆盖，需补入这两个变量和 `memory_bandwidth` 测试块；暂不测可设置 `enabled: false`。SSH 和自动创建容器仍使用现有接口，输入路径必须在执行环境内可见。
+综合容器模板保留 memory 配置但默认关闭，因为当前 gfx938 标准 SGLang 镜像构建未通过。匹配环境中填写 `memory_binary`、`memory_hcus` 并启用后，`bash bench.sh all` 才会一起运行。旧个人配置不会被覆盖。SSH 和自动创建容器仍使用现有接口，输入路径必须在执行环境内可见。
 
 ### 尚未编译时
 

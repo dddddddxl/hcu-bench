@@ -41,6 +41,10 @@ def build_e2e_report(store, state):
         writer.writerows(rows)
     columns = ["model", "suite", "input_tokens", "output_tokens", "concurrency", "repeat", "measurement_status",
                "gsm8k_accuracy_mean (ratio)", "output_throughput_mean (tok/s)", "ttft_p99 (ms)", "case_status"]
+    if any(row.get("profile") in ("tp1", "tp4") and "pixel_total_time_value (s)" in row for row in rows):
+        columns += ["profile", "size", "num_frames", "num_inference_steps", "pixel_total_time_value (s)",
+                    "denoise_time_value (s)", "denoise_step_time_value (s)", "decode_time_value (s)",
+                    "api_inference_time_value (s)"]
     def cell(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
     lines = ["# End-to-End Results", "", "Separate rows per workload/repeat; see e2e.csv for all metrics and failures.", "",

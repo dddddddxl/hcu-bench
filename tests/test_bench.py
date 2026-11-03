@@ -136,13 +136,13 @@ class ConfigurationTests(Fixture):
             with self.subTest(name=name):
                 plan = make_plan(str(ROOT / "configs" / name))
                 self.assertEqual([case.suite for case in plan.cases],
-                                 ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
+                                 ["rccl"] + ["operators"] * 2 + ["rccl"] * 9 + ["pcie", "deepep", "e2e", "e2e"])
                 self.assertTrue(all(case.container == container for case in plan.cases))
                 for case in plan.cases:
                     self.assertEqual(case.duration_s, 600 if case.suite == "deepep" else None)
                 self.assertEqual(plan.nodes["node0"]["gpus"], list(range(8)))
                 with patch("subprocess.Popen", side_effect=AssertionError("preview must not execute")):
-                    self.assertEqual(preview(plan)["case_count"], 20)
+                    self.assertEqual(preview(plan)["case_count"], 16)
 
     def test_variable_based_configuration_executes(self):
         self.data["vars"] = {"samples": 1, "output": "variable-results"}

@@ -1,5 +1,5 @@
 # 仅测单卡显存/缓存/LDS 带宽；在已有容器内执行，所有路径填容器内绝对路径。
-# 复制为 configs/bench.yaml，改 vars 后 bash bench.sh memory。
+# 确认工具链匹配后，将 memory_bandwidth.enabled 改为 true，再 bash bench.sh memory。
 version: 1
 name: memory-bandwidth
 failure_policy: continue
@@ -23,6 +23,7 @@ nodes:
       HIP_VISIBLE_DEVICES: "${hcu_ids}"
 tests:
   memory_bandwidth:
+    enabled: false # 标准 SGLang 镜像未跑通此构建；匹配 hcu-stream/AICC 后手动开启。
     suite: memory
     adapter: command
     pack: ../testpacks/memory/manifest.yaml

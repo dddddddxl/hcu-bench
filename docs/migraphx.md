@@ -19,6 +19,7 @@ BERT 的默认路径使用当前运行环境的 rocBLAS，不要求另找外置�
 ```bash
 cp configs/migraphx.template.yaml configs/bench.yaml
 # 编辑镜像、模型/调优库路径、NUMA、唯一目标卡和容器 hook。
+# 原生环境准备好后，将 tests.resnet50.enabled 和 tests.bert_large.enabled 改成 true。
 bash bench.sh check -c configs/bench.yaml --suite migraphx
 bash bench.sh plan -c configs/bench.yaml --suite migraphx
 bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE

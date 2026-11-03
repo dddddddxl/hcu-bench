@@ -6,6 +6,8 @@
 
 在已有 Linux 容器内复制 `configs/numeric-operators.template.yaml` 为 `configs/bench.yaml`，填写仓库、输出目录及允许使用的卡，然后执行 `bash bench.sh operators`。综合容器模板也已包含这两项；已有个人 YAML 需要手动合并对应测试块。
 
+GEMM 默认关闭：当前标准 SGLang 镜像的原生接口与配方不匹配。准备好对应 profile 的工具及数值标准后，将 `tests.gemm.enabled` 改为 `true`。PA/FA 模板中的 FP8 也独立为 `fa_fp8_performance`，默认关闭；PA、FA FP16 保持启用。
+
 | recipe | 精度 | 用例范围 | 原生工具 |
 | --- | --- | --- | --- |
 | `conv` | fp32 / fp16 | Conv2D 13 项、Conv3D 15 项，含普通/分组/Depthwise、前向/dgrad/wgrad；共 56 组精度配置 | 镜像已有 MIOpenDriver |
@@ -27,16 +29,16 @@ GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段使�
 
 ```bash
 # 默认新版
-bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.gemm_profile=new
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.gemm_profile=new
 # 显式旧版
-bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.gemm_profile=legacy
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.gemm_profile=legacy
 ```
 
 独立附件入口保存在 `vendor/operator-cases/gemm`：默认 `run_gemm_cases.py`，旧版 `run_gemm_cases_legacy.py`；`commands/new_check.sh`、`new_perf.sh`、`legacy_check.sh`、`legacy_perf.sh` 分别覆盖三种精度。完整说明见 [RUNNING.txt](../vendor/operator-cases/gemm/RUNNING.txt)。独立脚本的perf需人工先审核check日志；上面的 hcu-bench perf入口会自动先check，再决定是否计时。
 
 ```bash
 bash bench.sh operators --set tests.conv.params.mode=check --set tests.gemm.params.mode=check
-bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.params.group=batched
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.group=batched
 ```
 
 ## 配置与执行

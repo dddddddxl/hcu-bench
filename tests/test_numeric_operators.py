@@ -106,7 +106,8 @@ class NumericTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["correctness"], "not_checked")
 
     def test_template_has_five_dtype_sweeps(self):
-        plan = make_plan(str(ROOT / "configs/numeric-operators.template.yaml"), "operators")
+        plan = make_plan(str(ROOT / "configs/numeric-operators.template.yaml"), "operators",
+                         ["tests.gemm.enabled=true"])
         self.assertEqual(len(plan.cases), 5)
         self.assertEqual({(c.params["recipe"], c.params["dtype"]) for c in plan.cases},
                          {("conv", "fp32"), ("conv", "fp16"), ("gemm", "fp32"), ("gemm", "fp16"), ("gemm", "bf16")})
@@ -178,5 +179,5 @@ class NumericTests(unittest.TestCase):
 
     def test_profile_is_forwarded_by_manifest(self):
         plan = make_plan(str(ROOT / "configs/numeric-operators.template.yaml"), "operators",
-                         ["tests.conv.enabled=false", "tests.gemm.params.gemm_profile=legacy"])
+                         ["tests.conv.enabled=false", "tests.gemm.enabled=true", "tests.gemm.params.gemm_profile=legacy"])
         self.assertTrue(all(c.params["gemm_profile"] == "legacy" for c in plan.cases))

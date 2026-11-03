@@ -31,6 +31,7 @@ containers:
     hook_timeout_s: 120
 tests:
   resnet50:
+    enabled: false # 标准 SGLang 镜像没有 MIGraphX driver；切换兼容环境并准备模型后开启。
     suite: migraphx
     adapter: command
     pack: ../testpacks/migraphx/manifest.yaml
@@ -47,6 +48,7 @@ tests:
     env:
       BENCH_IMAGE: "${vars.image}"
   bert_large:
+    enabled: false # 同上；BERT 的运行库可用性须在目标环境检查。
     suite: migraphx
     adapter: command
     pack: ../testpacks/migraphx/manifest.yaml

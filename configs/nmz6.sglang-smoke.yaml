@@ -1,0 +1,332 @@
+# nmz6 单机功能短测；在一个已经创建好的 8 卡容器内执行。
+# 适用镜像：标准 SGLang 0.5.12 daily 20260909-0006；RCCL 需已合入 PR #4。
+# memory、MIGraphX、GEMM、FA FP8 默认关闭；Mooncake 因缺第二节点关闭。
+# 不安装/替换框架，不改频率；缺依赖、原生错误或错误校验不算通过。
+# 示例挂载 /home/github/dxl -> /workspace；仓库须位于 /workspace/hcu-bench，实际映射须核对。
+# 网卡/GID、PCIe ID 是 nmz6 历史实查值，开测前在当前容器复核。
+# 先确认宿主机没有正在执行的 CI 或其他业务占卡；YAML 不会为你预约节点。
+# 使用：复制为 configs/bench.yaml 后 bash bench.sh all；或直接指定本文件运行。
+version: 1
+name: nmz6-sglang-smoke
+failure_policy: continue
+
+vars:
+  bench_root: /workspace/hcu-bench          # 必核对：当前仓库路径，不能沿用旧测试目录。
+  workspace: /workspace/bench-output       # 必核对：当前用户可写，日志与首次构建缓存保存于此。
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # 容器必须实际开放这 8 张物理卡，不只是在 YAML 填 8 个号。
+  single_hcu: [0]                         # 算子、memory、MIGraphX 与模型测试逐项复用此卡。
+  rccl_ranks: 8
+  num_processes: 8
+  iface: ens65f0np0                        # nmz6 历史 IP 为 12.12.12.102；核对当前网络。
+  ib_hca: mlx5_0                           # nmz6 历史映射：mlx5_0 port 1 -> ens65f0np0。
+  gid: "3"                                # 对应上述 IPv4 的 RoCE v2 GID index，不是 GID 地址。
+  pcie_cpu_devices: "0,1"
+  pcie_hcu_devices: "2,3,4,5,6,7,8,9"     # rocm-bandwidth-test -e 的编号，不是 HIP 卡号。
+  memory_hcus: "0"
+  memory_model_mhz: 1400                   # 原始 MODEL 换算参数，不锁频；比较带宽时保持参数口径一致。
+  numa_node: 0                            # HCU0 历史对应 NUMA0；改卡时一起核对。
+  gemm_profile: new                        # rocBLAS 5.2.0 用 new，4.3.0 须改 legacy；不自动换库。
+  duration_s: 600
+  qwen3_4b_path: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B
+  qwen3_8b_path: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-8B
+  # 上述模型路径来自集群已用共享路径；当前容器须已挂载且分片齐全。
+  resnet50_model: /public/opendas/ArchivedFile/temp/share_liulc/yytest/resnet50_dynamic_batch.onnx
+  bert_model: /public/opendas/ArchivedFile/temp/share_liulc/shaobobu/bert-large-uncased-squad-v2-opt-mha-384.onnx
+  # 两个 ONNX 都位于 ArchivedFile，仅挂载 DL_DATA 不够；未挂载时明确报告文件缺失。
+  rocblas_dir: ""                          # BERT 使用运行环境默认库；需要 PR #8 修复。
+
+build:
+  dtk_root: /opt/dtk                       # 镜像真实 DTK 根目录，不存在就修改，不创建假目录。
+  mpi_home: /opt/mpi                       # 镜像真实 Open MPI 根目录；缺失时 RCCL 报错。
+  arch: auto
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2
+  timeout_s: 3600                          # 首次编译时限，不是实际压测时长。
+
+output_dir: "${vars.workspace}/results"
+
+nodes:
+  all_cards:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+  one_card:
+    executor: local
+    hcus: "${vars.single_hcu}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+
+models:
+  qwen3_4b:
+    start_script: ./model_scripts/qwen3_4b.sh
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_4b_path}"
+    tokenizer_path: "${vars.qwen3_4b_path}"
+    port: 30903
+    startup_timeout_s: 1800
+  qwen3_8b:
+    start_script: ./model_scripts/qwen3_8b.sh
+    env:
+      BENCH_MODEL_PATH: "${vars.qwen3_8b_path}"
+    tokenizer_path: "${vars.qwen3_8b_path}"
+    port: 30903                           # 两模型串行，共用空闲端口；不是同时起两个服务。
+    startup_timeout_s: 1800
+
+tests:
+  rccl_collectives:
+    enabled: true
+    suite: rccl
+    adapter: command
+    pack: ../testpacks/rccl/manifest.yaml
+    nodes: [all_cards]
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto
+      ranks: "${vars.rccl_ranks}"
+      # 省略消息大小，按仓库默认固定 16 GiB；需要覆盖时同时填写两项（字节）。
+      # min_bytes: 17179869184
+      # max_bytes: 17179869184
+      step_factor: 2
+      datatype: half
+      warmup_iters: 5
+      iters: 20
+    matrix:
+      collective: [all_reduce, all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]
+    env:
+      OMPI_ALLOW_RUN_AS_ROOT: "1"
+      OMPI_ALLOW_RUN_AS_ROOT_CONFIRM: "1"
+      NCCL_IB_DISABLE: "1"                # 单机 RCCL，不把结果当跨机 RDMA 带宽。
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      NCCL_IB_HCA: "${vars.ib_hca}"
+
+  pcie_bandwidth:
+    enabled: true
+    suite: pcie
+    adapter: command
+    pack: ../testpacks/pcie/manifest.yaml
+    nodes: [all_cards]
+    timeout_s: 1800
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto
+      cpu_devices: "${vars.pcie_cpu_devices}"
+      hcu_devices: "${vars.pcie_hcu_devices}"
+      size_mib: 512
+      iters: 20
+
+  memory_bandwidth:
+    enabled: false # gfx938/AICC 原生构建尚未兼容；不自动更换工具链。
+    suite: memory
+    adapter: command
+    pack: ../testpacks/memory/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1800
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto
+      devices: "${vars.memory_hcus}"
+      presets: both                       # 24 项，单张 HCU0；不是 8 卡显存带宽全覆盖。
+      model_mhz: "${vars.memory_model_mhz}"
+      array_size: 104857600
+
+  deepep_pressure:
+    enabled: true
+    suite: deepep
+    adapter: command
+    pack: ../testpacks/deepep/manifest.yaml
+    nodes: [all_cards]
+    duration_s: "${vars.duration_s}"
+    timeout_s: 3600
+    params:
+      bench_root: "${vars.bench_root}"
+      test_script: auto                    # 缺 DeepEP 或接口不兼容就报错，不屏蔽原生断言。
+      master_addr: 127.0.0.1
+      master_port: 29450
+      num_processes: "${vars.num_processes}"
+      num_tokens: 128
+      hidden: 7168
+      num_topk: 8
+      num_experts: 256
+    env:
+      ROCSHMEM_HEAP_SIZE: "4737418240"
+      HIP_BUFFER_EXTRA_SIZE: "0"
+      NCCL_IB_DISABLE: "1"
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
+      ROCSHMEM_IB_GID_INDEX: "${vars.gid}"
+
+  conv_fp32_smoke:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      dtype: fp32
+      mode: perf
+      case_id: conv2d-row001-F1-fp32        # 功能短测：原始 CSV 第 1 项前向，不是 56 组全覆盖。
+      warmup: 2
+      iters: 10
+      repeats: 1
+      native_timeout_s: 1800
+
+  conv_fp16_smoke:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      dtype: fp16
+      mode: perf
+      case_id: conv2d-row001-F1-fp16
+      warmup: 2
+      iters: 10
+      repeats: 1
+      native_timeout_s: 1800
+
+  gemm_smoke:
+    enabled: false # 当前 SGLang rocblas-bench 与配方接口不匹配，先准备匹配工具。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      gemm_profile: "${vars.gemm_profile}"
+      mode: perf
+      case_id: square-1024                 # 单个 1024 方阵；保留三种精度。
+      max_norm_error: ""                   # 未批准非零阈值；误差非零时不跑性能，不算通过。
+      warmup: 2
+      iters: 10
+      repeats: 1
+      native_timeout_s: 1800
+    matrix:
+      dtype: [fp32, fp16, bf16]
+
+  operator_performance:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      native_timeout_s: 1800
+    matrix:
+      recipe: [pa_decode, fa_fp16_forward]
+
+  fa_fp8_performance:
+    enabled: false # FP8 扩展接口不匹配，修复并核实后单独开启，不影响 PA/FA FP16。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: fa_fp8_forward
+      native_timeout_s: 1800
+
+  operator_stress_smoke:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      native_timeout_s: 1800
+      stress_iterations: 100               # 明确为 smoke，不是正式百万次压力通过。
+    matrix:
+      recipe: [blas_fp16_stress, fa_fp16_stress, fa_bf16_stress]
+
+  resnet50:
+    enabled: false # 标准 SGLang 镜像没有 MIGraphX driver；专用镜像中准备模型后开启。
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      model: "${vars.resnet50_model}"
+      numa_node: "${vars.numa_node}"
+    matrix:
+      recipe: [resnet50_fp16, resnet50_int8]
+      batch: [1, 32]
+
+  bert_large:
+    enabled: false # 同上；支持 PR #8 的默认 rocBLAS，不代表镜像已安装 MIGraphX。
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [one_card]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: bert_large_fp16
+      model: "${vars.bert_model}"
+      numa_node: "${vars.numa_node}"
+      rocblas_dir: "${vars.rocblas_dir}"
+    matrix:
+      batch: [1, 32]
+
+  gsm8k_smoke:
+    enabled: true
+    suite: e2e_acc
+    models: all
+    nodes: [one_card]
+    timeout_s: 3600
+    params:
+      data_path: auto
+      few_shot_path: auto
+      num_examples: 100                    # 100 题短测；不是全部 1319 题。
+      num_shots: 5
+      max_tokens: 2048
+      chat_template_kwargs: {enable_thinking: false}
+      min_score: ""                       # 只报告分数。
+
+  throughput_smoke:
+    enabled: true
+    suite: e2e_perf
+    models: all
+    nodes: [one_card]
+    timeout_s: 7200                        # 每模型整个吞吐任务的上限；完成即结束，不跑满 2 小时。
+    params:
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 8]}
+        - {input_tokens: 1024, output_tokens: 128, concurrency: [1, 8]}
+      requests: 32                        # 每模型 4 点，每点 32 正式请求、8 预热、1 轮。
+      warmup_requests: 8
+      repeats: 1
+      request_timeout_s: 600
+      extra_body: {chat_template_kwargs: {enable_thinking: false}}
+
+  mooncake_not_scheduled:
+    enabled: false                        # 用户明确本轮关闭；all 不会执行，也不会伪造一条通过结果。
+    suite: mooncake
+    adapter: command
+    pack: ../testpacks/mooncake/manifest.yaml
+    nodes: [all_cards]                    # 这里只标明未安排，不能直接改 enabled=true 当双机配置使用。
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      shared_dir: ""                      # 启用前须配置两台节点共同可写目录及对应节点列表。
+      addresses: ""                       # 启用前按 target/initiator 顺序填写实际通信 IP。
+      topology: pair
+      duration: 180
+      hcu_id: 0
+      min_bandwidth_gbps: ""

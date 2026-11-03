@@ -1,0 +1,52 @@
+version: 1
+id: e2e_perf.wan-video
+suite: e2e_perf
+duration_control: native
+max_nodes: 1
+parameters:
+  bench_root: {type: string, required: true}
+  start_script: {type: string, default: model_scripts/wan22_t2v.sh}
+  model_path: {type: string, required: true}
+  profile: {type: string, default: tp1, choices: [tp1, tp4]}
+  request: {type: object, default: {}}
+  warmup_requests: {type: integer, default: 1, min: 0, max: 100}
+  requests: {type: integer, default: 1, min: 1, max: 100}
+  port: {type: integer, default: 30005, min: 1, max: 65535}
+  startup_timeout_s: {type: integer, default: 1800, min: 1}
+  request_timeout_s: {type: integer, default: 7200, min: 1}
+command:
+  - python3
+  - -u
+  - "${p_bench_root}/testpacks/wan/run.py"
+  - --start-script
+  - "${p_start_script}"
+  - --model-path
+  - "${p_model_path}"
+  - --profile
+  - "${p_profile}"
+  - --request-json
+  - "${p_request}"
+  - --warmup-requests
+  - "${p_warmup_requests}"
+  - --requests
+  - "${p_requests}"
+  - --port
+  - "${p_port}"
+  - --startup-timeout-s
+  - "${p_startup_timeout_s}"
+  - --request-timeout-s
+  - "${p_request_timeout_s}"
+  - --hcu-ids
+  - "${hcu_ids}"
+  - --nnodes
+  - "${nnodes}"
+  - --node-rank
+  - "${node_rank}"
+  - --output-dir
+  - "${case_dir}"
+cwd: "${case_dir}"
+env: {}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv", "${case_dir}/requests/*.json", "${case_dir}/videos/*.mp4", "${case_dir}/native-perf/*.log"]
+artifact_limit_mb: 500
