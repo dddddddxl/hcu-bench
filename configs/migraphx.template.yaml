@@ -4,7 +4,8 @@ name: fixed-migraphx-models
 output_dir: ../runs
 failure_policy: stop
 vars:
-  image: YOUR_APPROVED_MIGRAPHX_IMAGE # 可通过 --set vars.image=... 替换，不内置镜像地址。
+  # Verified native-tool image; Python onnx still needs .[migraphx]. See docs/migraphx.md.
+  image: harbor.sourcefind.cn:5443/dcu/admin/base/migraphx@sha256:bf6e6a8d8d7d124dbba7cf49eb598415d0e10f6bdb5901eb2d8199ee2deea360
   container_hook: /YOUR_HOST_SCRIPTS/container.sh
   host_workspace: /YOUR_HOST_WORKSPACE
   container_workspace: /work/bench-runs

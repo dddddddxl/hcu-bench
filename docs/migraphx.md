@@ -2,6 +2,8 @@
 
 来源为用户补充的飞书模型页面配方。两种模型均通过 MIGraphX 原生 `perf` 入口执行，使用独立的 `migraphx` suite，不属于 `e2e` 分组，不启动 HTTP 服务、不使用 `models` 服务字段。
 
+首次使用、提示缺少 `migraphx-driver` 时，按 [专用镜像与新容器准备步骤](migraphx-setup.md) 操作。已提供包含 MIGraphX 5.2.0 / DTK 26.04 原生工具的镜像 tag/digest；仍需安装本工具的 Python extras。任意 Torch 镜像并不保证具备此运行环境。
+
 | recipe | ONNX 输入 | batch | 精度 / 编译参数 |
 | --- | --- | --- | --- |
 | `resnet50_fp16` | `[batch,3,224,224]` FP32 | 1、32 | `--fp16 --opt-compile --gpu` |
@@ -36,6 +38,8 @@ bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE
 | `params.round_timeout_s` | 每轮故障时限，默认 600 秒；外层默认 2100 秒 |
 
 环境需已有 Python 3.10+、PyYAML、psutil、onnx、numactl、migraphx-driver；FP16 ResNet50 需要支持 `--opt-compile`。仓库提供可选 Python 依赖组 `.[migraphx]` 供镜像准备阶段使用，运行时不安装依赖。
+
+`.[migraphx]` 不安装原生 MIGraphX/DTK。目标容器中可运行 `python3 testpacks/migraphx/check.py --recipe resnet50_fp16` 先检查包、可执行文件、共享库与 help flags；它与框架的静态 `bench check` 不同，但也不替代 GPU/模型实测。执行脚本会自动发现 PATH 外的标准 DTK/ROCm driver，并在开始测量前检查缺失的动态库；显式 binary 覆盖保持严格。
 
 执行前用 ONNX 元数据验证输入名、类型和形状；动态 batch 使用请求值，静态 batch 必须与配置一致。只接受自包含 ONNX，外部权重会明确报错，避免仅记录图文件哈希而漏掉权重。BERT 只在本次子进程中向 `LD_LIBRARY_PATH` 前置 `<rocblas_dir>/lib`，不修改宿主配置。`lib` 内的目录软链接会因指纹覆盖不完整而报错，应提供完整的调优库目录树；文件软链接记录目标内容哈希。
 
