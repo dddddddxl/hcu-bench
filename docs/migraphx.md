@@ -4,6 +4,8 @@
 
 首次使用、提示缺少 `migraphx-driver` 时，按 [专用镜像与新容器准备步骤](migraphx-setup.md) 操作。已提供包含 MIGraphX 5.2.0 / DTK 26.04 原生工具的镜像 tag/digest；仍需安装本工具的 Python extras。任意 Torch 镜像并不保证具备此运行环境。
 
+BERT 的默认路径使用当前运行环境的 rocBLAS，不要求另找外置调优库；仅在明确复现特定外置库基线时设置 `rocblas_dir`。BERT 单独运行及输入要求见 [BERT 配方](bert.md)。
+
 | recipe | ONNX 输入 | batch | 精度 / 编译参数 |
 | --- | --- | --- | --- |
 | `resnet50_fp16` | `[batch,3,224,224]` FP32 | 1、32 | `--fp16 --opt-compile --gpu` |
@@ -32,7 +34,7 @@ bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE
 | `vars.resnet50_model` | `resnet50-torch-fp32.onnx` 的容器内路径 |
 | `vars.bert_model` | `bert-large-uncased-squad-v2-opt-mha-384.onnx` 的容器内路径 |
 | `vars.numa_node` | 目标卡对应的 CPU / memory NUMA 节点 |
-| `vars.rocblas_dir` | BERT 匹配的调优库目录，必须含非空 `lib` |
+| `vars.rocblas_dir` | 可选 BERT 外置库目录；空表示使用当前运行环境，非空必须含非空 `lib` |
 | `vars.hcus` | 经核实的单个执行环境内 HIP 编号；单卡隔离容器通常为 `[0]` |
 | `params.binary` / `params.numactl` | 默认从 PATH 查找，也可填已有可执行文件路径 |
 | `params.round_timeout_s` | 每轮故障时限，默认 600 秒；外层默认 2100 秒 |
@@ -41,7 +43,7 @@ bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE
 
 `.[migraphx]` 不安装原生 MIGraphX/DTK。目标容器中可运行 `python3 testpacks/migraphx/check.py --recipe resnet50_fp16` 先检查包、可执行文件、共享库与 help flags；它与框架的静态 `bench check` 不同，但也不替代 GPU/模型实测。执行脚本会自动发现 PATH 外的标准 DTK/ROCm driver，并在开始测量前检查缺失的动态库；显式 binary 覆盖保持严格。
 
-执行前用 ONNX 元数据验证输入名、类型和形状；动态 batch 使用请求值，静态 batch 必须与配置一致。只接受自包含 ONNX，外部权重会明确报错，避免仅记录图文件哈希而漏掉权重。BERT 只在本次子进程中向 `LD_LIBRARY_PATH` 前置 `<rocblas_dir>/lib`，不修改宿主配置。`lib` 内的目录软链接会因指纹覆盖不完整而报错，应提供完整的调优库目录树；文件软链接记录目标内容哈希。
+执行前用 ONNX 元数据验证输入名、类型和形状；动态 batch 使用请求值，静态 batch 必须与配置一致。只接受自包含 ONNX，外部权重会明确报错，避免仅记录图文件哈希而漏掉权重。BERT 仅在指定非空 `rocblas_dir` 时，向本次子进程的 `LD_LIBRARY_PATH` 前置 `<rocblas_dir>/lib`；未指定则保持环境原样，不修改宿主配置。显式指定但缺失或为空的目录仍失败，不静默退回默认库。`lib` 内的目录软链接会因指纹覆盖不完整而报错，应提供完整的目录树；文件软链接记录目标内容哈希。
 
 ## 原生命令
 
@@ -59,6 +61,8 @@ numactl --cpubind="$NUMA_NODE" --membind="$NUMA_NODE" \
 ## 结果与边界
 
 每个 case 保留 `plan.json`（实际 argv、环境、模型/二进制 SHA256、BERT 调优库文件指纹、输入形状）、`execution.json`、`round-1.log` 至 `round-3.log`、`rounds.json/csv`、`measurements.json` 和 `assessment.json`。
+
+BERT 的 plan、测量和 assessment 另记 `rocblas_mode`：`runtime_default` 或 `custom_directory`。默认库结果不能直接当成历史外置调优库配方的性能验收；`custom_directory` 只表明显式配置了该目录，不证明它适配当前硬件或带来加速。
 
 结果以 `suite: migraphx` 收入 `summary.json`、`summary.txt` 和 `metrics.csv`，原生文件归档到 `raw/`，不写入服务类模型的 `e2e.csv`。将测试块及所需节点、容器配置合并到 `configs/bench.yaml` 后，`bash bench.sh all` 会运行其中启用的 MIGraphX 用例。
 

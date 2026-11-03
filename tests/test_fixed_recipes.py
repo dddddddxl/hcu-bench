@@ -387,8 +387,7 @@ class FixedExecution(unittest.TestCase):
 
     def test_bert_library_environment_and_hashes(self):
         self.args.recipe = "bert_large_fp16"
-        with self.assertRaisesRegex(ValueError, "rocblas_dir"):
-            model.validate(self.args, {})
+        self.assertNotIn("LD_LIBRARY_PATH", model.validate(self.args, {}))
         lib = self.root / "rocblas/lib"
         lib.mkdir(parents=True)
         (lib / "fixture.so").write_bytes(b"library fixture")

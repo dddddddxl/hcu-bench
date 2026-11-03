@@ -41,10 +41,11 @@ def validate(args, env):
         raise ValueError("Local ONNX model missing; no model is downloaded")
     args.binary, args.numactl = executable(args.binary, env), executable(args.numactl, env)
     if args.recipe == "bert_large_fp16":
-        if not args.rocblas_dir or not (Path(args.rocblas_dir) / "lib").is_dir():
-            raise ValueError("BERT requires rocblas_dir with the matching prepared lib directory")
-        lib = str((Path(args.rocblas_dir) / "lib").resolve())
-        env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+        if args.rocblas_dir:
+            if not (Path(args.rocblas_dir) / "lib").is_dir():
+                raise ValueError("Explicit BERT rocblas_dir requires the matching prepared lib directory")
+            lib = str((Path(args.rocblas_dir) / "lib").resolve())
+            env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     elif args.rocblas_dir:
         raise ValueError("rocblas_dir is only part of the BERT recipe")
     shared_libraries(args.binary, env)
@@ -128,16 +129,17 @@ def parse(text, batch):
 def run(args, stopped):
     out = claim_output(args.output_dir)
     rows, executions = [], []
+    rocblas_mode = ("custom_directory" if args.rocblas_dir else "runtime_default") if args.recipe == "bert_large_fp16" else "not_applicable"
     try:
         env = validate(args, dict(os.environ))
         inputs = inspect_model(args)
-        tuning = tuning_fingerprint(args.rocblas_dir, stopped) if args.recipe == "bert_large_fp16" else None
+        tuning = tuning_fingerprint(args.rocblas_dir, stopped) if rocblas_mode == "custom_directory" else None
         write_json(out / "plan.json", dict(params=vars(args), argv=command(args), inputs=inputs,
                    rounds=ROUNDS, iterations_per_round=ITERATIONS,
                    input_policy="fill1" if args.recipe == "bert_large_fp16" else "native generated",
                    model_sha256=sha256(args.model), binary_sha256=sha256(args.binary),
                    numactl_sha256=sha256(args.numactl), wrapper_sha256=sha256(__file__),
-                   tuning_library=tuning, environment=environment_record(env),
+                   rocblas_mode=rocblas_mode, tuning_library=tuning, environment=environment_record(env),
                    versions=versions(["onnx", "migraphx"]), correctness="not_checked"))
         for index in range(1, ROUNDS + 1):
             text = execute(command(args), f"round-{index}", out, env, stopped, executions, args.round_timeout_s)
@@ -149,20 +151,20 @@ def run(args, stopped):
                 writer.writerows(rows)
         if stopped.is_set():
             raise RuntimeError("Cancelled before publishing all three rounds")
-        result = dict(measurement_status="measured", correctness="not_checked", recipe=args.recipe,
+        result = dict(measurement_status="measured", correctness="not_checked", recipe=args.recipe, rocblas_mode=rocblas_mode,
                       batch=args.batch, rounds=rows, accuracy_scope="performance only; no numerical/SQuAD accuracy",
                       metrics=[dict(name="throughput", unit="inf/s", statistic="median_of_3_rounds",
                                     value=statistics.median(r["throughput_inf_s"] for r in rows)),
                                dict(name="batch_latency", unit="ms/batch", statistic="median_of_3_rounds",
                                     value=statistics.median(r["latency_ms_batch"] for r in rows))])
         write_json(out / "measurements.json", result)
-        write_json(out / "assessment.json", dict(complete=True, completed_rounds=len(rows), correctness="not_checked"))
+        write_json(out / "assessment.json", dict(complete=True, completed_rounds=len(rows), correctness="not_checked", rocblas_mode=rocblas_mode))
         emit(result)
         return 0
     except CleanupError as exc:
         return cleanup_failure(out, exc)
     except Exception as exc:
-        write_json(out / "assessment.json", dict(complete=False, completed_rounds=len(rows), correctness="not_checked", error=str(exc)))
+        write_json(out / "assessment.json", dict(complete=False, completed_rounds=len(rows), correctness="not_checked", rocblas_mode=rocblas_mode, error=str(exc)))
         emit(dict(measurement_status="invalid", correctness="not_checked", metrics=[], reason=str(exc)))
         return 2
 
@@ -173,7 +175,7 @@ def main():
     parser.add_argument("--batch", type=int, choices=(1, 32), required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--numa-node", type=int, required=True)
-    parser.add_argument("--rocblas-dir", default="")
+    parser.add_argument("--rocblas-dir", default="", help="Optional BERT library override with nonempty lib; empty preserves the runtime environment")
     parser.add_argument("--binary", default="migraphx-driver")
     parser.add_argument("--numactl", default="numactl")
     parser.add_argument("--round-timeout-s", type=int, default=600)

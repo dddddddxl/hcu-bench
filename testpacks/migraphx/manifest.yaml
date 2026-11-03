@@ -9,7 +9,7 @@ parameters:
   batch: {type: integer, required: true, choices: [1, 32]}
   model: {type: string, required: true}
   numa_node: {type: integer, required: true, min: 0}
-  rocblas_dir: {type: string, default: "", description: "BERT requires a prepared matching tuning directory containing lib"}
+  rocblas_dir: {type: string, default: "", description: "Optional BERT library override containing nonempty lib; empty uses the prepared runtime's libraries"}
   binary: {type: string, default: migraphx-driver}
   numactl: {type: string, default: numactl}
   round_timeout_s: {type: integer, default: 600, min: 1, max: 86400}

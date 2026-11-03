@@ -1,0 +1,30 @@
+# Run inside the prepared MIGraphX container. Model is user-supplied, not downloaded.
+version: 1
+name: bert-large-migraphx
+output_dir: /work/results
+failure_policy: stop
+vars:
+  bench_root: /workspace/hcu-bench
+  model: /models/bert-large-uncased-squad-v2-opt-mha-384.onnx
+  numa_node: 0
+  hcus: [0]
+  rocblas_dir: "" # Optional override, not a requirement for a runtime-default run.
+nodes:
+  local:
+    executor: local
+    hcus: "${vars.hcus}"
+tests:
+  bert_large:
+    suite: migraphx
+    adapter: command
+    pack: ../testpacks/migraphx/manifest.yaml
+    nodes: [local]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: bert_large_fp16
+      model: "${vars.model}"
+      numa_node: "${vars.numa_node}"
+      rocblas_dir: "${vars.rocblas_dir}"
+    matrix:
+      batch: [1, 32]

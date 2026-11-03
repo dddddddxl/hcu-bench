@@ -95,4 +95,6 @@ BENCH_PYTHON="$PY" bash bench.sh migraphx
 
 默认 FP16/INT8 × batch 1/32，每个组合三轮，每轮 -n 20。模型应是符合输入合同的自包含 ONNX；动态 batch 可运行两种 batch，静态 batch 必须与请求一致，例如静态 batch=1 时先把 `matrix.batch` 改成 `[1]`。结果保留在 `/work/results`，详见 [性能口径](migraphx.md)。本步骤不要求 Torch 参与推理，也不自动下载/导出模型。
 
+同一原生环境也可使用 [BERT 独立配置](bert.md)。该配置默认使用当前环境的 rocBLAS，不要求另行准备外置调优库；仍须提供满足 BERT 输入合同的实际 ONNX 模型。
+
 退出容器后在原宿主机终端 `docker stop "$NAME"`，确认无需保留容器时可执行 `docker rm "$NAME"`。宿主机 `$WORK` 内的 wheel、预检报告、虚拟环境和测量结果仍保留。

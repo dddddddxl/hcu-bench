@@ -12,7 +12,7 @@ vars:
   bench_root: /workspace/hcu-bench
   resnet50_model: /models/resnet50-torch-fp32.onnx
   bert_model: /models/bert-large-uncased-squad-v2-opt-mha-384.onnx
-  rocblas_dir: /opt/rocblas-install
+  rocblas_dir: "" # BERT uses the runtime's rocBLAS; set only for an explicit matching library override.
   numa_node: 0 # 必须按目标卡实际 NUMA 归属填写。
   hcus: [0] # 单卡容器通常为 0；须用 BDF/UUID 核实，不能猜测映射。
 nodes:

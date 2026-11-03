@@ -4,7 +4,7 @@
 
 **Goal:** Allow the BERT FP16 recipe to run with the prepared environment's rocBLAS, preserving strict optional tuned-library execution and recording the distinction.
 
-**Architecture:** An empty rocblas_dir selects runtime_default and leaves library search settings unchanged. An explicitly supplied directory selects custom_tuned and retains existence, nonempty-tree, shared-library and fingerprint checks; it must never silently fall back. Model input/dtype/batch validation and three-round measurement requirements remain intact. Results identify the effective mode so custom-tuned historical baselines are not confused with runtime-default results.
+**Architecture:** An empty rocblas_dir selects runtime_default and leaves library search settings unchanged. An explicitly supplied directory selects custom_directory and retains existence, nonempty-tree, shared-library and fingerprint checks; it must never silently fall back. The label records configuration and does not certify that a library is tuned. Model input/dtype/batch validation and three-round measurement requirements remain intact. Results identify the mode so custom-library historical baselines are not confused with runtime-default results.
 
 **Tech Stack:** Existing MIGraphX native perf wrapper, Python standard library, YAML templates, existing onnx/psutil environment.
 
