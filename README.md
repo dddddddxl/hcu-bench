@@ -32,7 +32,7 @@ bash bench.sh all           # YAML 中全部启用项
 
 ResNet50 提示缺少 `migraphx-driver` 时，使用 [已检查的 MIGraphX 镜像与新容器步骤](docs/migraphx-setup.md)，并在目标容器执行 `python3 testpacks/migraphx/check.py`。`.[migraphx]` 只安装 Python 依赖；新 [ResNet50 专用模板](configs/resnet50.template.yaml) 不需要 BERT 模型或容器 hook。
 
-BERT 使用 [专用模板与输入要求](docs/bert.md)，默认使用当前原生环境的 rocBLAS，外置库目录改为可选；报告记录默认环境或显式目录模式，便于区分不同性能基线。
+BERT 使用 [专用模板与启动步骤](docs/bert.md)，默认使用当前原生环境的 rocBLAS，外置库目录改为可选；`check.py --recipe bert_large_fp16 --model /YOUR_MODEL.onnx --batch 1 32` 可在推理前检查依赖和模型输入。报告记录默认环境或显式目录模式，便于区分不同性能基线。
 
 “已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。Conv 的 56 组配置、RCCL 的 10 类单机通信已在 BW1000 上实测；GEMM 现提供默认 rocBLAS 5.2.0 和显式 legacy 4.3.0 两套接口，运行前自动检查版本与参数；接口匹配不代表 GEMM 已完成硬件验收。范围与结果见 [实机验证记录](docs/validation/2026-11-02-bw1000-operator-coverage.md)；不能据此宣称整套 `all` 已验收。
 
