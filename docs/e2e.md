@@ -1,5 +1,7 @@
 # 端到端精度与吞吐测试
 
+本页说明语言模型的精度/吞吐流水线。Wan 文生视频也属于 `e2e_perf`，但使用独立测试包和参数，见 [Wan 测试](wan.md)；不使用下面的 tokenizer、token 长度和 EvalScope 客户端。
+
 ## 运行入口
 
 ```bash

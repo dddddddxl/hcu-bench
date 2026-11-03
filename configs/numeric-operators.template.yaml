@@ -33,7 +33,7 @@ tests:
     matrix:
       dtype: [fp32, fp16]
   gemm:
-    enabled: true
+    enabled: false # 标准 SGLang rocblas-bench 不兼容；匹配工具/profile 并确认误差标准后开启。
     suite: operators
     adapter: command
     pack: ../testpacks/operators/numeric/manifest.yaml

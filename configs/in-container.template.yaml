@@ -26,6 +26,11 @@ vars:
   hcus: [0, 1, 2, 3, 4, 5, 6, 7]          # 本次允许使用的卡号，先确认没有其他业务。
   num_processes: 8                         # DeepEP 每节点进程数，应与 hcus 数量一致。
   duration_s: 600                          # 压测计划窗口（秒），含初始化；须小于 timeout_s。
+  wan_model_path: /YOUR_MODELS/Wan2.2-T2V-A14B-Diffusers # Wan 可选；需模型和扩散运行环境。
+  wan_start_script: model_scripts/wan22_t2v.sh
+  wan_hcus_tp1: [0]
+  wan_hcus_tp4: [0, 1, 2, 3]
+  wan_request: {prompt: "A curious raccoon", size: 1280x720, num_frames: 81, fps: 16, num_inference_steps: 40, seed: 42, guidance_scale: 4.0}
 build:                                    # 仅首次编译/缓存失效时使用，不修改镜像软件。
   dtk_root: /opt/dtk
   mpi_home: /opt/mpi                       # RCCL 使用镜像中的 Open MPI。
@@ -50,6 +55,12 @@ nodes:
     hcus: "${vars.model_hcus}"
     env:
       HIP_VISIBLE_DEVICES: "${hcu_ids}"
+  wan_single:
+    executor: local
+    hcus: "${vars.wan_hcus_tp1}"
+  wan_four:
+    executor: local
+    hcus: "${vars.wan_hcus_tp4}"
 models:
   qwen3_4b:
     start_script: ./model_scripts/qwen3_4b.sh
@@ -74,8 +85,9 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.rccl_binary}"
       ranks: "${vars.rccl_ranks}"
-      min_bytes: 17179869184              # 16 GiB，等价于原生 -b 16G。
-      max_bytes: 17179869184              # 固定 16 GiB，等价于原生 -e 16G。
+      # 不填消息大小，使用仓库默认固定 16 GiB；需要覆盖时同时填写以下两项（字节）。
+      # min_bytes: 17179869184
+      # max_bytes: 17179869184
       step_factor: 2
       datatype: half                     # half / float / double；归约操作为 sum。
       warmup_iters: 20
@@ -94,7 +106,7 @@ tests:
     matrix:
       dtype: [fp32, fp16]
   gemm:
-    enabled: true
+    enabled: false # 当前标准 SGLang 镜像的 rocblas-bench 接口不匹配；匹配工具并确认误差阈值后开启。
     suite: operators
     adapter: command
     pack: ../testpacks/operators/numeric/manifest.yaml
@@ -118,8 +130,7 @@ tests:
       bench_root: "${vars.bench_root}"
       binary: "${vars.rccl_binary}"
       ranks: "${vars.rccl_ranks}"
-      min_bytes: 17179869184
-      max_bytes: 17179869184
+      # 消息大小省略，全部 collective 使用仓库默认固定 16 GiB。
     matrix:
       collective: [all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]
   # 五类 PCIe 路径，固定大小逐对测试；不做正确性/长期压测，不使用 duration_s。
@@ -139,6 +150,7 @@ tests:
       iters: 20                          # 原生 ROCM_BW_ITER_CNT；不改频率或软件包。
   # 单卡显存/缓存/LDS 带宽，每张指定卡执行 zd1+zd2；和 PCIe 拷贝带宽分开。
   memory_bandwidth:
+    enabled: false # 标准 SGLang 镜像的 gfx938/AICC 构建未跑通；匹配工具链后开启。
     suite: memory
     adapter: command
     pack: ../testpacks/memory/manifest.yaml
@@ -208,3 +220,30 @@ tests:
       repeats: 1
       request_timeout_s: 1800
       extra_body: {chat_template_kwargs: {enable_thinking: false}}
+  # Wan 视频性能与 LLM 吞吐分开；填模型路径、确认扩散 API 后选择启用。详见 docs/wan.md。
+  wan_tp1:
+    enabled: false
+    suite: e2e_perf
+    adapter: command
+    pack: ../testpacks/wan/manifest.yaml
+    nodes: [wan_single]
+    timeout_s: 18000
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: "${vars.wan_start_script}"
+      model_path: "${vars.wan_model_path}"
+      profile: tp1
+      request: "${vars.wan_request}"
+  wan_tp4:
+    enabled: false
+    suite: e2e_perf
+    adapter: command
+    pack: ../testpacks/wan/manifest.yaml
+    nodes: [wan_four]
+    timeout_s: 18000
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: "${vars.wan_start_script}"
+      model_path: "${vars.wan_model_path}"
+      profile: tp4
+      request: "${vars.wan_request}"

@@ -91,6 +91,7 @@ driver 默认先从 PATH 查找，再查 `/opt/dtk/bin/migraphx-driver`、`/opt/
 
 ```bash
 cp configs/resnet50.template.yaml configs/bench.yaml
+# 编辑 paths/NUMA/hcus，并将 tests.resnet50.enabled 改为 true；标准 SGLang 镜像默认关闭此项。
 # 修改 vars.model、vars.numa_node、vars.hcus；确认隔离后映射的逻辑设备编号。
 BENCH_PYTHON="$PY" bash bench.sh check -c configs/bench.yaml --suite migraphx
 BENCH_PYTHON="$PY" bash bench.sh migraphx

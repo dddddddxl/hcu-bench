@@ -54,7 +54,7 @@ def dispatch(args):
             "operators": "native: fixed BLAS/FA repeatability stress and PA/FA performance recipes (single HCU)",
             "migraphx": "native: MIGraphX ResNet50/BERT fixed inference recipes (single HCU)",
             "e2e_acc": "native: SGLang 0.5.12 GSM8K accuracy; script-managed single-node service",
-            "e2e_perf": "native: EvalScope 1.13.0 serving pipeline",
+            "e2e_perf": "native: EvalScope 1.13.0 LLM throughput + Wan video timings",
         }
         for suite in SUITES:
             print(f"{suite:12} {descriptions[suite]}")

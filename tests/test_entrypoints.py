@@ -26,7 +26,13 @@ class PublicTemplateTests(unittest.TestCase):
             if path.name == "bench.yaml":
                 continue
             with self.subTest(config=path.name), patch("subprocess.Popen", side_effect=AssertionError("static only")):
-                plan = make_plan(str(path))
+                data = load_document(path)
+                overrides = []
+                if all(test.get("enabled", True) is False for test in data["tests"].values()):
+                    with self.assertRaisesRegex(BenchError, "No enabled tests"):
+                        make_plan(str(path))
+                    overrides = [f"tests.{name}.enabled=true" for name in data["tests"]]
+                plan = make_plan(str(path), overrides=overrides)
                 rendered = preview(plan)
                 self.assertEqual(rendered["case_count"], len(plan.cases))
                 for case in rendered["cases"]:

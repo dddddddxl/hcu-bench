@@ -185,7 +185,9 @@ class MemoryTests(unittest.TestCase):
 
     def test_templates_all_selection_and_commands(self):
         for name in ("in-container.template.yaml", "managed-container.template.yaml", "memory.template.yaml"):
-            plan = make_plan(str(ROOT / "configs" / name), "memory")
+            config = str(ROOT / "configs" / name)
+            overrides = ["tests.memory_bandwidth.enabled=true"]
+            plan = make_plan(config, "memory", overrides)
             self.assertEqual(len(plan.cases), 1)
             case = plan.cases[0]
             self.assertEqual(case.pack["id"], "memory.bandwidth")
@@ -195,15 +197,16 @@ class MemoryTests(unittest.TestCase):
             self.assertIn("--devices", argv)
             self.assertEqual(argv[argv.index("--devices") + 1], "" if name == "memory.template.yaml" else "0")
             self.assertFalse(any("${" in part for part in argv))
-            plan = make_plan(str(ROOT / "configs" / name), "all")
+            plan = make_plan(config, "all", overrides)
             self.assertIn("memory", [case.suite for case in plan.cases])
             if name != "memory.template.yaml":
                 self.assertEqual([case.suite for case in plan.cases],
-                                 ["rccl"] + ["operators"] * 5 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
+                                 ["rccl"] + ["operators"] * 2 + ["rccl"] * 9 + ["pcie", "memory", "deepep", "e2e", "e2e"])
 
     def test_planner_rejects_duration_multinode_and_bad_params(self):
         data = yaml.safe_load((ROOT / "configs/memory.template.yaml").read_text(encoding="utf-8"))
         test = data["tests"]["memory_bandwidth"]
+        test["enabled"] = True
         test["pack"] = str(ROOT / "testpacks/memory/manifest.yaml")
         path = self.root / "bench.yaml"
         for key, value, message in (("duration_s", 60, "duration_control"), ("nodes", ["node0", "node1"], "at most 1"),

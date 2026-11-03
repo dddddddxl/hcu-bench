@@ -32,8 +32,9 @@ tests:
       binary: auto
       ranks: "${vars.ranks}"
       root: 0 # 仅 broadcast/reduce/gather/scatter 使用。
-      min_bytes: 17179869184
-      max_bytes: 17179869184
+      # 不填消息大小，使用仓库默认固定 16 GiB；需覆盖时同时填写以下两项（字节）。
+      # min_bytes: 17179869184
+      # max_bytes: 17179869184
       datatype: half
       warmup_iters: 20
       iters: 50

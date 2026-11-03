@@ -31,7 +31,7 @@ PY=/work/venv/bin/python
 MODEL=/models/bert-large-uncased-squad-v2-opt-mha-384.onnx
 "$PY" testpacks/migraphx/check.py --recipe bert_large_fp16 \
   --model "$MODEL" --batch 1 32 --output /work/bert-preflight.json
-# 修改 configs/bert.template.yaml 的 vars.numa_node、vars.hcus 和 batch。
+# 修改 configs/bert.template.yaml 的 vars.numa_node、vars.hcus 和 batch，并启用 tests.bert_large.enabled。
 # rocblas_dir 默认留空；通过参数指定本次代码和模型位置。
 BENCH_PYTHON="$PY" bash bench.sh run -c configs/bert.template.yaml --suite migraphx \
   --set "vars.bench_root=$PWD" --set "vars.model=$MODEL"

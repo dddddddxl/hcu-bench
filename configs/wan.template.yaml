@@ -1,0 +1,54 @@
+# Wan 是 e2e_perf 的视频用例，不是 GSM8K/LLM token 吞吐。
+# 对照 docs/wan.md 填好模型及客户端口径，并启用所需 profile，再 bash bench.sh e2e_perf。
+version: 1
+name: wan22-t2v-performance
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  model_path: /YOUR_MODELS/Wan2.2-T2V-A14B-Diffusers
+  start_script: model_scripts/wan22_t2v.sh # 完整部署参数在脚本中；可换成已验证的自有脚本。
+  hcus_tp1: [0]
+  hcus_tp4: [0, 1, 2, 3]
+  # 用户同意初版采用官方 API 示例；不能据此宣称与性能表未注明的请求参数完全一致。
+  request: {prompt: "A curious raccoon", size: 1280x720, num_frames: 81, fps: 16, num_inference_steps: 40, seed: 42, guidance_scale: 4.0}
+  # 其他 guidance 字段按目标 API 核对；不发送已核对 schema 未声明的 embedded_guidance_scale。
+output_dir: "${vars.workspace}/results"
+nodes:
+  wan_single:
+    executor: local
+    hcus: "${vars.hcus_tp1}"
+  wan_four:
+    executor: local
+    hcus: "${vars.hcus_tp4}"
+tests:
+  wan_tp1:
+    enabled: true # 专用模板运行单卡/四卡；综合模板默认关闭。不挤入 models: all 的精度任务。
+    suite: e2e_perf
+    adapter: command
+    pack: ../testpacks/wan/manifest.yaml
+    nodes: [wan_single]
+    timeout_s: 18000 # 包含服务初始化及两次生成；不是要求跑满该时长。
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: "${vars.start_script}"
+      model_path: "${vars.model_path}"
+      profile: tp1
+      request: "${vars.request}"
+      warmup_requests: 1 # 初版 1 次预热、1 次正式；并非表格给出的历史次数。
+      requests: 1
+  wan_tp4:
+    enabled: true
+    suite: e2e_perf
+    adapter: command
+    pack: ../testpacks/wan/manifest.yaml
+    nodes: [wan_four]
+    timeout_s: 18000
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: "${vars.start_script}"
+      model_path: "${vars.model_path}"
+      profile: tp4
+      request: "${vars.request}"
+      warmup_requests: 1
+      requests: 1

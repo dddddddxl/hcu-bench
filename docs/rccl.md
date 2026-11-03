@@ -20,7 +20,7 @@ bash bench.sh all        # 与 YAML 中其余启用项串行执行
 - `binary: auto` 使用仓库内 rccl-tests `ae3e635`，按 collective 编译对应的 `*_perf`，不同算子使用独立缓存。未选中的算子不编译，不会因其他未使用目标缺符号而阻塞 AllReduce。
   也可显式指定已有二进制。构建使用镜像已有 make、hipcc、Open MPI 和 DTK/RCCL，不下载或升级库。
 - 全部 10 类通信默认 8 卡、half、固定 16 GiB 消息，归约类使用 sum。AllReduce 等价于 `mpirun -np 8 all_reduce_perf -b 16G -e 16G -f 2 -g 1` 的卡数和消息配置。
-  YAML 的 `min_bytes`、`max_bytes` 均为 `17179869184`；原生 `G` 按 1024³ 字节换算，AllReduce 中这是每个 rank 的消息大小，不是八卡合计；其他通信项按各自原生工具的消息语义执行，不将此值解释为实际显存总占用。
+  模板不显式填写 `min_bytes`、`max_bytes`，两项均从仓库继承默认 `17179869184`，注释保留覆盖示例。原生 `G` 按 1024³ 字节换算，AllReduce 中这是每个 rank 的消息大小，不是八卡合计；其他通信项按各自原生工具的消息语义执行，不将此值解释为实际显存总占用。已有个人 YAML 若保留显式大小，仍按其值执行；需同时删除两项才能继承默认。
   保留预热 20 次、测量 50 次及原生数据校验；按各通信项支持的模式汇总测量记录，具体见下文。
   参数允许设置到 16 GiB；调整范围时 `max_bytes` 必须落在倍增序列上。完整有限轮次测试不接受 `duration_s`；超时由 `timeout_s` 控制并记为失败。
 - MPI 显式使用 `--host localhost:<ranks>`，为本机提供与进程数一致的 slot；默认 `localhost:8`，不会继承集群分配去其他节点启动进程。
