@@ -6,6 +6,13 @@ from functools import partial
 from typing import Literal, Set
 from typing import Literal, Set, Optional
 import deep_ep
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testpacks.deepep.api_contract import handle_field, load_contract
+
+API_CONTRACT = load_contract(deep_ep.Buffer)
 from utils import init_dist, bench, bench_kineto, calc_diff, hash_tensor, per_token_cast_pg_back, per_token_cast_pc_back, deepep_per_token_quantize, per_token_cast_back_generic
 
 
@@ -121,7 +128,7 @@ def test_main_moriep_layered(num_tokens: int,
             recv_x_quant = packed_recv_x[0][i].contiguous()
             recv_x_scale = packed_recv_x[1][i].contiguous()
             # 获取 当前本地专家 Dispatch 接收到的 token 总数 及 每个token 的 源索引
-            recv_count, recv_src_info = packed_recv_count[i], handle[0][i]
+            recv_count, recv_src_info = packed_recv_count[i], handle_field(API_CONTRACT, handle, 'packed_recv_src_info')[i]
 
             # 判断 当前本地专家 接收 的Token 总数 是否和 全局 topk_ids 对的上
             num_valid_tokens = recv_count.item()
@@ -183,7 +190,7 @@ def test_main_moriep_layered(num_tokens: int,
             # 获取 当前本地专家 Dispatch 接收到的 token 数据
             recv_x_bf16 = packed_recv_x[i].contiguous()
             # 获取 当前本地专家 Dispatch 接收到的 token 总数 及 每个token 的 源索引
-            recv_count, recv_src_info = packed_recv_count[i], handle[0][i]
+            recv_count, recv_src_info = packed_recv_count[i], handle_field(API_CONTRACT, handle, 'packed_recv_src_info')[i]
 
             # 判断 当前本地专家 接收 的Token 总数 是否和 全局 topk_ids 对的上
             num_valid_tokens = recv_count.item()
@@ -448,9 +455,9 @@ def test_main(num_tokens: int,
                             elif quant_group_size == 128:
                                 recv_x = per_token_cast_pg_back(packed_recv_x[0][i], packed_recv_x[1][i])
                             
-                            # Verified against this daily wheel's 11-field dispatch handle.
-                            assert len(handle) == 11, f'Unexpected dispatch handle length: {len(handle)}'
-                            recv_count, recv_src_info, recv_layout_range = packed_recv_count[i], handle[0][i], handle[6][i]
+                            recv_count = packed_recv_count[i]
+                            recv_src_info = handle_field(API_CONTRACT, handle, 'packed_recv_src_info')[i]
+                            recv_layout_range = handle_field(API_CONTRACT, handle, 'packed_recv_layout_range')[i]
 
                             # Check expert indices
                             int_mask = (2 ** 32) - 1

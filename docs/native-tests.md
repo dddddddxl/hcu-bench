@@ -25,9 +25,13 @@ hcu-bench run -c configs/your-env.yaml --suite e2e
 
 ## DeepEP 低延迟压测
 
-`test_script: auto` 使用 `vendor/deepep-tests` 内的脚本和 `utils.py`，已包含此前验证的 11 项 handle 接口及索引适配，不删除正确性断言。也可指定外部脚本；运行时不自动修改脚本来迁就不匹配的 wheel。启动方式保持 `torchrun --nproc-per-node=1`，再由原生脚本 `--num-processes` 在每节点 spawn HCU workers；实际 HCU world size 为节点数 × num_processes，不能把 torchrun worker 数再次设为卡数。
+`test_script: auto` 使用 `vendor/deepep-tests` 内的脚本和 `utils.py`。每次运行先检查实际安装的 DeepEP 方法签名，静态解析 dispatch 的 handle 构造，并核对 combine 的对应解包，生成 `api_contract.json`。工作进程复核接口源码指纹，按字段名称映射读取来源和布局，不再固定要求 11 字段。当前识别 DAS weighted 的 `route_mode` 和 `dispatch_mode/combine_mode` 两类接口；未知字段、歧义结构或不匹配的调用参数会明确报错，不猜索引、不覆盖镜像软件包。公开 DeepEP-das main 的 5 字段接口尚不属于这份内置测试的支持范围。
 
-默认 600 秒由 Bench `duration_s` 控制。原生 `--pressure-test` 如果提前成功结束，包装器重新启动；每次完成周期使用 `master_port + cycle`，避免连接上一周期的 TCP store，网络需允许这个端口范围。所有节点必须使用相同配置和原生代码，并由控制机同时启动。多机只扩展此测试的 nodes；精度测试仍只启动一个服务节点。
+内置测试先不带 `--pressure-test` 执行一轮有限的原生正确性及性能测试，成功退出才开始压力模式；短测日志 `native_smoke.log` 和结果 `smoke_status` 独立保留，短测指标不计入正式样本。全部数值断言和压力模式的随机种子重复一致性检查保留。也可指定外部已验证脚本，外部脚本沿用其原有执行方式，不自动套用内置契约或改写脚本。
+
+启动方式保持 `torchrun --nproc-per-node=1`，再由原生脚本 `--num-processes` 在每节点 spawn HCU workers；实际 HCU world size 为节点数 × num_processes，不能把 torchrun worker 数再次设为卡数。
+
+默认 600 秒由 Bench `duration_s` 控制，是整个测试的计划窗口，包含接口探测及首轮有限测试，不保证正式压力循环独占 600 秒。原生 `--pressure-test` 如果提前成功结束，包装器重新启动；有限测试及每次压力周期使用 `master_port + cycle`，避免连接上一周期的 TCP store，网络需允许这个端口范围。所有节点必须使用相同配置和原生代码，并由控制机同时启动。多机只扩展此测试的 nodes；精度测试仍只启动一个服务节点。
 
 只重启成功完成的周期。SIGKILL、SIGABRT、正确性断言或 profiler 崩溃不会自动吞掉重试；控制机取消其他节点并保留日志。包装器只对可解析但数值无效的性能行记 invalid，不修改原生 profiler 的断言。低延迟子进程明确 unset DEEP_EP_NORMAL_MNVL；其余通信变量由配置提供。
 

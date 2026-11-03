@@ -29,10 +29,10 @@
     "tree_sha256": "2fb5dfec68ee678b063680fd29dbd934e134b1fc9e12a968a34ce2c67e996b78"
   },
   "deepep-tests": {
-    "version": "tests-3-daily-handle11",
+    "version": "tests-3-probed-weighted-handle",
     "source": "User-supplied tests (3).zip; public redistribution authorized by the supplier on 2026-10-19",
-    "modifications": "Verified daily dispatch handle adaptation: assert len(handle)==11; layout-range index 4 -> 6. Correctness assertions retained. See README.md.",
-    "tree_sha256": "5f40a1d691a70b673afdc308a79e1490c851ca1f23dbf97737ef0a82ae0f0d73"
+    "modifications": "Load a runtime API contract from testpacks/deepep/api_contract.py, verify method source fingerprints in spawned workers, and read named source/layout fields through the probed mapping. Native numerical assertions retained. See README.md.",
+    "tree_sha256": "e77122af05be641274a976197cc848a3225ae611791f12d131f6c9f2e3444aa0"
   },
   "mooncake": {
     "version": "0.3.13.post1+237c9167",

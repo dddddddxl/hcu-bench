@@ -41,5 +41,5 @@ cwd: "${case_dir}"
 env: {}
 result_protocol: bench-jsonl-v1
 requires_metrics: true
-artifacts: ["${case_dir}/*.json", "${case_dir}/*.jsonl", "${case_dir}/native_cycle_*.log"]
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.jsonl", "${case_dir}/native_cycle_*.log", "${case_dir}/native_smoke.log"]
 artifact_limit_mb: 100

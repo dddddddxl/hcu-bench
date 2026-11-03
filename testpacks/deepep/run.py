@@ -1,4 +1,4 @@
-"""Wrap the supplied low-latency test without editing its code or environment."""
+"""Probe the bundled test's API, then preserve native correctness and pressure checks."""
 import argparse
 import importlib.util
 import json
@@ -10,6 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from testpacks.native_common import CleanupError, NativeProcess, cancellation, cleanup_failure, emit, sha256, versions, write_json
+from testpacks.deepep.api_contract import ENV_KEY, installed_contract
+
+BUNDLED_SCRIPT = Path(__file__).resolve().parents[2] / "vendor/deepep-tests/test_low_latency.py"
 
 NUMBER = r"([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)"
 RANK = r"\[rank\s+(\d+)\]\s*"
@@ -52,13 +55,13 @@ def parse_line(line):
     return samples
 
 
-def command_for(args, cycle):
+def command_for(args, cycle, pressure=True):
     port = args.master_port + cycle
     if port > 65535:
         raise ValueError("Fresh rendezvous port range exhausted")
     return [sys.executable, "-u", "-m", "torch.distributed.run", "--nproc-per-node=1",
             f"--nnodes={args.nnodes}", f"--node-rank={args.node_rank}", f"--master-addr={args.master_addr}",
-            f"--master-port={port}", str(Path(args.test_script).resolve()), "--pressure-test",
+            f"--master-port={port}", str(Path(args.test_script).resolve()), *(["--pressure-test"] if pressure else []),
             "--num-processes", str(args.num_processes), "--num-tokens", str(args.num_tokens),
             "--hidden", str(args.hidden), "--num-topk", str(args.num_topk), "--num-experts", str(args.num_experts)]
 
@@ -110,13 +113,20 @@ def preflight(args, env=None):
 
 def run(args):
     if args.test_script == "auto":
-        args.test_script = str(Path(__file__).resolve().parents[2] / "vendor/deepep-tests/test_low_latency.py")
+        args.test_script = str(BUNDLED_SCRIPT)
     output = Path(args.output_dir)
     output.mkdir(parents=True, exist_ok=True)
     native_env = dict(os.environ)
     native_env["PYTHONDONTWRITEBYTECODE"] = "1"
     native_env.pop("DEEP_EP_NORMAL_MNVL", None)
     evidence = preflight(args, native_env)
+    bundled = Path(args.test_script).resolve() == BUNDLED_SCRIPT.resolve()
+    if bundled:
+        contract = installed_contract()
+        contract_path = output.resolve() / "api_contract.json"
+        write_json(contract_path, contract)
+        native_env[ENV_KEY] = str(contract_path)
+        evidence["api_contract"] = contract
     write_json(output / "environment.json", evidence)
     if args.check_only:
         print("DeepEP preflight OK; no HCU workload started", flush=True)
@@ -126,6 +136,22 @@ def run(args):
     sample_id = 0
     summary = {"completed_cycles": 0, "valid_samples": 0, "invalid_samples": 0, "status": "running"}
     write_json(output / "summary.json", summary)
+    if bundled:
+        command = command_for(args, cycle, pressure=False)
+        write_json(output / "smoke_command.json", {"argv": command})
+        process = NativeProcess(command, str(BUNDLED_SCRIPT.parent), native_env, output / "native_smoke.log")
+        try:
+            code = process.wait(stopped)
+        finally:
+            process.close()
+        summary["smoke_status"] = "interrupted" if stopped.is_set() else "passed" if code == 0 else "failed"
+        if stopped.is_set() or code != 0:
+            summary.update(status=summary["smoke_status"], native_returncode=code)
+            write_json(output / "summary.json", summary)
+            return 130 if stopped.is_set() else 1
+        cycle += 1
+        write_json(output / "summary.json", summary)
+        print("Native correctness smoke passed; starting pressure checks", flush=True)
     with (output / "samples.jsonl").open("w", encoding="utf-8") as samples:
         while not stopped.is_set():
             cycle_start_samples = summary["valid_samples"]
