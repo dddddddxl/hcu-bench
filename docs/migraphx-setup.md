@@ -73,10 +73,13 @@ docker exec -it "$NAME" bash
 
 ```bash
 python3 -m venv --system-site-packages /work/venv
+source /work/venv/bin/activate
 PY=/work/venv/bin/python
 "$PY" -m pip install --no-index --find-links=/wheels --no-build-isolation -e '.[migraphx]'
 "$PY" testpacks/migraphx/check.py --recipe resnet50_fp16 --output /work/migraphx-check.json
 ```
+
+激活虚拟环境是必要步骤：测试包使用 PATH 中的 `python3`，只设置 `BENCH_PYTHON` 会选择 CLI 解释器，不会改变测试子进程的解释器。另开终端后应再次激活同一环境。
 
 预检返回 0 且 JSON `ready: true` 才表示依赖检查通过；2 表示失败。它检查 Python 包、driver/numactl 路径、共享库以及配方要求的 help flags，不加载模型、不分配 GPU、不声称正确性或性能通过。之后再核对 DCU/驱动、设备映射、NUMA 和 ONNX 输入。
 

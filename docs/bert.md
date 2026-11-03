@@ -22,6 +22,7 @@
 按 [MIGraphX 新容器准备](migraphx-setup.md) 获得原生环境和 Python 依赖，并挂载已有模型后，在容器内：
 
 ```bash
+source /work/venv/bin/activate
 PY=/work/venv/bin/python
 "$PY" testpacks/migraphx/check.py --recipe bert_large_fp16 --output /work/bert-dependencies.json
 # 编辑 configs/bert.template.yaml 的 vars.model、vars.numa_node、vars.hcus 和 batch。
