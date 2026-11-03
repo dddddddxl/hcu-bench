@@ -32,6 +32,8 @@ bash bench.sh all           # YAML 中全部启用项
 
 ResNet50 提示缺少 `migraphx-driver` 时，使用 [已检查的 MIGraphX 镜像与新容器步骤](docs/migraphx-setup.md)，并在目标容器执行 `python3 testpacks/migraphx/check.py`。`.[migraphx]` 只安装 Python 依赖；新 [ResNet50 专用模板](configs/resnet50.template.yaml) 不需要 BERT 模型或容器 hook。
 
+BERT 使用 [专用模板与启动步骤](docs/bert.md)，默认使用当前原生环境的 rocBLAS，外置库目录改为可选；`check.py --recipe bert_large_fp16 --model /YOUR_MODEL.onnx --batch 1 32` 可在推理前检查依赖和模型输入。报告记录默认环境或显式目录模式，便于区分不同性能基线。
+
 “已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。Conv 的 56 组配置、RCCL 的 10 类单机通信已在 BW1000 上实测；GEMM 现提供默认 rocBLAS 5.2.0 和显式 legacy 4.3.0 两套接口，运行前自动检查版本与参数；接口匹配不代表 GEMM 已完成硬件验收。范围与结果见 [实机验证记录](docs/validation/2026-11-02-bw1000-operator-coverage.md)；不能据此宣称整套 `all` 已验收。
 
 ## 快速开始
@@ -58,7 +60,7 @@ python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print(
 | e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
 | e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip 22.3+（不要求 ensurepip）、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
 | operators | 固定算子脚本、Conv/GEMM CSV、解析器及来源 SHA256 | Conv 需 MIOpenDriver，GEMM 需 rocblas-bench；PA/FA/BLAS 需匹配 ABI 的 Torch/Triton/FlashAttention 等 |
-| migraphx | ResNet50 / BERT 命令、三轮中位数、输入检查和指纹记录 | MIGraphX driver、numactl、onnx、psutil、本地 ONNX；BERT 另需匹配的 rocBLAS 调优库 |
+| migraphx | ResNet50 / BERT 命令、三轮中位数、输入检查和指纹记录 | MIGraphX driver、numactl、onnx、psutil、本地 ONNX；BERT 默认使用当前环境的 rocBLAS，可显式提供外置库 |
 
 以上是运行镜像的基础依赖，不是要求另找测试代码。原生构建源码版本、校验与授权说明见 [vendor](vendor/README.md)，固定算子脚本来源见 [算子测试](docs/operators.md)。原生 C/C++ 构建不联网下载源码、不安装系统软件包；EvalScope 服务压测首次会在独立缓存虚拟环境安装客户端 Python 依赖，不改服务环境的 DTK、Torch 或 SGLang。MIGraphX 固定模型包不自动安装依赖。依赖不全或准备失败会保留错误，不自动换库。
 
@@ -139,7 +141,7 @@ BLAS FP16、FA FP16/BF16 三项压力用例另在 `operator_stress` 中，默认
 ```bash
 # 模型性能：ResNet50 FP16/INT8、BERT-large FP16，各测试 batch=1、32。
 cp configs/migraphx.template.yaml configs/bench.yaml
-# 编辑 vars.image、模型路径、NUMA、BERT rocBLAS 调优库及容器 hook。
+# 编辑 vars.image、模型路径、NUMA、容器 hook；BERT rocblas_dir 默认留空。
 bash bench.sh check -c configs/bench.yaml --suite migraphx
 bash bench.sh plan -c configs/bench.yaml --suite migraphx
 bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE

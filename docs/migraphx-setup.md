@@ -73,10 +73,13 @@ docker exec -it "$NAME" bash
 
 ```bash
 python3 -m venv --system-site-packages /work/venv
+source /work/venv/bin/activate
 PY=/work/venv/bin/python
 "$PY" -m pip install --no-index --find-links=/wheels --no-build-isolation -e '.[migraphx]'
 "$PY" testpacks/migraphx/check.py --recipe resnet50_fp16 --output /work/migraphx-check.json
 ```
+
+激活虚拟环境是必要步骤：测试包使用 PATH 中的 `python3`，只设置 `BENCH_PYTHON` 会选择 CLI 解释器，不会改变测试子进程的解释器。另开终端后应再次激活同一环境。
 
 预检返回 0 且 JSON `ready: true` 才表示依赖检查通过；2 表示失败。它检查 Python 包、driver/numactl 路径、共享库以及配方要求的 help flags，不加载模型、不分配 GPU、不声称正确性或性能通过。之后再核对 DCU/驱动、设备映射、NUMA 和 ONNX 输入。
 
@@ -94,5 +97,7 @@ BENCH_PYTHON="$PY" bash bench.sh migraphx
 ```
 
 默认 FP16/INT8 × batch 1/32，每个组合三轮，每轮 -n 20。模型应是符合输入合同的自包含 ONNX；动态 batch 可运行两种 batch，静态 batch 必须与请求一致，例如静态 batch=1 时先把 `matrix.batch` 改成 `[1]`。结果保留在 `/work/results`，详见 [性能口径](migraphx.md)。本步骤不要求 Torch 参与推理，也不自动下载/导出模型。
+
+同一原生环境也可使用 [BERT 独立配置](bert.md)。该配置默认使用当前环境的 rocBLAS，不要求另行准备外置调优库；仍须提供满足 BERT 输入合同的实际 ONNX 模型。
 
 退出容器后在原宿主机终端 `docker stop "$NAME"`，确认无需保留容器时可执行 `docker rm "$NAME"`。宿主机 `$WORK` 内的 wheel、预检报告、虚拟环境和测量结果仍保留。
