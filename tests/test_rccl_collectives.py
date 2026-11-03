@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class CollectiveTests(unittest.TestCase):
     def params(self, collective):
         p = {k: v["default"] for k, v in rccl.RcclAllReduce.schema.items()}
-        p.update(binary=f"/work/{collective}_perf", max_bytes=16384)
+        p.update(binary=f"/work/{collective}_perf", ranks=2, min_bytes=8192, max_bytes=16384)
         return p
 
     def test_all_collectives_have_matching_build_and_local_launch(self):
@@ -80,3 +80,7 @@ class CollectiveTests(unittest.TestCase):
     def test_public_template_contains_ten_collectives(self):
         plan = make_plan(str(ROOT / "configs/rccl.template.yaml"), "rccl")
         self.assertEqual({c.params["collective"] for c in plan.cases}, set(prepare.RCCL_COLLECTIVES))
+        self.assertEqual(len(plan.cases), 10)
+        for case in plan.cases:
+            self.assertEqual((case.params["ranks"], case.params["min_bytes"], case.params["max_bytes"]),
+                             (8, 17179869184, 17179869184))

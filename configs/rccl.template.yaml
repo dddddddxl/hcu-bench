@@ -32,8 +32,8 @@ tests:
       binary: auto
       ranks: "${vars.ranks}"
       root: 0 # 仅 broadcast/reduce/gather/scatter 使用。
-      min_bytes: 8192
-      max_bytes: 67108864
+      min_bytes: 17179869184
+      max_bytes: 17179869184
       datatype: half
       warmup_iters: 20
       iters: 50

@@ -27,7 +27,7 @@ wheel 不包含 MPI、DTK、RCCL 或 rccl-tests 二进制，不安装或替换 T
 ## 测试与导入
 
 1. 在测试环境准备 MPI-enabled `all_reduce_perf` 和兼容的动态库。参考实现为 [ROCm/rccl-tests](https://github.com/ROCm/rccl-tests)，当前解析器对应 `ae3e635` 的输出格式；这里没有复制或分发原生源码。
-2. 复制 `examples/rccl/allreduce.json` 到工作目录，修改 `binary` 为实际绝对路径。默认单机 2 个 rank、每 rank 一线程一卡，half/sum，8 KiB～64 MiB、步长 2、预热 20 次、迭代 50 次。
+2. 复制 `examples/rccl/allreduce.json` 到工作目录，修改 `binary` 为实际绝对路径。默认单机 8 个 rank、每 rank 一线程一卡，half/sum，固定 16 GiB（`min_bytes=max_bytes=17179869184`，等价于原生 `-b 16G -e 16G`）、步长 2、预热 20 次、迭代 50 次。
 3. 校验参数并生成计划：
 
 ```bash
@@ -45,14 +45,14 @@ hcubench plan allreduce.json --output plan.json
 {
   "host_name": "replace-with-actual-host",
   "image_id": "replace-with-actual-image-digest",
-  "physical_indices": [0, 1]
+  "physical_indices": [0, 1, 2, 3, 4, 5, 6, 7]
 }
 ```
 
-检查两张卡空闲，确保 `mpirun`、动态库和参数与配置对应，然后执行：
+检查八张卡空闲，确保 `mpirun`、动态库和参数与配置对应，然后执行：
 
 ```bash
-export HIP_VISIBLE_DEVICES=0,1
+export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 python collect.py plan.json --bundle first-bundle --environment host-environment.json
 hcubench import-result allreduce.json --bundle first-bundle --output results
 ```

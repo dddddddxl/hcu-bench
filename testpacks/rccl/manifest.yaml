@@ -10,8 +10,8 @@ parameters:
   collective: {type: string, default: all_reduce, choices: [all_reduce, all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]}
   root: {type: integer, default: 0, min: 0, max: 7}
   ranks: {type: integer, default: 8, min: 2, max: 8}
-  min_bytes: {type: integer, default: 8192, min: 8, max: 1073741824}
-  max_bytes: {type: integer, default: 67108864, min: 8, max: 1073741824}
+  min_bytes: {type: integer, default: 17179869184, min: 8, max: 17179869184}
+  max_bytes: {type: integer, default: 17179869184, min: 8, max: 17179869184}
   step_factor: {type: integer, default: 2, min: 2, max: 16}
   datatype: {type: string, default: half, choices: [half, float, double]}
   operation: {type: string, default: sum, choices: [sum]}

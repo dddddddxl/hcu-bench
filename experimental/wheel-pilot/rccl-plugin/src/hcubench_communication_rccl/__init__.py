@@ -16,9 +16,9 @@ class RcclAllReduce:
     description = "单机 AllReduce；使用者启动 MPI，插件导入原生日志。支持 ae3e635 输出格式。"
     schema = {
         "binary": dict(type="string", default="/work/rccl-tests/build/all_reduce_perf", description="rccl-tests 可执行文件绝对路径", identity=False, location=True),
-        "ranks": integer(2, 2, 8, "单机 MPI 进程数，每进程一线程一卡"),
-        "min_bytes": integer(8192, 8, 1073741824, "起始消息字节数"),
-        "max_bytes": integer(67108864, 8, 1073741824, "结束消息字节数，必须落在倍增序列上"),
+        "ranks": integer(8, 2, 8, "单机 MPI 进程数，每进程一线程一卡"),
+        "min_bytes": integer(17179869184, 8, 17179869184, "起始消息字节数，默认 16 GiB"),
+        "max_bytes": integer(17179869184, 8, 17179869184, "结束消息字节数，默认 16 GiB，必须落在倍增序列上"),
         "step_factor": integer(2, 2, 16, "消息大小倍增因子"),
         "datatype": dict(type="string", default="half", enum=["half", "float", "double"], description="数据类型", identity=True),
         "operation": dict(type="string", default="sum", enum=["sum"], description="归约操作，首版支持 sum", identity=True),
