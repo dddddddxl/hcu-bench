@@ -11,10 +11,10 @@
 在容器内的 Bench 仓库目录，首次准备：
 
 ```bash
-cp configs/in-container.template.yaml configs/bench.yaml
+cp configs/bench.template.yaml configs/bench.yaml
 ```
 
-修改 `configs/bench.yaml` 顶部 `vars`：可写工作目录、容器内 Bench 路径、模型启动脚本、实际网卡/GID、卡号和压测时长。原生工具、DeepEP 脚本、GSM8K 数据可保持 `auto`。模型参数写在独立启动脚本中，YAML 引用路径，见 [端到端测试](e2e.md)。`configs/bench.yaml` 和 `model_scripts/*.local.sh` 被 Git 忽略，不提交节点私有配置。
+先修改 `configs/bench.yaml` 顶部的公共路径和HCU分配，再配置需要执行的suite：PCIe设备编号、DeepEP网卡/GID及负载参数、模型部署和评测参数分别位于各自段落。原生工具、DeepEP脚本、GSM8K数据可保持 `auto`。默认关闭项目已提供[独立测例配置](../configs/cases/README.md)，不由主配置自动加载。模型部署参数写在独立启动脚本中，YAML引用路径，见[端到端测试](e2e.md)。`configs/bench.yaml` 和 `model_scripts/*.local.sh` 被Git忽略，不提交节点私有配置；原 `in-container.template.yaml` 保留兼容。
 
 随后在容器里执行：
 

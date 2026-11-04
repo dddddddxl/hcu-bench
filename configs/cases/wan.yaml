@@ -1,0 +1,39 @@
+# 已有兼容SGLang扩散服务的容器内运行；默认已验证的TP4，不使用LLM token吞吐。
+version: 1
+name: wan22-tp4-performance
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0, 1, 2, 3]                     # TP4需4张空闲卡；TP1须同时改为单卡和profile: tp1。
+output_dir: "${vars.workspace}/results"
+nodes:
+  wan:
+    executor: local
+    hcus: "${vars.hcus}"
+tests:
+  wan_tp4:
+    enabled: true
+    suite: e2e_perf
+    adapter: command
+    pack: ../../testpacks/wan/manifest.yaml
+    nodes: [wan]
+    timeout_s: 18000
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: model_scripts/wan22_t2v.sh
+      model_path: /YOUR_MODELS/Wan2.2-T2V-A14B-Diffusers
+      profile: tp4
+      request:
+        prompt: A curious raccoon
+        size: 1280x720
+        num_frames: 81
+        fps: 16
+        num_inference_steps: 40
+        seed: 42
+        guidance_scale: 4.0
+      warmup_requests: 1
+      requests: 1
+      port: 31095                       # 核对端口未占用。
+      startup_timeout_s: 1800
+      request_timeout_s: 7200

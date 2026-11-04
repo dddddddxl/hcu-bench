@@ -1,124 +1,119 @@
 # HCU Bench
 
-HCU Bench 是面向海光 HCU 测试的命令行工具，将通信、PCIe、显存带宽、算子压测与性能、模型精度和推理吞吐测试统一编排。测试参数写在 YAML；服务类模型的部署参数放在各自的启动脚本中，MIGraphX 固定模型直接配置 ONNX 路径：
-
-真实测试在 Linux 服务器或 Linux 容器内执行，主 CI 也使用 Linux 验证编排、解析及失败处理。
+HCU Bench 是 Linux 下的命令行测试工具，统一执行通信、带宽、算子和模型测试。测试参数通过 YAML 配置，模型部署命令由各自的启动脚本管理。
 
 ```bash
-bash bench.sh rccl          # 单个 suite
-bash bench.sh rccl,pcie     # 多个 suite
-bash bench.sh all           # YAML 中全部启用项
+bash bench.sh all           # 执行主配置中启用的测试
+bash bench.sh rccl          # 仅执行 RCCL
+bash bench.sh pcie,deepep   # 选择多个 suite
+bash bench.sh e2e           # 模型精度 + LLM 性能
 ```
-
-**测试源码和包装器随仓库提供；需要编译的原生 C/C++ 工具首次运行自动构建，之后复用缓存。** 算子、DeepEP 和 MIGraphX 包使用执行环境中已准备的框架或二进制。工具负责参数展开、节点调度、进程与容器生命周期、日志归档和结果汇总。驱动、DTK、框架运行库和模型权重仍由执行环境提供，不自动安装或升级。
 
 ## 支持的测试
 
-| Suite | 当前功能 | 节点范围 | 主要结果 |
-| --- | --- | --- | --- |
-| `rccl` | 10 类 MPI 通信：AllReduce、AllGather、ReduceScatter、Broadcast、Reduce、AllToAll/AllToAllv、Gather、Scatter、SendRecv | 单机 2–8 卡 | 延迟、algbw、busbw、原生正确性检查 |
-| `pcie` | CPU→HCU、HCU→CPU、HCU→HCU、CPU↔HCU、HCU↔HCU 五类路径；默认 512 MiB | 单机，逐对串行 | 各路径 Avg BW、Peak BW，五类 CSV |
-| `memory` | hcu-stream 的 zd1 / zd2 共 24 项，覆盖显存、L1/L2 缓存和 LDS | 单机，指定卡逐卡串行 | 每卡、每用例的 GB/s |
-| `deepep` | 原生低延迟压测，默认 600 秒；支持 token、hidden、top-k、expert 数 | 单机 / 多机 | 有效带宽、分阶段带宽和延迟 |
-| `mooncake` | RDMA / VRAM 压测，支持 pair、fan-in、pairs、ring | 多机，至少两节点 | 吞吐、原生日志、可选吞吐下限判断 |
-| `e2e_acc` | SGLang 0.5.12 GSM8K 评测接口，默认 100 题、5-shot | 单节点服务 | 分数、评测耗时、回答及原生报告 |
-| `e2e_perf` | LLM：EvalScope 1.13.0 流式压测；Wan：独立文生视频 API 测试 | 单节点服务 | LLM 吞吐/延迟；Wan 总耗时、Denoise、单步、Decode、API 耗时 |
-| `operators` | Conv/GEMM 正确性与性能；BLAS/FA 重复性压测；PA、FA 前向性能 | 单机单卡 | 原生校验、延迟、GFLOPS/TFLOPS、PA 带宽及原始日志 |
-| `migraphx` | MIGraphX ResNet50 FP16/INT8、BERT-large FP16 固定推理用例 | 单机单卡 | 三轮吞吐中位数、ms/batch、逐轮结果及原始日志 |
+主配置适用于已有 SGLang 容器，包含以下项目。实际执行仍需满足各项目的环境要求；缺少依赖时记录失败原因，不自动替换运行库。
 
-`e2e` 是 `e2e_acc` + `e2e_perf` 的分组。对于服务类模型，每个模型启动一次，先运行选中的精度项，再运行吞吐项，清理后换下一个模型。支持 OpenAI 兼容服务，附 SGLang / vLLM 启动脚本模板；不支持多机模型服务编排。具体模型能否启动仍取决于镜像、权重和启动参数。
+| Suite | 项目 | 收集结果 |
+| --- | --- | --- |
+| `rccl` | 单机10类通信 | 延迟、algbw、busbw、原生正确性检查 |
+| `pcie` | CPU→HCU、HCU→CPU、HCU→HCU、CPU↔HCU、HCU↔HCU | 各路径平均/峰值带宽 |
+| `operators` | Conv、PA decode、FA FP16前向性能 | 原生校验、耗时、计算性能或带宽 |
+| `deepep` | 低延迟通信压测，默认10分钟 | 原生带宽、延迟、错误 |
+| `e2e_acc` | Qwen3-4B/8B，GSM8K全量1319题，训练集5-shot，非思考 | 精度分数、回答及原生报告 |
+| `e2e_perf` | Qwen3-4B/8B，多长度、多并发流式性能 | 输出吞吐、首token延迟等 |
 
-Wan2.2-T2V-A14B 的单卡/四卡视频配置见 [Wan 指导](docs/wan.md) 和 [专用 YAML](configs/wan.template.yaml)。综合模板中 Wan 默认关闭，填权重并确认目标扩散接口后启用；它不会进入 Qwen 的 `models: all`、GSM8K 或 EvalScope 流程。
+`e2e` 为 `e2e_acc` 和 `e2e_perf` 的组合入口。每个模型按服务启动、精度评测、性能测试、服务清理的顺序执行，完成后切换至下一模型。
 
-`migraphx` 是独立 suite，不属于 `e2e` 分组；使用直接命令测试包，无需 HTTP 服务或 `models` 服务配置。固定用例见 [算子测试](docs/operators.md) 和 [ResNet50 / BERT](docs/migraphx.md)。Conv/GEMM 使用文档附件中的原始 CSV，和 BLAS 固定矩阵压测分开；百万次压测默认关闭。
+### 独立测例
 
-ResNet50 提示缺少 `migraphx-driver` 时，使用 [已检查的 MIGraphX 镜像与新容器步骤](docs/migraphx-setup.md)，并在目标容器执行 `python3 testpacks/migraphx/check.py`。`.[migraphx]` 只安装 Python 依赖；新 [ResNet50 专用模板](configs/resnet50.template.yaml) 不需要 BERT 模型或容器 hook。
+原默认关闭的项目独立配置，保留原有 suite 名称。这些项目具有不同的镜像、工具或资源要求，不纳入默认执行范围。
 
-BERT 使用 [专用模板与启动步骤](docs/bert.md)，默认使用当前原生环境的 rocBLAS，外置库目录改为可选；`check.py --recipe bert_large_fp16 --model /YOUR_MODEL.onnx --batch 1 32` 可在推理前检查依赖和模型输入。报告记录默认环境或显式目录模式，便于区分不同性能基线。
+**显存带宽（`memory`）和 MIGraphX（`migraphx`）默认禁用（disabled）**，不随主配置的 `bash bench.sh all` 执行。主模板不包含这两个测试块；独立配置中的 `enabled: true` 仅在显式选择该配置时生效。SGLang 镜像不保证具备这两项所需的工具链和原生依赖。
 
-“已接入”表示可由统一入口调用，不表示任意卡型、镜像或原生工具版本都已验证。Conv 的 56 组配置、RCCL 的 10 类单机通信已在 BW1000 上实测；GEMM 现提供默认 rocBLAS 5.2.0 和显式 legacy 4.3.0 两套接口，运行前自动检查版本与参数；接口匹配不代表 GEMM 已完成硬件验收。范围与结果见 [实机验证记录](docs/validation/2026-11-02-bw1000-operator-coverage.md)；不能据此宣称整套 `all` 已验收。
+| 配置文件 | Suite | 内容及前提 |
+| --- | --- | --- |
+| `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
+| `configs/cases/migraphx-resnet50.yaml` | `migraphx` | ResNet50 FP16/INT8；需 MIGraphX driver 和本地 ONNX |
+| `configs/cases/migraphx-bert.yaml` | `migraphx` | BERT-large FP16；需 MIGraphX driver、本地 ONNX、兼容的原生库 |
+| `configs/cases/gemm.yaml` | `operators` | GEMM正确性/性能；需匹配 rocblas-bench，误差标准明确后才测性能 |
+| `configs/cases/fa-fp8.yaml` | `operators` | FA FP8前向性能；需匹配的 FP8 扩展 |
+| `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
+| `configs/cases/mooncake.yaml` | `mooncake` | 至少两节点、RDMA、共享可写目录 |
+| `configs/cases/wan.yaml` | `e2e_perf` | Wan2.2文生视频；不使用LLM token吞吐口径 |
 
-## 默认启用范围
+每份独立配置仅包含该测例所需的公共信息和测试参数，测试块默认 `enabled: true`，通过指定配置文件执行。
 
-综合模板默认启用 RCCL、PCIe、Conv、DeepEP 和 Qwen3 精度/性能流水线。RCCL 不在 YAML 中填写消息大小，直接采用仓库默认的固定 **16 GiB**；旧个人配置中已有的 `min_bytes`、`max_bytes` 仍会覆盖默认值，需要同时删除才会继承。
+```bash
+bash bench.sh configs/cases/memory.yaml all
+bash bench.sh configs/cases/migraphx-resnet50.yaml all
+bash bench.sh configs/cases/wan.yaml all
+```
 
-以下项目保留配置和测试代码，但默认 `enabled: false`，不会在 `all` 中运行：
+默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/` 或自动执行可选项目。如需纳入主测试计划，可将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
 
-| 项目 | 开启前需确认 |
-| --- | --- |
-| memory | 目标架构的 hcu-stream/AICC 兼容；当前 gfx938 标准 SGLang 镜像构建未通过 |
-| MIGraphX ResNet50 / BERT | 兼容的原生 MIGraphX driver、动态库和本地 ONNX；标准 SGLang 镜像没有 driver |
-| GEMM | rocblas-bench 与所选 profile 匹配，并确认数值误差标准 |
-| FA FP8 | FlashAttention FP8 扩展接口匹配；不影响 PA 和 FA FP16 的独立测试块 |
+主配置未包含 memory 测试块时，`bash bench.sh memory` 不会自动加载独立配置，须显式指定文件路径。配置选择沿用现有 CLI 规则。
 
-专用模板中也需明确将所选测试的 `enabled` 改成 `true`。全被关闭时会提示 `No enabled tests match this selection`，不会伪造通过结果。上述设置针对已检查的镜像，不代表所有 SGLang 镜像都缺少这些能力；升级仓库不会改写已有 `configs/bench.yaml`。
+### 显存带宽与 MIGraphX 使用方法
+
+在对应的兼容容器中，修改下列独立 YAML 后，从仓库根目录执行。两项均使用文件内声明的路径和卡号，不继承个人 `configs/bench.yaml`。
+
+**显存带宽**：编辑 `configs/cases/memory.yaml`，设置 `vars.bench_root`（容器内仓库路径）、`vars.workspace`（可写输出目录）、`vars.hcus`（目标卡）以及 `build.dtk_root`。`params.binary: auto` 使用已有兼容工具链编译内置 hcu-stream；已有二进制时可改为其绝对路径。`params.presets: both` 执行 zd1/zd2 共24项，多卡逐卡串行。
+
+```bash
+bash bench.sh configs/cases/memory.yaml all
+```
+
+**MIGraphX**：编辑 ResNet50 或 BERT 配置中的 `vars.bench_root`、`vars.workspace`、`vars.hcus`，并设置 `params.model`（本地 ONNX 文件）、`params.binary`（可用的 `migraphx-driver` 命令或绝对路径）、`params.numa_node`（目标卡对应的 NUMA 节点）。执行环境须提前提供兼容的 MIGraphX 原生程序和动态库，以及 numactl、onnx、psutil；本工具不通过安装 driver 来补齐运行库。
+
+```bash
+# ResNet50：FP16/INT8，batch 1/32
+bash bench.sh configs/cases/migraphx-resnet50.yaml all
+
+# BERT-large：FP16，batch 1/32
+bash bench.sh configs/cases/migraphx-bert.yaml all
+```
+
+BERT 的 `params.rocblas_dir: ""` 使用镜像原生库；仅在需要外置兼容库时指定包含 `lib/` 的目录。MIGraphX 每组参数执行三轮，报告吞吐及耗时中位数，不包含模型精度评测。
+
+结果分别写入所选 YAML 的 `${vars.workspace}/results/RUN_ID`，状态与原因查看 `summary.txt`，性能指标查看 `metrics.csv`。详细环境要求见[显存带宽说明](docs/memory.md)和[MIGraphX说明](docs/migraphx.md)。
 
 ## 快速开始
 
-以下是在**已有 Linux 测试容器内**运行的推荐流程，不需要 Docker socket。
+### 1. 获取代码与检查依赖
 
-### 1. 获取代码
+在已准备的 Linux 测试容器中执行：
 
 ```bash
 git clone https://github.com/dddddddxl/hcu-bench.git
 cd hcu-bench
-python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print("Python dependencies OK")'
+python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print("OK")'
 ```
 
-运行入口需要 Python 3.10+ 和 PyYAML；内置原生包装器还需要 psutil。满足依赖时可以直接从仓库运行，无需安装 HCU Bench。
+运行入口需要 Python 3.10+、PyYAML、psutil。依赖已满足时可直接运行，无需额外创建虚拟环境或执行 `pip install -e`。
 
-| 测试 | 仓库已提供 | 镜像仍需具备 |
-| --- | --- | --- |
-| RCCL | 固定版本 rccl-tests 源码，按 collective 自动编译对应 MPI 工具 | make、HIP 编译器、Open MPI、DTK/RCCL 开发库 |
-| PCIe | rocm-bandwidth-test 2.6.0 逐对输出版本源码，自动编译 | CMake、C++ 编译器、HSA 开发库 |
-| memory | main-staging-1.0 hcu-stream 源码，自动按架构编译 | make、匹配架构的 AICC/DTK |
-| DeepEP | 原生测试、接口探测；自动读取已识别 DAS weighted 接口的 handle 字段位置，先有限正确性测试再压测 | 匹配接口的 Torch/DeepEP、通信环境；未知结构明确报错，不自动换库 |
-| Mooncake | Hygon Transfer Engine、pybind11、yalantinglibs 源码，自动编译 | CMake、C++20 编译器、HIP、RDMA/numa/gflags/glog/jsoncpp/yaml-cpp 开发库、Python 开发头文件；两端共享可写目录 |
-| e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
-| e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip 22.3+（不要求 ensurepip）、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
-| operators | 固定算子脚本、Conv/GEMM CSV、解析器及来源 SHA256 | Conv 需 MIOpenDriver，GEMM 需 rocblas-bench；PA/FA/BLAS 需匹配 ABI 的 Torch/Triton/FlashAttention 等 |
-| migraphx | ResNet50 / BERT 命令、三轮中位数、输入检查和指纹记录 | MIGraphX driver、numactl、onnx、psutil、本地 ONNX；BERT 默认使用当前环境的 rocBLAS，可显式提供外置库 |
+仓库提供测试源码和包装脚本，RCCL/PCIe/memory/Mooncake 首次运行时按需编译。驱动、DTK、模型框架、原生运行库和权重由镜像及挂载目录提供，不自动安装或升级。LLM 性能测试首次在独立缓存环境准备 EvalScope 客户端依赖，需要可用包源或 wheelhouse；此过程不升级模型服务环境。
 
-以上是运行镜像的基础依赖，不是要求另找测试代码。原生构建源码版本、校验与授权说明见 [vendor](vendor/README.md)，固定算子脚本来源见 [算子测试](docs/operators.md)。原生 C/C++ 构建不联网下载源码、不安装系统软件包；EvalScope 服务压测首次会在独立缓存虚拟环境安装客户端 Python 依赖，不改服务环境的 DTK、Torch 或 SGLang。MIGraphX 固定模型包不自动安装依赖。依赖不全或准备失败会保留错误，不自动换库。
+### 2. 配置测试方案
 
-### 2. 复制并修改 YAML
+复制主模板为个人配置：
 
 ```bash
-cp configs/in-container.template.yaml configs/bench.yaml
+cp configs/bench.template.yaml configs/bench.yaml
 ```
 
-编辑 `configs/bench.yaml`。模板带中文注释，主要修改以下内容，路径均使用**容器内绝对路径**：
+主模板见 [bench.template.yaml](configs/bench.template.yaml)，独立测例见 [configs/cases](configs/cases/README.md)。原有 `in-container.template.yaml`、managed/SSH及各专用模板保留兼容；已有个人配置不会自动迁移或覆盖。
 
-| 配置位置 | 填写内容 |
-| --- | --- |
-| `vars.workspace` / `vars.bench_root` | 可写输出目录 / 当前仓库目录 |
-| `vars.hcus` | 本次允许使用的卡号；先确认无其他业务占用 |
-| `vars.rccl_ranks` | RCCL 进程数，等于分配卡数 |
-| `vars.pcie_*_devices` | PCIe 工具的 CPU/HCU Device ID，不是 HIP 卡号 |
-| `vars.memory_hcus` | 显存测试卡号，必须属于 `hcus` |
-| `vars.iface` / `vars.ib_hca` / `vars.gid` | 实际通信网卡、RDMA 设备和 GID |
-| `vars.qwen3_4b_path` / `vars.qwen3_8b_path` / `vars.model_hcus` | 默认两个模型的本地权重路径及单卡；其他模型在`models`填写启动脚本 |
-| `build` | 已有 DTK/MPI 路径、架构、构建缓存；默认探测 HCU 架构 |
+主配置按以下顺序组织：
 
-只填写需要运行的 suite；不运行的测试块设为 `enabled: false`，不要删除公共变量定义。模板中的 `YOUR_*` 是占位符，不是可直接使用的配置。
+1. **通用配置**：仓库目录、结果目录、HCU 分配和编译环境。
+2. **模型部署**：4B/8B权重、启动脚本、端口，仅 e2e 使用。
+3. **Suite 配置**：RCCL、PCIe、算子、DeepEP、模型精度和模型性能，各项目参数分别配置。
 
-PCIe 的 Device ID 必须先在同一执行环境运行 `rocm-bandwidth-test -e` 获取，并根据 PCI 地址核对；**它不是 HCU 卡号**。显存带宽与 PCIe 是两种测试，不能互换二进制或设备编号。
+仅执行 RCCL 时，无需配置模型权重、PCIe 设备编号或 DeepEP 网卡。未执行的测试块可设为 `enabled: false`；使用 `all` 时，所有启用项目均须配置完整。`YOUR_*` 为待替换的占位符，不具有自动发现功能。
 
-模板中的 `*_binary`、`deepep_script`、`dataset` 默认保持 `auto`，无需另找测试源码。已有工具也可填写绝对路径，工具不会替换无效的显式路径。
+所有运行路径均使用**当前执行容器内的绝对路径**，并确保对应目录已挂载且可访问。
 
-默认模型为Qwen3-4B、Qwen3-8B，通用BF16/TP1脚本已提供，填好YAML里的本地权重路径和卡号即可使用。精度默认训练集5-shot、test全量1319题、非思考、只报告分数；性能按月英表已有数据，每模型31点，每点256正式请求、32预热、1轮。完整扫描可能需要数小时以上，详细参数见[端到端测试](docs/e2e.md)。
-
-新增其他模型时，复制一份 [SGLang 模板](model_scripts/sglang.template.sh) 或 [vLLM 模板](model_scripts/vllm.template.sh)，写入已经验证的部署命令，再把路径填入 YAML：
-
-```bash
-cp model_scripts/sglang.template.sh model_scripts/model_a.local.sh
-# 编辑 model_a.local.sh：权重路径、TP、量化、EP 配置、网卡等
-# 在 bench.yaml 的 models 下新增模型，并填写 start_script
-```
-
-脚本最后用 `exec` 前台启动服务，监听 `$BENCH_HOST:$BENCH_PORT`，不要加 `nohup` 或 `&`。`*.local.sh` 和 `configs/bench.yaml` 都被 Git 忽略。具体字段见 [端到端测试](docs/e2e.md)。
-
-### 3. 检查并运行
+### 3. 检查与执行
 
 ```bash
 bash bench.sh check -c configs/bench.yaml --suite all
@@ -126,151 +121,261 @@ bash bench.sh plan -c configs/bench.yaml --suite all
 bash bench.sh all
 ```
 
-`check` 检查配置和参数，`plan` 展示实际命令；二者都不会连接节点、启动容器或占用 HCU，也不证明环境已经可运行。原生工具、模型和依赖在实际执行时检查。
+`check` 检查配置，`plan` 展示执行计划；两者均不占用 HCU 或启动模型，也不验证原生依赖的完整可用性。测试前应通过 `hy-smi` 和 `hy-smi --showpids` 核对资源占用，瞬时利用率为0不能单独作为空闲依据。
 
-综合模板已包含 Conv/GEMM、RCCL 通信集合、PCIe、memory、DeepEP 和模型流水线，GEMM、memory 默认关闭，其他启用项按 YAML 顺序串行运行。**`all` 只运行当前 YAML 中启用的测试**；PA/FA、Mooncake、MIGraphX 可从各自模板合并所需测试块。nmz6 的单容器功能短测示例见 [nmz6.sglang-smoke.yaml](configs/nmz6.sglang-smoke.yaml)，路径、卡号、网卡仍须在当前容器复核，短测不是完整验收。
+## 通用配置
 
-`configs/bench.yaml` 是默认配置路径，已被 Git 忽略。升级仓库不会覆盖个人配置，也不会自动增加新 suite；新增测试块需从最新模板补入。
-
-### 首次编译与缓存
-
-运行 RCCL、PCIe、memory、Mooncake 时，先校验源码，再在执行环境的缓存目录编译。源码、架构、编译器或已记录的运行库信息变化时会使用新缓存；失败构建不会标记为可用。DeepEP / e2e_acc 不编译推理框架；EvalScope 客户端也缓存于 `build.cache_dir`，首次安装成功后复用。固定算子和 MIGraphX 包不自动安装或重编译框架。
-
-`build.timeout_s` 默认 3600 秒，独立于测试时限；`build.jobs` 默认 2，`build.cache_dir` 指定可写缓存目录。自动建容器时应把缓存放在持久挂载目录，避免每个容器重复编译。Mooncake 会等待所有节点准备好后再开始负载。
-
-memory 默认使用已有 AICC，YY/gfx92a 自动对应 `arch_num: 9210`。**此前 gfx938 + DTK 26.04 的原生编译仍有兼容问题；自动编译不代表已修复该问题。** 新构建链路经过本地软件回归，尚不能视为所有镜像的 HCU 实测通过。
-
-## 固定算子与 ResNet50 / BERT
-
-这两类测试使用独立模板，可以选择不同镜像。模板默认在 Docker 宿主机执行，需要填写容器启动、检查、停止 hook；在已有容器内运行时，删除 `containers` 和测试块中的 `container` 字段，并填写容器内路径。详见 [算子用例](docs/operators.md) 和 [模型用例](docs/migraphx.md)。
-
-```bash
-# 算子性能：Conv/GEMM，以及 PA decode、FA FP16/FP8。
-cp configs/operators.template.yaml configs/bench.yaml
-# 编辑 vars.image、容器 hook、仓库路径和唯一目标卡。
-bash bench.sh check -c configs/bench.yaml --suite operators
-bash bench.sh plan -c configs/bench.yaml --suite operators
-bash bench.sh operators --set vars.image=YOUR_APPROVED_OPERATOR_IMAGE
-```
-
-BLAS FP16、FA FP16/BF16 三项压力用例另在 `operator_stress` 中，默认关闭。安排测试窗口后才设为 `enabled: true`；必须完成原生 100 万次循环，超时或中断不算完成。逐次比较首次结果只证明重复一致性，不能代替独立数值精度验证。
-
-```bash
-# 模型性能：ResNet50 FP16/INT8、BERT-large FP16，各测试 batch=1、32。
-cp configs/migraphx.template.yaml configs/bench.yaml
-# 编辑 vars.image、模型路径、NUMA、容器 hook；BERT rocblas_dir 默认留空。
-# 原生环境准备好后，将 tests.resnet50.enabled、tests.bert_large.enabled 改为 true。
-bash bench.sh check -c configs/bench.yaml --suite migraphx
-bash bench.sh plan -c configs/bench.yaml --suite migraphx
-bash bench.sh migraphx --set vars.image=YOUR_APPROVED_MIGRAPHX_IMAGE
-```
-
-两段示例应分别配置运行；第二次复制会替换 `configs/bench.yaml`。镜像可填写 tag 或 digest，`vars.image` 会传给启动 hook。MIGraphX 共 6 个组合，每组 3 轮、每轮 20 次，保留 Rate、Total time 和三轮中位数；ResNet50 仅 FP16 添加 `--opt-compile`。BERT 使用三个 INT64 `[batch,384]` 输入并填充为 1。本用例只测性能，不评估模型数值精度或 SQuAD 准确率。
-
-## 常用命令与参数
-
-```bash
-bash bench.sh list                         # 查看 suite 和接入范围
-bash bench.sh rccl
-bash bench.sh pcie
-bash bench.sh memory
-bash bench.sh deepep
-bash bench.sh operators                   # 当前 YAML 中启用的算子项
-bash bench.sh migraphx                    # ResNet50 / BERT 原生推理
-bash bench.sh e2e_acc                     # 仅精度
-bash bench.sh e2e_perf                    # 仅服务吞吐
-bash bench.sh e2e                         # 精度 + 服务吞吐，共用每个模型的服务
-bash bench.sh deepep,e2e                   # 仍按 YAML 中的顺序执行
-bash bench.sh configs/another-node.yaml all
-
-# 参数仅对本次运行生效
-bash bench.sh deepep --set vars.duration_s=1200
-bash bench.sh pcie --set tests.pcie_bandwidth.params.size_mib=64
-bash bench.sh memory --set tests.memory_bandwidth.enabled=true --set tests.memory_bandwidth.params.presets=zd2
-
-# 后台执行；RUN_ID 使用启动时打印的真实路径
-bash bench.sh all --detach
-bash bench.sh status /work/bench-output/results/RUN_ID
-bash bench.sh stop /work/bench-output/results/RUN_ID
-bash bench.sh report /work/bench-output/results/RUN_ID
-```
-
-| 范围 | 常调参数 |
-| --- | --- |
-| 公共 | `enabled`、`nodes`、`repeats`、`timeout_s`、`failure_policy` |
-| RCCL | `collective`、`root`、`ranks`、`min_bytes`、`max_bytes`、`step_factor`、`datatype`、`warmup_iters`、`iters` |
-| PCIe | `cpu_devices`、`hcu_devices`、`size_mib`、`iters` |
-| memory | `devices`、`presets`、`model_mhz`、`array_size` |
-| DeepEP | `duration_s`（测试块）、`num_processes`、`num_tokens`、`hidden`、`num_topk`、`num_experts` |
-| Mooncake | `topology`、`duration`、`buffer_size`、`threads`、`batch_size`、`block_size`、`operation` |
-| operators | 固定配方：`recipe`、`native_timeout_s`；Conv/GEMM：`dtype`、`mode`、分组/方向/用例过滤、预热/迭代/轮次及 `max_norm_error` |
-| 服务类模型部署 | `models.<名称>.start_script`、`port`、`startup_timeout_s`；其余部署参数在启动脚本内 |
-| e2e_acc | `models`、`num_examples`、`num_shots`、`few_shot_path`、`num_threads`、`max_tokens`、`chat_template_kwargs`、`min_score` |
-| EvalScope e2e_perf | `models`、`workloads`或`shapes`/`concurrency`、`requests`、`warmup_requests`、`repeats`、`seed`、`extra_body` |
-| migraphx | `recipe`、`batch`（1 / 32）、`model`、`numa_node`、`rocblas_dir`、`round_timeout_s` |
-
-参数通常写在测试块的 `params` 中；原生包字段以 `manifest.yaml` 为准。普通测试可用 `matrix` / 外层 `repeats`；引用 `models` 的测试不使用这两个字段，吞吐扫描使用 `params.shapes`、`params.concurrency`、`params.repeats`，见 [端到端测试](docs/e2e.md)。
-
-DeepEP 的 `duration_s` 是计划窗口，必须小于故障时限 `timeout_s`。Mooncake 使用原生 `params.duration`；RCCL、PCIe、memory、固定算子、migraphx 和 e2e 按完整用例结束，不能设置框架 `duration_s`。memory 的 `model_mhz` 仅影响部分用例的带宽换算，**不会锁定硬件频率**。
-
-## 其他运行方式
-
-| 场景 | 模板 | 说明 |
+| 配置项 | 说明与示例 | 调整条件 |
 | --- | --- | --- |
-| 已有容器内运行 | [in-container.template.yaml](configs/in-container.template.yaml) | 最短使用路径，不需要宿主机 Docker 权限 |
-| 宿主机自动创建容器 | [managed-container.template.yaml](configs/managed-container.template.yaml) | 由用户脚本提供启动、检查、停止接口 |
-| 控制机通过 SSH 调度 | [remote.template.yaml](configs/remote.template.yaml) | 双节点原生 DeepEP 示例 |
-| 仅 PCIe / 仅 memory | [pcie.template.yaml](configs/pcie.template.yaml) / [memory.template.yaml](configs/memory.template.yaml) | 无需填写模型和通信测试输入 |
-| Mooncake 多机 | [mooncake.template.yaml](configs/mooncake.template.yaml) | 使用已准备的容器，共享目录须在所有节点可写 |
-| 多模型精度 / 吞吐 | [e2e-multi-model.template.yaml](configs/e2e-multi-model.template.yaml) | 每个模型单独启动脚本，精度和吞吐串行共用服务 |
-| Wan 文生视频性能 | [wan.template.yaml](configs/wan.template.yaml) | 单卡/四卡，官方请求初值，各 1 次预热 + 1 次正式；不是原表同口径验收 |
-| 算子压测 / 性能 | [operators.template.yaml](configs/operators.template.yaml) | Conv/GEMM 和 PA/FA 性能；百万次压测默认关闭；镜像可选 |
-| Conv/GEMM | [numeric-operators.template.yaml](configs/numeric-operators.template.yaml) | 已有容器内执行；56 组 Conv、42 组 GEMM；perf 自动先校验 |
-| RCCL 通信集合 | [rccl.template.yaml](configs/rccl.template.yaml) | 单机 2–8 卡；按算子编译，归约类使用 sum |
-| ResNet50 / BERT 性能 | [migraphx.template.yaml](configs/migraphx.template.yaml) | MIGraphX 原生推理，6 个组合，每组 3 轮；镜像可选 |
-| 无 HCU 演示 | [demo.yaml](configs/demo.yaml) | 全部为模拟数据，不能作为性能结果 |
+| `name` | 本轮方案名称，例如 `nmz6-bench` | 便于区分报告，可自行命名 |
+| `vars.bench_root` | 仓库绝对路径，在仓库根目录执行 `pwd` 获取 | 仓库路径或容器挂载变化时修改 |
+| `vars.workspace` | 可写输出目录，建议持久挂载，例如 `/workspace/bench-output` | 换平台时核对，用于保存结果和缓存 |
+| `vars.hcus` | 多卡测试允许使用的编号列表，例如 `[0,1,2,3]` | 必须核对实际可见设备和业务占用 |
+| `vars.single_hcus` | 单卡测试所用编号，例如 `[0]` | 仅分配一张卡，且属于 `vars.hcus` 范围 |
+| `failure_policy` | `continue` 或 `stop` | 普通失败清理后继续，或立即停止 |
+| `build.dtk_root` | 实际DTK安装根目录 | 核对 `/opt/dtk` 是否存在且对应当前环境 |
+| `build.mpi_home` | Open MPI安装根目录 | RCCL需要；可从 `command -v mpirun` 初步定位，再核对实际安装目录 |
+| `build.arch` | `auto` 或实际架构名，如 `gfx938` | 存在多架构或无法唯一识别时显式指定；可用 `rocminfo` 核对 |
+| `build.cache_dir` | 可写原生构建/客户端缓存目录 | 默认引用 workspace，须具有写权限 |
+| `build.jobs` | 首次编译并行任务数，默认2 | 用于调整编译CPU负载，与卡数无关 |
+| `build.timeout_s` | 编译准备超时，默认3600秒 | 首次编译耗时较长时调整 |
+| `output_dir` | 统一结果目录 | 默认 `${vars.workspace}/results`，通常无需调整 |
+| `nodes.*.executor` | 已有容器内执行用 `local` | SSH控制机调度时另用远程模板 |
+| `nodes.*.hcus` | 引用分配的卡列表 | 通常不改引用；不是PCIe工具的Device ID |
+| `HIP_VISIBLE_DEVICES` | 保留 `${hcu_ids}` | 由框架根据该用例的卡分配展开 |
 
-自动建容器模式的控制端需要 Python 3.10+、PyYAML 和 Docker。模板保留以下脚本接口，设备、权限、挂载和镜像由使用者明确配置：
+本模板的卡号以当前容器执行环境为准。若容器仅透传部分物理卡，应通过PCI地址或UUID核对与宿主机设备的映射关系。调整卡数时，须同步修改 RCCL `ranks` 和 DeepEP `num_processes`。
 
-```text
-bash container.sh start NAME IMAGE HOST_WORKSPACE CONTAINER_WORKSPACE
-bash container.sh check NAME
-bash container.sh stop NAME
+### 测试块字段
+
+| 字段 | 说明 |
+| --- | --- |
+| 测试名，如 `pcie_bandwidth` | 日志和命令覆盖使用的ID；不是suite名 |
+| `enabled` | 是否纳入执行；即使指定suite，false项也不运行 |
+| `suite` | 命令行选择名，通常不改 |
+| `adapter: command` / `pack` | 真实测试包及其manifest，通常不改 |
+| `nodes` | 选择前面声明的节点/卡组；单卡用single，多卡用multi |
+| `timeout_s` | 测试故障时限，单位秒；测试完成后立即结束，不要求持续至超时 |
+| 外层 `repeats` | 整个测试块的独立重复次数，适用于普通测试 |
+| `params` | 本测试的原生参数 |
+| `matrix` | 将列出的参数组合展开成多个用例 |
+| `env` | 只给当前测试设置的环境变量，值写字符串 |
+
+`pack` 相对于 YAML 所在目录解析：`configs/bench.yaml` 使用 `../testpacks/...`，`configs/cases/*.yaml` 使用 `../../testpacks/...`。同一文件中的顶层 `tests:` 和 `models:` 均不得重复定义。
+
+## Suite 参数说明
+
+### RCCL
+
+配置位置：`tests.rccl_collectives`。默认执行10类通信，每类使用固定 **16 GiB** 消息、half、20次预热和50次测量。YAML 省略消息大小参数，继承仓库默认值。
+
+| 参数 | 取值与说明 |
+| --- | --- |
+| `binary` | 默认 `auto`，按collective编译对应工具；显式指定的程序须与collective匹配 |
+| `ranks` | 等于分配HCU数，一进程一卡；当前2–8卡 |
+| `datatype` | `half` / `float` / `double`，对比时保持一致 |
+| `warmup_iters` / `iters` | 预热和正式迭代次数，不是秒数 |
+| `matrix.collective` | 待执行的通信项列表，可按测试范围删减 |
+
+`min_bytes` / `max_bytes` 仅保留注释。已有个人配置若指定了64 MiB或1 GiB，须移除这两个覆盖值才能继承16 GiB。显存不足时保留原始错误，不自动降低消息大小或将降级结果判为通过。
+
+该suite目前用于单机通信，不代表网卡带宽测试。通信环境变量在本测试块的 `env` 中配置，与DeepEP的网卡设置分别管理。
+
+### PCIe
+
+配置位置：`tests.pcie_bandwidth.params`。换平台时须重新枚举并核对 `cpu_devices`、`hcu_devices`，其余参数按测试口径调整。
+
+```bash
+/实际工具路径/rocm-bandwidth-test -e
+/实际工具路径/rocm-bandwidth-test -t
+hy-smi
 ```
 
-修改模板后同样执行 `bash bench.sh all`。工具按用例创建并清理自己的容器，不接管已有同名容器。也支持 `mode: existing` 复用明确指定的容器，不删除它；详细接口见 [容器运行说明](docs/quick-run.md)。
+设备枚举须使用本轮实际运行的工具版本，并在同一容器内通过PCI地址核对映射关系。工具缺失时可使用仓库内置源码的准备入口构建，无需另行获取源码；不同工具版本的设备编号不能直接复用。
 
-多节点使用已有 SSH 密钥、ssh-agent 或 SSH config，不保存密码。将这一个完整仓库部署或共享挂载到目标环境，原生工具在各节点自动准备；模型和运行库仍需在目标可见。每个测试独立配置 `nodes`，因此同一 YAML 可以让 RCCL/PCIe/memory/e2e 使用一个节点、DeepEP/Mooncake 使用多个节点；**不能仅给 e2e 增加节点就获得多机推理支持**。
-
-多模型写在顶层`models`。模板的精度与吞吐均用`models: all`，新增模型只需填`start_script`，自动纳入两项测试；仍可用显式列表只选部分模型。同一模型、节点、容器及环境配置合并为一次服务会话。旧`suite: e2e` / profile配置仍按精度测试解释，不会自动增加吞吐。完整示例见[端到端测试](docs/e2e.md)。
-
-文档和新 YAML 字段统一使用 HCU。旧 `gpus`、`gpu_devices`、`gpu_id` 仍有兼容别名，不能和对应新字段同时填写。原生环境变量、命令参数、源码及历史结果字段保留原名，例如 `GPU_MAX_HW_QUEUES`，不可机械改名。
-
-## 结果与失败处理
-
-每次运行生成独立的 `RUN_ID`，控制台打印输出位置。容器内模板默认写入 `vars.workspace/results/RUN_ID`；SSH 模式的统一报告保存在控制机的 `output_dir`。
-
-| 文件或目录 | 内容 |
+| 参数 | 取值与说明 |
 | --- | --- |
-| `summary.txt` / `summary.md` | 按suite展示执行概览、关键性能、正确性、失败/取消原因及日志入口 |
+| `binary` | `auto`编译内置工具，或已核对接口的程序绝对路径 |
+| `cpu_devices` | 例如 `"0,1"`，是工具枚举的CPU内存代理，不是CPU核心号 |
+| `hcu_devices` | 例如 `"2,3,4,5"`，是同一工具的HCU Device ID，不是卡号 |
+| `size_mib` | 默认512，单次拷贝512 MiB；不是整轮只传512 MiB |
+| `iters` | 默认20，原生内部迭代次数 |
+| 外层 `repeats` | 默认1，整套路径复测次数 |
+
+上述编号仅用于演示格式，实际取值以目标环境的枚举结果为准。五类路径完整扫描至少需要两张HCU；平均值和峰值分别保存，双向带宽已包含两个方向之和，不再乘2。
+
+### operators：Conv、PA、FA FP16
+
+| 测试块 | 参数 | 取值与说明 |
+| --- | --- | --- |
+| `conv` | `mode` | `check`只校验；`perf`先校验再测性能 |
+| `conv` | `driver` | `auto`查找镜像的MIOpenDriver；不自动安装原生库 |
+| `conv` | `conv_suite` | `all` / `conv2d` / `conv3d` |
+| `conv` | `direction` | `all` / `fwd` / `dgrad` / `wgrad` |
+| `conv` | `matrix.dtype` | 默认 `[fp32, fp16]` |
+| `conv` | `warmup` / `iters` / `params.repeats` | 每用例预热、正式迭代、性能轮数，默认10/100/3 |
+| `conv` | `native_timeout_s` | 原生执行时限；外层timeout另留清理余量 |
+| `pa_decode` | `recipe` | 固定 `pa_decode`；形状由当前固定配方定义 |
+| `fa_fp16_forward` | `recipe` | 固定 `fa_fp16_forward` |
+| PA/FA | `native_timeout_s` | 默认1800秒；不是迭代次数 |
+
+PA/FA使用固定配方，暂不支持任意形状配置。FP8和重复性压力测试使用独立测例，不能仅通过修改dtype切换。
+
+### DeepEP
+
+配置位置：`tests.deepep_pressure`。负载参数通过 `params` 配置，通信环境变量通过本测试块的 `env` 配置。
+
+| 参数 | 取值与说明 |
+| --- | --- |
+| `duration_s` | 默认600秒，计划压测窗口，含初始化 |
+| `timeout_s` | 故障时限，必须大于duration_s |
+| `test_script` | `auto`使用内置测试，不代表安装或升级DeepEP |
+| `num_processes` | 每节点使用的进程数，等于分配HCU数 |
+| `master_addr` | 单机 `127.0.0.1`；多机填首节点可达地址，并配置SSH节点 |
+| `master_port` | 未占用端口，示例29450 |
+| `num_tokens` | 每卡token数，默认128 |
+| `hidden` | hidden维度，默认7168 |
+| `num_topk` | 每token选择的expert数，默认8 |
+| `num_experts` | expert总数，默认256；须满足原生实现的整除条件 |
+| `NCCL_SOCKET_IFNAME` / `GLOO_SOCKET_IFNAME` | 实际可用socket网卡，两项通常填同一接口 |
+| `ROCSHMEM_IB_GID_INDEX` | 实际RDMA设备、端口所用的GID index，写字符串 |
+
+使用以下命令核对网络设备与GID信息：
+
+```bash
+ip -br addr
+ibv_devices
+ibdev2netdev
+show_gids
+```
+
+`ibdev2netdev`、`show_gids` 并非所有镜像均已提供；缺失时应通过宿主机或sysfs核对。socket网卡可能用于管理网络，RDMA设备可能对应其他网络，两者名称不必相同。GID index须与目标RDMA设备、端口、地址类型及原生运行库要求匹配，不预设为0或3。多HCA选择须按目标ROCSHMEM接口确认，`NCCL_IB_HCA` 并非所有运行库通用的设备选择参数。
+
+`ROCSHMEM_HEAP_SIZE`、`HIP_BUFFER_EXTRA_SIZE`、`NCCL_IB_DISABLE` 默认保留已确认的单机配方；其中 `NCCL_IB_DISABLE` 仅作用于NCCL，不表示关闭ROCSHMEM的RDMA。
+
+内置DeepEP测试启动前生成 `api_contract.json`，识别已支持的11/12字段结构；worker复核接口指纹，原生正确性短测通过后才进入压力阶段。未知或歧义接口明确拒绝，不保证任意未来版本均可适配，也不会绕过原生正确性检查。
+
+### e2e：模型启动脚本
+
+模型部署在顶层 `models` 中定义，由精度和性能测试共同引用，无需重复配置部署命令。
+
+| 参数 | 取值与说明 |
+| --- | --- |
+| 模型名，如 `qwen3_4b` | 自定义ID，用于选模型和报告 |
+| `start_script` | 启动脚本路径；相对路径以执行环境的bench_root为基准 |
+| `env.BENCH_MODEL_PATH` | 默认4B/8B脚本读取的权重路径；自有脚本按自身约定读取 |
+| `tokenizer_path` | 配套本地tokenizer目录；模板显式配置，避免服务返回的模型名无法解析为本地路径 |
+| `port` | 空闲服务端口；模型串行可复用 |
+| `startup_timeout_s` | 等服务就绪的最长秒数，默认1800 |
+
+默认4B/8B脚本采用通用BF16、TP1配置。新增模型可在自有脚本中管理权重、量化、TP、网络和后端参数，YAML仅声明 `start_script`；客户端无法通过服务获取可用tokenizer时，另行配置 `tokenizer_path`。
+
+```yaml
+models:
+  new_model:
+    start_script: model_scripts/new_model.local.sh
+    # tokenizer_path: /models/new-model
+```
+
+启动脚本须前台运行，使用 `exec` 启动服务，并读取 `$BENCH_HOST`、`$BENCH_PORT`，不得使用 `nohup` 或 `&` 后台化。上述模型定义应加入现有 `models`，不得重复定义顶层键。
+
+### e2e_acc：模型精度
+
+| 参数 | 默认值与说明 |
+| --- | --- |
+| `models` | `all`使用所有模型；或 `[qwen3_4b]`只测一个 |
+| `data_path` | `auto`明确指仓库 `vendor/gsm8k/test.jsonl` |
+| `few_shot_path` | `auto`明确指 `vendor/gsm8k/train-5shot.jsonl`，不从测试集扣除5题 |
+| `num_examples` | 0=全量1319题；功能短测可填100 |
+| `num_shots` | 5，使用训练示例 |
+| `num_threads` | 128，客户端线程数；不是HCU数或TP |
+| `max_tokens` | 2048，每题输出上限，会影响结果可比性 |
+| `chat_template_kwargs.enable_thinking` | false；是否生效也取决于模型模板和服务支持 |
+| `min_score` | 空字符串只报告分数；有验收标准再填 `"0.90"` 等比例 |
+| `timeout_s` | 每模型精度任务的故障时限，默认14400秒 |
+
+历史vLLM结果不直接作为当前SGLang的通过阈值。自定义JSONL须包含 `question`、`answer` 字符串，训练提示与评分数据应分开提供。
+
+### e2e_perf：LLM吞吐
+
+| 参数 | 默认值与说明 |
+| --- | --- |
+| `models` | 同精度，可单独指定模型列表 |
+| `python` | `auto`准备隔离EvalScope客户端；也可填已准备的客户端解释器路径 |
+| `workloads[].input_tokens` | 目标输入token长度 |
+| `workloads[].output_tokens` | 目标输出token长度；保留实际长度，不假定每次等长 |
+| `workloads[].concurrency` | 此长度组合的并发档位列表 |
+| `requests` | 每个点256正式请求，必须不小于最大并发 |
+| `warmup_requests` | 每点32预热，不计入正式性能 |
+| `params.repeats` | 每个点重复1轮，不是模型服务启动次数 |
+| `seed` | 42，随机数据种子 |
+| `request_timeout_s` | 每条请求最长1800秒 |
+| `extra_body` | 附加API字段，默认关闭thinking；不可覆盖框架管理的模型、提示和token上限字段 |
+| `timeout_s` | 每模型性能任务最多172800秒，即48小时，不是必须运行48小时 |
+
+默认采用月英参考表的4组长度及并发组合，共31个测试点。每模型包含7936次正式请求和992次预热请求，完整两模型测试预计耗时较长。功能验证可将 `workloads` 缩减为单个测试点，并减少正式及预热请求数；短测结果不能代替完整扫描。
+
+## 独立测例配置
+
+独立测例沿用主配置的通用字段，仅保留各自所需的输入，无需配置无关的LLM模型或DeepEP网卡。
+
+| 测例 | 必须核对 | 主要可调参数 |
+| --- | --- | --- |
+| memory | 目标卡、兼容AICC/DTK或已编译hcu-stream | `binary`、`devices`、`presets`（zd1/zd2/both）、`model_mhz`、`array_size`、轮数 |
+| MIGraphX ResNet50 | 单卡、原生driver、ONNX、NUMA节点 | `model`、`numa_node`、`matrix.recipe`（fp16/int8）、`matrix.batch`（1/32）、`round_timeout_s` |
+| MIGraphX BERT | 单卡、原生driver、BERT ONNX、原生库兼容 | `model`、`numa_node`、`rocblas_dir`、`matrix.batch`（1/32）、`round_timeout_s` |
+| GEMM | rocblas-bench接口、认可的误差标准 | `gemm_profile`（new/legacy）、`rocblas_bench`、`group`、`case_id`、`matrix.dtype`、`mode`、`max_norm_error`、预热/迭代/轮次 |
+| FA FP8 | 匹配的Torch/FA FP8扩展 | 固定 `recipe: fa_fp8_forward`，`native_timeout_s` |
+| 算子压力 | 单卡空闲窗口、BLAS/FA依赖 | `stress_iterations`=100短测或1000000正式；3个recipe，原生及外层超时 |
+| Mooncake | 至少两节点、RDMA、双方可写且内容相同的共享目录 | `nodes`、`addresses`、`shared_dir`、`topology`、`duration`、`hcu_id`、`min_bandwidth_gbps` |
+| Wan | 本地Diffusers权重、可用扩散服务、1或4卡 | `start_script`、`model_path`、`profile`、`request`、预热/正式请求数和各层超时 |
+
+- memory的 `devices: ""` 表示使用已分配的全部卡，逐卡串行；非空字符串可填其子集。`model_mhz` 是原脚本换算参数，不锁频；`array_size` 是元素数，不是字节。
+- MIGraphX的 `numa_node` 须按目标卡PCI拓扑对应的实际NUMA节点配置，不预设为0。BERT的 `rocblas_dir: ""` 使用镜像原生库，仅在明确要求外置兼容库时指定目录。每个batch组合内部执行三轮并报告中位数，不包含模型精度评测。
+- GEMM的 `new` 对应当前5.2.0接口，`legacy` 对应4.3.0接口，实际版本应通过原生工具确认。`max_norm_error: ""` 沿用严格规则：非零误差未获阈值认可时不继续性能测试；可按精度拆分测试块并分别配置阈值。
+- 独立压力测例默认100次，标记为smoke，不属于100万次压力验收。正式压力将 `stress_iterations` 改为1000000，并同步增大原生及外层超时；超时或中断不判为完成。
+- Mooncake的 `addresses` 须按 `nodes` 的顺序配置。`duration` 为原生测试时长，单位秒，不使用框架 `duration_s`；带宽阈值为空字符串时仅报告结果。该测例至少需要两台节点。
+- Wan的 `request` 包含prompt、size、num_frames、fps、num_inference_steps、seed、guidance_scale；初版采用1280×720、81帧、16 FPS、40步，1次预热和1次正式生成。TP4已完成实机流程验证，TP1尚未实测；视频质量未评估，不使用LLM吞吐或精度指标。
+
+## 结果与日志
+
+每轮启动时通过 `Run directory` 输出结果目录，默认路径为 `${vars.workspace}/results/RUN_ID`。
+
+| 文件 | 用途 |
+| --- | --- |
+| `summary.txt` / `summary.md` | 按suite展示执行概览、关键指标、正确性、失败/取消原因及日志入口 |
 | `summary.json` | 保留原有机器可读的分组指标汇总 |
-| `report-details/suite-*.csv` | 摘要中对应suite的全部可展示指标，含参数、节点、轮次与统计口径 |
-| `metrics.csv` | 逐条指标，含 suite、节点、参数、单位、正确性及模拟标记 |
-| `e2e.csv` / `e2e.md` | 服务类模型流水线专用汇总，每个工作负载和轮次单独一行；保留失败及未出结果项 |
-| `state.json` / `results.jsonl` | 用例状态 / 标准结果记录 |
-| `logs/` | 各节点执行日志 |
-| `raw/` / `artifacts.jsonl` | 收回的原生报告 / 归档状态 |
-| 配置、命令和环境快照 | 本次运行的复测依据 |
+| `report-details/suite-*.csv` | 对应suite的全部可展示指标，含参数、节点、轮次和原生统计口径 |
+| `metrics.csv` | 所有suite的逐条标准指标 |
+| `e2e.md` / `e2e.csv` | 各模型精度和性能；Wan按视频指标单列 |
+| `state.json` / `results.jsonl` | 原始执行状态 / 标准结果记录 |
+| `logs/测试ID/节点.log` | 分测试、分节点日志；模型会话按其生成ID保存 |
+| `raw/` / `artifacts.jsonl` | 原生报告及单独的归档状态 |
 
-日志使用执行环境本地时间及偏移。不同路径、参数、单位和原生统计口径分开汇总，Avg BW 不当成 Peak BW，DeepEP effective bandwidth 不当成 RCCL busbw。
+### 结果阅读顺序
 
-### 报告阅读
+1. 先查看 `summary.md`（表格）或 `summary.txt`（纯文本），确认整体状态和各suite是否实际执行、是否完成，以及是否发生取消或归档警告。
+2. 在对应suite章节查看关键指标；形状、rank或测试点较多时，摘要展示前12条，全部指标通过该节的suite CSV链接查看。模型会话按精度/性能子任务展示，但执行总数按父会话计一次；子任务无结果不视为完成。模型原始分组另见 `e2e.md`，所有逐条指标见 `metrics.csv`。
+3. 只有需要定位失败、核对统计来源或分析异常时，再打开对应测试ID的日志及 `raw/` 原生报告。
 
-测试结束后优先打开 `summary.md`（表格）或 `summary.txt`（纯文本）：先看执行概览，再看所需suite。每个suite分别列出执行状态、有效测量和正确性，未测量的项目不填0，也不把依赖准备当作模型测试完成。模型会话的精度/性能分别展示，但执行总数仍按父会话计一次。
+| 测试 | 优先关注的指标 | 解释 |
+| --- | --- | --- |
+| RCCL | `algbw`、`busbw`、latency、原生wrong | GB/s、GB/s、微秒；algbw与busbw分别比较，不能互换 |
+| PCIe | `avg_gbps`、`peak_gbps`及源/目标路径 | 原生CSV字段名虽为gbps，单位为GB/s；双向数值已含两个方向 |
+| memory | 配方名称与带宽 | 单位GB/s，显存、缓存和LDS用例分别比较 |
+| DeepEP | effective bandwidth、dispatch/combine带宽与延迟 | 按指标名称、rank和参数区分；计划到时不等于完整稳定性通过 |
+| Conv/GEMM | 原生校验、norm_error、latency及计算性能 | 正确性未确认时，check日志中的速度不能作为正式性能结果 |
+| PA/FA | 带宽或TFLOPS；压力任务的迭代数和完成状态 | 固定性能配方与重复性压力是不同测试 |
+| MIGraphX | 三轮吞吐中位数、ms/batch | 仅代表固定模型性能，不表示模型精度已验证 |
+| 模型精度 | GSM8K分数、评分题数、shot数、输出上限 | 比较时必须统一数据集与评测口径 |
+| LLM性能 | 输出tokens/s、TTFT、TPOT、成功请求数 | 吞吐通常越高越好、延迟通常越低越好；只比较同长度/并发/轮次 |
+| Wan | Pixel、Denoise、单步、Decode、API耗时 | 单位秒，计时边界不同，不能用LLM tokens/s解释 |
 
-RCCL区分消息大小及原地/非原地；PCIe按同一用例、节点、轮次、配置和消息大小展示不同路径的Avg/Peak范围，不计算跨路径均值。其他suite保留原生指标名及单位；形状、rank或测试点较多时，摘要展示前12条，完整数据通过每节的suite CSV链接查看。模型吞吐与Wan耗时使用不同表格，百分位数不跨轮平均。
+`measurement_status` 表示是否获得有效测量，`correctness` 表示数值正确性结论，两者分别判断。`not_checked` 不等于失败，也不等于正确性通过。不同卡型、镜像、消息大小、模型、精度或并发的结果不直接合并为一个平均值。
 
-错误原因仅来自结构化结果和执行状态。若只有非零退出码，报告会注明原因未确认并提供对应日志，不自动推断OOM或库版本问题；独占状态、外部CI归属等仍须结合资源监控记录判断。归档状态独立列出，不覆盖已采性能。模拟数据保留显著标记，不作为HCU实测数据。
+RCCL的消息大小、原地/非原地分开展示；PCIe只在同一配置、节点和轮次下展示不同路径的Avg/Peak范围，不计算跨路径均值。LLM吞吐与Wan耗时分别列表，百分位数不跨轮平均。模拟数据保留显著标记，不作为HCU实测结果。
+
+错误原因仅来自结构化结果和执行状态。若只有非零退出码，报告会注明原因未确认并提供对应日志，不自动推断OOM或库版本问题；独占状态、外部CI归属等仍须结合资源监控记录判断。归档状态独立列出，不覆盖已采性能。
 
 已有结果可重新生成报告，无需重跑测试：
 
@@ -278,30 +383,30 @@ RCCL区分消息大小及原地/非原地；PCIe按同一用例、节点、轮�
 bash bench.sh report /实际结果目录/RUN_ID
 ```
 
-重新生成只读取该轮已有结果，更新报告及指标导出，不修改配置、测试状态、原生结果或日志。`summary.json` 和 `metrics.csv` 保持原有格式；若新版展示生成失败，会写入明确警告，并回退保留逐条指标摘要。
+重新生成只读取该轮已有结果，更新报告及指标导出，不修改配置、测试状态、原生结果或日志。`summary.json` 和 `metrics.csv` 保持原有格式；新版展示生成失败时明确告警，并回退保留逐条指标摘要。完整说明见[结果报告](docs/reports.md)。
 
-固定算子和 MIGraphX 分别以 `operators`、`migraphx` 收入通用 `summary` / `metrics.csv`，原始日志与测量 JSON 归档到 `raw/`；MIGraphX 不写入服务类模型的 `e2e.csv`。MIGraphX 另保留 `rounds.json/csv`，指标统计口径为 `median_of_3_rounds`；如设置外层 `repeats`，框架汇总的是多组三轮中位数的均值。
+MIGraphX使用通用suite报告，不写入服务类模型的 `e2e.csv`。原始 `rounds.json/csv` 保留三轮结果，指标口径为 `median_of_3_rounds`；外层 `repeats` 分别展示，原有 `summary.json` 的分组统计契约不变。
 
-- 普通失败默认清理后继续下一项；`failure_policy: stop` 可立即停止。清理无法确认时，无论策略如何都停止后续测试。
-- 达到计划时长不等于正确性通过；超时、原生断言、空结果和异常退出不会被当作成功。
-- PCIe、memory 默认只报告带宽；e2e_acc 的 `min_score: ""` 只报告分数。EvalScope 要求正式请求全部成功，MIGraphX 要求三轮全部完成且指标完整；两者均不把流程成功当作模型正确性通过，也不设通用吞吐门槛。
-- 原生报告缺失或归档失败会单独警告，保留已采集结果；查看汇总时也要检查用例状态和归档状态。
-- HCU 资源锁只协调本工具，不能代替业务占用检查。工具不改频率，不清理其他用户的进程或容器。
+普通失败默认在清理后继续执行；无法确认清理完成时，停止剩余计划。原生报告缺失或归档失败单独告警，不覆盖已采集的性能结果。`completed` 不代表正确性验证通过，短测不作为完整验收依据。
 
-## 开发与测试包接入
+资源锁仅协调HCU Bench自身，不阻止CI或其他用户使用HCU，也不自动终止外部任务。
 
-需要新建控制端或开发环境时：
+## 常用命令
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[native]'
-python -m unittest discover -s tests -v
-bash bench.sh configs/demo.yaml all
+bash bench.sh e2e_acc
+bash bench.sh e2e_perf
+bash bench.sh deepep --set tests.deepep_pressure.duration_s=1200
+bash bench.sh pcie --set tests.pcie_bandwidth.repeats=3
+bash bench.sh all --detach
+bash bench.sh status /实际输出目录/RUN_ID
+bash bench.sh stop /实际输出目录/RUN_ID
 ```
 
-这不是待验镜像的自动安装步骤。模拟输出标记为 `SIMULATED`，单元测试不依赖 HCU，不能替代硬件验证。Bash 入口优先使用仓库 `.venv/bin/python`，也可通过 `BENCH_PYTHON=/path/to/python` 指定已有解释器。Windows 可作为控制端运行 `hcu-bench` CLI，原生 HCU 测试目标为 Linux。
+`--set` 的测试ID必须与当前配置相同。增大DeepEP计划时长时，外层 `timeout_s` 仍需更大；命令行覆盖不修改原YAML。
 
-接入新测试只需编写 manifest 和必要的包装脚本，声明参数、启动命令、指标及原生报告路径，不必修改调度框架。见 [测试包接口](docs/testpacks.md)。
+宿主机自动创建容器和SSH多节点调度使用对应独立模板及start/check/stop脚本接口，与本文的容器内执行方式分开配置。容器权限和挂载由启动脚本明确声明，配置文件不保存密码。每个测试可独立选择节点；当前e2e模型服务仅支持单节点，增加节点名称不能直接实现多机推理。
 
-模块说明：[RCCL](docs/rccl.md) · [PCIe](docs/pcie.md) · [显存带宽](docs/memory.md) · [DeepEP / 旧版 GSM8K 配置](docs/native-tests.md) · [固定算子](docs/operators.md) · [ResNet50 / BERT](docs/migraphx.md) · [端到端精度与吞吐](docs/e2e.md) · [Mooncake](docs/mooncake.md)。
+个人 `configs/bench.yaml` 不随模板更新自动覆盖。测试源码和内置数据随仓库提供，无需从其他仓库另行获取测试脚本；模型权重及环境依赖仍按各测例要求准备。
+
+详细说明：[配置结构](docs/configuration.md) · [容器与远程执行](docs/quick-run.md) · [RCCL](docs/rccl.md) · [PCIe](docs/pcie.md) · [显存带宽](docs/memory.md) · [算子](docs/operators.md) · [MIGraphX](docs/migraphx.md) · [端到端](docs/e2e.md) · [Mooncake](docs/mooncake.md) · [Wan](docs/wan.md)。

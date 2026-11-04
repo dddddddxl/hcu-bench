@@ -1,0 +1,64 @@
+# Linux控制机通过SSH调度两台已有容器；不创建、停止或删除已有容器。
+# bench_root、workspace须在目标容器可见；shared_dir的内容须在两端一致且可写。
+version: 1
+name: mooncake-two-node-pair
+failure_policy: stop
+vars:
+  bench_root: /YOUR_SHARED_HOME/hcu-bench
+  workspace: /YOUR_SHARED_WRITABLE_WORKSPACE
+  container_name: YOUR_PREPARED_CONTAINER
+  hcus: [0]
+output_dir: ../../runs
+build:
+  dtk_root: /opt/dtk
+  arch: auto
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2
+  timeout_s: 3600
+nodes:
+  target:
+    executor: ssh
+    host: YOUR_TARGET_SSH_ALIAS
+    python: python3
+    work_root: "${vars.workspace}/host/target"
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+      MC_TE_FILTERS: YOUR_TARGET_RDMA_NIC
+  initiator:
+    executor: ssh
+    host: YOUR_INITIATOR_SSH_ALIAS
+    python: python3
+    work_root: "${vars.workspace}/host/initiator"
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+      MC_TE_FILTERS: YOUR_INITIATOR_RDMA_NIC
+containers:
+  existing:
+    mode: existing
+    name: "${vars.container_name}"          # 本示例要求两端已有容器同名。
+    work_root: "${vars.workspace}/container"
+    check:
+      - python3
+      - -c
+      - "import subprocess,sys; p=subprocess.run(['docker','inspect','--format','{{.State.Running}}',sys.argv[1]],stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True); sys.exit(2 if p.returncode else 0 if p.stdout.strip()=='true' else 1)"
+      - "${container_name}"
+    exec_prefix: [docker, exec, -i, "${container_name}", python3, -u]
+tests:
+  transfer_pair:
+    enabled: true
+    suite: mooncake
+    adapter: command
+    pack: ../../testpacks/mooncake/manifest.yaml
+    nodes: [target, initiator]
+    container: existing
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      shared_dir: "${vars.workspace}/rendezvous"
+      addresses: YOUR_TARGET_IPV4,YOUR_INITIATOR_IPV4 # 与nodes顺序一致。
+      topology: pair
+      duration: 180                      # 原生计划时长，不设置框架duration_s。
+      hcu_id: 0                          # 容器内可见逻辑编号，-1表示所有可见卡。
+      min_bandwidth_gbps: ""             # 空=只报告，不设通过阈值。

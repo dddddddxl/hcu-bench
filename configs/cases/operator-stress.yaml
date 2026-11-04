@@ -1,0 +1,30 @@
+# BLAS/FA重复性短压力；100次为smoke，不作为百万次正式压力验收。
+# 正式测试改stress_iterations为1000000，并同步增大native_timeout_s和timeout_s。
+version: 1
+name: operator-stress-smoke
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  operator_stress:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../../testpacks/operators/manifest.yaml
+    nodes: [single]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      stress_iterations: 100
+      native_timeout_s: 1800
+    matrix:
+      recipe: [blas_fp16_stress, fa_fp16_stress, fa_bf16_stress]
