@@ -13,6 +13,17 @@ MAIN = ROOT / 'configs/bench.template.yaml'
 
 
 class CaseConfigurationTests(unittest.TestCase):
+    def test_readme_preserves_configuration_and_suite_report_sections(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        parameters = readme.split('### 测试块字段', 1)[1].split('## Suite 参数说明', 1)[0]
+        self.assertIn('`enabled`', parameters)
+        self.assertIn('`params`', parameters)
+        self.assertNotIn('summary.txt', parameters)
+        reports = readme.split('## 结果与日志', 1)[1].split('## 常用命令', 1)[0]
+        for content in ('summary.md', 'report-details/suite-*.csv', 'docs/reports.md', 'bash bench.sh report'):
+            self.assertIn(content, reports)
+        self.assertIn('默认禁用（disabled）', readme)
+
     def test_main_has_only_common_variables_and_no_optional_cases(self):
         document = load_document(MAIN)
         self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus'})

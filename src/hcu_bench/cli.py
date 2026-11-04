@@ -97,6 +97,7 @@ def dispatch(args):
         finally:
             build_report(store)
             print(f"Report: {store.path / 'summary.txt'}", flush=True)
+            print(f"Markdown report: {store.path / 'summary.md'}", flush=True)
     store = open_run(args.run_dir)
     if args.action == "status":
         print(json.dumps(store.read("state.json"), ensure_ascii=False, indent=2))
