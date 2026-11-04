@@ -3,13 +3,45 @@
 from collections import Counter
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
+import contextlib
+import io
+import json
+import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 
 from hcu_bench.planner import make_plan
 from testpacks.operators.hipdnn_conv import run as hipdnn
 
 
 class HipdnnConvTests(unittest.TestCase):
+    def test_native_commands_do_not_require_a_nonexistent_help_option(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            binary = root / 'test_conv'
+            binary.write_bytes(b'contract fixture; not a GPU executable')
+            args = SimpleNamespace(output_dir=str(root / 'out'), native_timeout_s=60,
+                                   binary=str(binary), source_root='', build_jobs=2,
+                                   case_id='dtk-conv-001', hcu_ids='0', nnodes=1, node_rank=0)
+            calls = []
+            def execute(argv, name, out, env, stopped, executions, timeout_s):
+                calls.append(argv)
+                self.assertNotIn('--help', argv)
+                if name == 'device-probe':
+                    return 'BENCH_DEVICE {"visible_count":1,"pci_bus":"0000:01:00.0"}'
+                original = hipdnn.load_cases(hipdnn.SOURCE / 'test_conv.sh')[0]
+                self.assertEqual(argv[1:], original['argv'])
+                self.assertEqual(env['MIOPEN_PRECISION_FP32_FP32_FP32_TF32_FP32'], '0')
+                return 'fprop avg times: 1.25 ms\nCPU validation result: successful\n'
+            with patch.object(hipdnn, 'execute', side_effect=execute), \
+                    patch.object(hipdnn, 'resolve_binary', return_value=str(binary)), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(hipdnn.run(args, threading.Event()), 0)
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(json.loads((root / 'out/assessment.json').read_text())['complete'])
+
     def test_original_script_and_ordered_environment(self):
         script = hipdnn.SOURCE / 'test_conv.sh'
         self.assertEqual(hashlib.sha256(script.read_bytes().split(b"\n", 2)[2]).hexdigest(),

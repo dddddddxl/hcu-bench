@@ -41,11 +41,7 @@ def run(args, stopped):
                 raise InterruptedError('DTK test_conv run cancelled or timed out')
             return execute(argv, name, out, run_env, stopped, executions, remaining)
         binary = resolve_binary(args, out, launch)
-        help_text = launch([binary, '--help'], 'native-help')
-        required = {flag for case in cases for flag in case['argv'] if flag.startswith('-') and not flag[1:].isdigit()}
-        missing = sorted(flag for flag in required if not re.search(r'(?<![\w-])' + re.escape(flag) + r'(?![\w-])', help_text))
-        if missing:
-            raise ValueError('test_conv CLI missing original flags: ' + ', '.join(missing))
+        # The original program has no --help; argument errors are native case failures.
         probe = launch([sys.executable, str(Path(__file__).parents[1] / 'numeric/probe.py')], 'device-probe')
         devices = [json.loads(line.split('BENCH_DEVICE ', 1)[1]) for line in probe.splitlines() if line.startswith('BENCH_DEVICE ')]
         if len(devices) != 1 or devices[0].get('visible_count') != 1:
