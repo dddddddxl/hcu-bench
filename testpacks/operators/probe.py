@@ -18,11 +18,16 @@ def inspect(recipe):
         if not (Path("/opt/dtk").exists() or Path("/opt/rocm/llvm/bin/clang").exists()):
             raise RuntimeError("PA native script cannot identify its prepared HIP toolkit")
     device = torch.cuda.get_device_properties(0)
-    return dict(torch_version=torch.__version__, hip_version=torch.version.hip,
+    result = dict(torch_version=torch.__version__, hip_version=torch.version.hip,
                 logical_device=0, visible_count=1, name=device.name,
                 total_memory=device.total_memory,
                 architecture=getattr(device, "gcnArchName", None),
                 uuid=str(getattr(device, "uuid", "unavailable")))
+    if recipe == "fa_fp8_forward":
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "native"))
+        from _flash_attn_build_loader import inspect_installed_fp8
+        _, result["fa_fp8_interface"] = inspect_installed_fp8()
+    return result
 
 
 if __name__ == "__main__":

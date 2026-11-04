@@ -18,6 +18,12 @@ def parse_sample(line: str):
     require(value.get("correctness") in ("passed", "failed", "not_checked"), "Result correctness must be explicit")
     metrics = value.get("metrics", [])
     require(isinstance(metrics, list), "metrics must be a list")
+    if "skip_case" in value:
+        require(value["skip_case"] is True and value["measurement_status"] == "skipped"
+                and value["correctness"] == "not_checked" and not metrics,
+                "skip_case requires a skipped, unchecked result without metrics")
+        require(isinstance(value.get("reason"), str) and bool(value["reason"].strip()),
+                "skip_case requires a reason")
     if value["measurement_status"] in ("measured", "simulated"):
         require(bool(metrics), "Measured result contains no metrics")
     for metric in metrics:

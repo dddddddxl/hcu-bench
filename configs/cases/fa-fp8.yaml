@@ -1,4 +1,4 @@
-# 已有匹配Torch/FlashAttention FP8扩展的容器内执行，不自动补装扩展。
+# 在已有容器内检查FlashAttention FP8接口；匹配才测，不匹配记为skipped，不自动补装扩展。
 version: 1
 name: fa-fp8-performance
 failure_policy: continue

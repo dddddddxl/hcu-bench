@@ -44,6 +44,7 @@ artifact_limit_mb: 100
 普通原生输出仍保留为日志。允许额外保存 provider、timing_method、source_file/source_row、reference_time_ns 等字段；框架的 suite/node/case/params 身份不能被测试输出覆盖。
 
 - `measurement_status`：measured / invalid / skipped；mock 另用 simulated。
+- 依赖预检查确认用例不适用时，可输出 `measurement_status: skipped`、`skip_case: true`、`correctness: not_checked`、空 `metrics` 和非空 `reason`，并正常退出。没有有效或无效样本且进程正常退出、清理确认后，框架将该节点记为 `skipped`；所有节点跳过时用例记为 `skipped`，继续后续计划。单纯输出 `skipped` 不会绕过 `requires_metrics`，非零退出、无效结果和清理失败也不会被跳过声明覆盖。整体 `completed` 表示流程结束，须结合用例跳过数量判断覆盖情况。
 - `correctness`：passed / failed / not_checked，不根据进程退出码猜测。
 - 无效 profiler 轮次输出 invalid、空 metrics 和 reason；不要伪造耗时或吞吐。
 - 原生结果存在但尚未提供解析器时，用 `result_protocol: none`、`requires_metrics: false`，只记录执行完成和原生报告，不称为性能测试通过。
