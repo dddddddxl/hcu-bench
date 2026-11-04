@@ -28,6 +28,8 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 
 原默认关闭的项目独立配置，保留原有 suite 名称。这些项目具有不同的镜像、工具或资源要求，不纳入默认执行范围。
 
+**显存带宽（`memory`）和 MIGraphX（`migraphx`）默认禁用（disabled）**，不随主配置的 `bash bench.sh all` 执行。主模板不包含这两个测试块；独立配置中的 `enabled: true` 仅在显式选择该配置时生效。SGLang 镜像不保证具备这两项所需的工具链和原生依赖。
+
 | 配置文件 | Suite | 内容及前提 |
 | --- | --- | --- |
 | `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
@@ -50,6 +52,30 @@ bash bench.sh configs/cases/wan.yaml all
 默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/` 或自动执行可选项目。如需纳入主测试计划，可将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
 
 主配置未包含 memory 测试块时，`bash bench.sh memory` 不会自动加载独立配置，须显式指定文件路径。配置选择沿用现有 CLI 规则。
+
+### 显存带宽与 MIGraphX 使用方法
+
+在对应的兼容容器中，修改下列独立 YAML 后，从仓库根目录执行。两项均使用文件内声明的路径和卡号，不继承个人 `configs/bench.yaml`。
+
+**显存带宽**：编辑 `configs/cases/memory.yaml`，设置 `vars.bench_root`（容器内仓库路径）、`vars.workspace`（可写输出目录）、`vars.hcus`（目标卡）以及 `build.dtk_root`。`params.binary: auto` 使用已有兼容工具链编译内置 hcu-stream；已有二进制时可改为其绝对路径。`params.presets: both` 执行 zd1/zd2 共24项，多卡逐卡串行。
+
+```bash
+bash bench.sh configs/cases/memory.yaml all
+```
+
+**MIGraphX**：编辑 ResNet50 或 BERT 配置中的 `vars.bench_root`、`vars.workspace`、`vars.hcus`，并设置 `params.model`（本地 ONNX 文件）、`params.binary`（可用的 `migraphx-driver` 命令或绝对路径）、`params.numa_node`（目标卡对应的 NUMA 节点）。执行环境须提前提供兼容的 MIGraphX 原生程序和动态库，以及 numactl、onnx、psutil；本工具不通过安装 driver 来补齐运行库。
+
+```bash
+# ResNet50：FP16/INT8，batch 1/32
+bash bench.sh configs/cases/migraphx-resnet50.yaml all
+
+# BERT-large：FP16，batch 1/32
+bash bench.sh configs/cases/migraphx-bert.yaml all
+```
+
+BERT 的 `params.rocblas_dir: ""` 使用镜像原生库；仅在需要外置兼容库时指定包含 `lib/` 的目录。MIGraphX 每组参数执行三轮，报告吞吐及耗时中位数，不包含模型精度评测。
+
+结果分别写入所选 YAML 的 `${vars.workspace}/results/RUN_ID`，状态与原因查看 `summary.txt`，性能指标查看 `metrics.csv`。详细环境要求见[显存带宽说明](docs/memory.md)和[MIGraphX说明](docs/migraphx.md)。
 
 ## 快速开始
 
