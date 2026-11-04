@@ -1,0 +1,32 @@
+# 已有MIGraphX容器内执行；需要原生driver、numactl、onnx、psutil和本地ONNX。
+version: 1
+name: migraphx-resnet50
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]                              # 仅一张已确认空闲的HCU。
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  resnet50:
+    enabled: true
+    suite: migraphx
+    adapter: command
+    pack: ../../testpacks/migraphx/manifest.yaml
+    nodes: [single]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      model: /YOUR_MODELS/resnet50_dynamic_batch.onnx # ONNX，不是模型目录。
+      numa_node: 0                       # 按目标卡PCI拓扑核对，不默认认为都是0。
+      binary: migraphx-driver            # 当前环境的命令名，或兼容程序绝对路径。
+      round_timeout_s: 600               # 每个组合内部3轮，每轮-n20。
+    matrix:
+      recipe: [resnet50_fp16, resnet50_int8]
+      batch: [1, 32]

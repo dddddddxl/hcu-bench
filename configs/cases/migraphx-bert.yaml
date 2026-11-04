@@ -1,0 +1,33 @@
+# 已有兼容MIGraphX容器内执行；本配方只测性能，不评测SQuAD精度。
+version: 1
+name: migraphx-bert
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  bert_large:
+    enabled: true
+    suite: migraphx
+    adapter: command
+    pack: ../../testpacks/migraphx/manifest.yaml
+    nodes: [single]
+    timeout_s: 2100
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: bert_large_fp16
+      model: /YOUR_MODELS/bert-large-uncased-squad-v2-opt-mha-384.onnx
+      numa_node: 0                       # 按目标卡实际NUMA归属核对。
+      rocblas_dir: ""                    # 留空使用原生运行库；显式目录须包含兼容的非空lib/。
+      binary: migraphx-driver
+      round_timeout_s: 600
+    matrix:
+      batch: [1, 32]

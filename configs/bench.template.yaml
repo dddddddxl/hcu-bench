@@ -1,0 +1,212 @@
+# 已有Linux测试容器内执行：复制为 configs/bench.yaml，修改实际路径和设备后运行。
+# YOUR_* 按目标环境替换；参数说明见README，独立可选测例位于configs/cases/。
+# 本模板按通用配置、模型部署、suite参数组织；不自动创建容器或安装运行库。
+
+# ==================== 1. 通用：换平台先看这里 ====================
+version: 1
+name: my-hcu-bench
+failure_policy: continue                   # continue=失败清理后继续；stop=失败即停。
+vars:
+  bench_root: /YOUR_BENCH_REPO             # 必改：容器内 git clone 的仓库绝对路径。
+  workspace: /YOUR_WRITABLE_WORKSPACE      # 必改：容器内可写、最好持久挂载的输出目录。
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # 必核对：多卡测试允许使用的 HCU 编号。
+  single_hcus: [0]                         # 必核对：单卡算子和模型使用的卡，须属于 hcus。
+
+output_dir: "${vars.workspace}/results"
+build:
+  dtk_root: /opt/dtk                       # 核对：实际 DTK 安装路径。
+  mpi_home: /opt/mpi                       # 核对：RCCL 使用的 Open MPI 安装路径。
+  arch: auto                              # 通常不改；无法唯一识别时填 gfx938 等实际架构。
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2                                 # 首次编译并行数，不是测试进程数。
+  timeout_s: 3600                          # 首次编译的超时秒数，不是压测时长。
+
+# 当前已经在测试容器内，不需要填写镜像或 Docker 启动命令。
+nodes:
+  multi:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+  single:
+    executor: local
+    hcus: "${vars.single_hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+
+# ==================== 2. 模型部署：只影响 e2e ====================
+# 完整部署命令放 start_script，不在 YAML 中混写 TP/量化/后端等参数。
+# 这里集中声明模型；后面的 e2e_acc/e2e_perf 共用。
+models:
+  qwen3_4b:
+    start_script: model_scripts/qwen3_4b.sh
+    env:
+      BENCH_MODEL_PATH: /YOUR_MODELS/Qwen3-4B # 必改：实际本地权重目录。
+    tokenizer_path: /YOUR_MODELS/Qwen3-4B    # 必改：与上述模型配套的 tokenizer 目录。
+    port: 30903                             # 核对未被其他服务占用。
+    startup_timeout_s: 1800                 # 等模型服务就绪的最长时间。
+  qwen3_8b:
+    start_script: model_scripts/qwen3_8b.sh
+    env:
+      BENCH_MODEL_PATH: /YOUR_MODELS/Qwen3-8B
+    tokenizer_path: /YOUR_MODELS/Qwen3-8B
+    port: 30903                             # 两模型串行、前者清理后启动，可复用端口。
+    startup_timeout_s: 1800
+
+# ==================== 3. 各 suite：只改需要测的那段 ====================
+# 下方每个测试块都有 enabled；不运行的块可以改 false。
+# 独立测例不放在这里，不参与默认 all。
+tests:
+  # -------------------- RCCL：单机10类通信 --------------------
+  rccl_collectives:
+    enabled: true
+    suite: rccl
+    adapter: command
+    pack: ../testpacks/rccl/manifest.yaml
+    nodes: [multi]
+    timeout_s: 600
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto                        # 首次自动编译内置 rccl-tests；也可填已有程序路径。
+      ranks: 8                            # 必核对：等于 vars.hcus 数量，当前支持2–8。
+      datatype: half                      # half / float / double。
+      warmup_iters: 20
+      iters: 50
+      # 消息大小不填写，继承仓库默认固定16 GiB，不是从小消息扫描到16 GiB。
+      # 仅确需覆盖时，同时添加 min_bytes / max_bytes（单位字节）。
+    env:
+      OMPI_ALLOW_RUN_AS_ROOT: "1"          # 允许容器内root启动MPI；非root执行不受影响。
+      OMPI_ALLOW_RUN_AS_ROOT_CONFIRM: "1"
+    matrix:
+      collective: [all_reduce, all_gather, reduce_scatter, broadcast, reduce, alltoall, alltoallv, gather, scatter, sendrecv]
+
+  # -------------------- PCIe：CPU/HCU五类拷贝路径 --------------------
+  pcie_bandwidth:
+    enabled: true
+    suite: pcie
+    adapter: command
+    pack: ../testpacks/pcie/manifest.yaml
+    nodes: [multi]
+    timeout_s: 1800
+    repeats: 1                            # 整套扫描轮数，不是每次拷贝迭代数。
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto                        # 内置 rocm-bandwidth-test 首次编译。
+      cpu_devices: "YOUR_CPU_DEVICE_IDS"  # 必改：工具 -e 枚举的 CPU Device ID。
+      hcu_devices: "YOUR_HCU_DEVICE_IDS"  # 必改：同一工具的 HCU Device ID；不是 HCU卡号。
+      size_mib: 512                       # 单次拷贝大小，512 MiB，不是总数据量。
+      iters: 20                           # 每条路径的原生拷贝迭代数。
+
+  # -------------------- operators：Conv正确性及性能 --------------------
+  conv:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [single]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: conv
+      mode: perf                          # perf=校验后测性能；check=只校验。
+      driver: auto                        # 查找当前环境的 MIOpenDriver，不自动安装。
+      conv_suite: all                     # all / conv2d / conv3d。
+      direction: all                      # all / fwd / dgrad / wgrad。
+      warmup: 10
+      iters: 100
+      repeats: 3                          # 每个用例内部的性能轮数。
+      native_timeout_s: 7200
+    matrix:
+      dtype: [fp32, fp16]
+
+  # -------------------- operators：PA性能 --------------------
+  pa_decode:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [single]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: pa_decode                   # 固定配方，不是模型端到端吞吐。
+      native_timeout_s: 1800
+
+  # -------------------- operators：FA FP16前向性能 --------------------
+  fa_fp16_forward:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [single]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: fa_fp16_forward
+      native_timeout_s: 1800
+
+  # -------------------- DeepEP：低延迟压测 --------------------
+  deepep_pressure:
+    enabled: true
+    suite: deepep
+    adapter: command
+    pack: ../testpacks/deepep/manifest.yaml
+    nodes: [multi]
+    duration_s: 600                        # 计划压测10分钟，含初始化。
+    timeout_s: 3600                        # 故障超时，须大于 duration_s。
+    params:
+      bench_root: "${vars.bench_root}"
+      test_script: auto                   # 内置自适应测试，先探测11/12字段接口并做正确性短测。
+      master_addr: 127.0.0.1              # 单机；多机需首节点可达地址及远端节点配置。
+      master_port: 29450                  # 核对端口未占用。
+      num_processes: 8                    # 必核对：与分配卡数相同；改 hcus 时同步修改。
+      num_tokens: 128
+      hidden: 7168
+      num_topk: 8
+      num_experts: 256
+    env:
+      NCCL_SOCKET_IFNAME: YOUR_ACTIVE_INTERFACE # 必改：实际 socket 网卡名。
+      GLOO_SOCKET_IFNAME: YOUR_ACTIVE_INTERFACE # 同上。
+      ROCSHMEM_IB_GID_INDEX: "YOUR_GID_INDEX"  # 必改：目标 RDMA 设备对应的 GID index。
+      # 若平台要求指定 HCA，在本测试块按其原生运行库接口补充；不全局影响其他 suite。
+      ROCSHMEM_HEAP_SIZE: "4737418240"
+      HIP_BUFFER_EXTRA_SIZE: "0"
+      NCCL_IB_DISABLE: "1"                # 保留当前单机配方，不代表禁用了 ROCSHMEM RDMA。
+
+  # -------------------- e2e_acc：模型精度 --------------------
+  model_accuracy:
+    enabled: true
+    suite: e2e_acc
+    models: all                           # models 中所有模型；也可填 [qwen3_4b]。
+    nodes: [single]
+    timeout_s: 14400                       # 每模型精度任务的故障时限。
+    params:
+      data_path: auto                     # 仓库自带 GSM8K test集，不联网搜索数据。
+      few_shot_path: auto                 # 仓库自带 train集，前5题作提示。
+      num_examples: 0                     # 全量test 1319题全部评分。
+      num_shots: 5
+      num_threads: 128                    # 客户端评测线程数，不是TP，也不是卡数。
+      max_tokens: 2048                    # 每题最大输出token数，会影响精度口径。
+      chat_template_kwargs: {enable_thinking: false}
+      min_score: ""                       # 只报告分数；有认可阈值再填字符串，如 "0.90"。
+
+  # -------------------- e2e_perf：LLM吞吐及延迟 --------------------
+  model_throughput:
+    enabled: true
+    suite: e2e_perf
+    models: all
+    nodes: [single]
+    timeout_s: 172800                      # 每模型性能任务最多48小时，不是要求跑满。
+    params:
+      python: auto                        # 准备独立 EvalScope 客户端，不升级模型服务环境。
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+      requests: 256                       # 每个长度/并发点的正式请求数，不是整套总数。
+      warmup_requests: 32                 # 每点预热请求数，不计正式性能。
+      repeats: 1                          # 每个点的完整重复轮数。
+      seed: 42
+      request_timeout_s: 1800             # 每条请求的故障时限，不是整套时限。
+      extra_body: {chat_template_kwargs: {enable_thinking: false}}

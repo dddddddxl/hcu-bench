@@ -1,0 +1,39 @@
+# 独立显存带宽测例；在已有兼容容器内运行，不被主配置自动加载。
+# 修改通用路径和卡号后：bash bench.sh configs/cases/memory.yaml all
+version: 1
+name: memory-bandwidth
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]                               # 实际目标卡；多张时逐卡串行。
+output_dir: "${vars.workspace}/results"
+build:
+  dtk_root: /opt/dtk
+  arch: auto
+  # arch_num: 9210                       # gfx92a 自动映射9210；不是把 gfx92a 改为 gfx9210。
+  cache_dir: "${vars.workspace}/native-cache"
+  jobs: 2
+  timeout_s: 3600
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  memory_bandwidth:
+    enabled: true
+    suite: memory
+    adapter: command
+    pack: ../../testpacks/memory/manifest.yaml # cases/ 下需多一级 ../。
+    nodes: [single]
+    timeout_s: 1800
+    repeats: 1
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto                        # 兼容工具链首次编译；也可填已编译 hcu-stream 路径。
+      devices: ""                         # 空=分配的全部卡；或填 "0"、"0,1" 子集。
+      presets: both                       # zd1 / zd2 / both；both共24项。
+      model_mhz: 1400                     # 原脚本换算参数，不锁频；对比时统一此口径。
+      array_size: 104857600               # 元素数，不是字节；部分测试不用此参数。

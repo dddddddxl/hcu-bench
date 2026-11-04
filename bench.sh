@@ -26,7 +26,7 @@ if [[ "${1:-}" == *.yaml || "${1:-}" == *.yml ]]; then
 fi
 if [[ ! -f "$CONFIG" ]]; then
     echo "Config not found: $CONFIG" >&2
-    echo "First copy configs/in-container.template.yaml (or managed-container.template.yaml) to configs/bench.yaml and edit it for your node." >&2
+    echo "First copy configs/bench.template.yaml (or managed-container.template.yaml) to configs/bench.yaml and edit it for your node." >&2
     exit 2
 fi
 SUITE=${1:-all}

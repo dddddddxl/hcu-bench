@@ -2,6 +2,8 @@
 
 所有 suite 可以放在同一 YAML 中。公共路径和卡号放在 `vars`；执行位置放在 `nodes`；每个测试的参数放在 `tests.<测试名>.params`。
 
+新配置优先使用 [bench.template.yaml](../configs/bench.template.yaml)，按通用配置、模型部署和suite参数依次组织。默认主计划不包含可选测例；显存带宽、MIGraphX、GEMM、FP8、算子压力、Mooncake和Wan分别位于 [独立测例目录](../configs/cases/README.md)，通过 `bash bench.sh configs/cases/文件.yaml all` 显式执行。旧模板仍可使用，不自动覆盖个人配置。
+
 ## 配置结构
 
 | 字段 | 用途 |
@@ -155,6 +157,6 @@ tests:
 
 旧的 `suite: e2e` 测试块按 `e2e_acc` 兼容，旧 `testpacks/sglang_accuracy/manifest.yaml`、`profile`、`serving.server_argv` 和 `ep_settings` 保留，不会自动增加吞吐负载。旧配置样例见 [deepep-sglang.template.yaml](../configs/deepep-sglang.template.yaml)，新配置优先使用脚本接口。
 
-精度接口固定为 SGLang 0.5.12 的 GSM8K；仓库自带官方 test 集 1319 条。自定义数据每行须含非空 `question` 和 `answer` 字符串。默认前 5 条作为提示样例，随后 100 条评分，至少需要 105 条。`num_examples: 0` 表示评测提示样例之后的全部数据。
+精度接口沿用 SGLang 0.5.12 的 GSM8K。新主模板显式配置 `data_path: auto`、`few_shot_path: auto`、`num_examples: 0`：分别使用仓库的test集1319题和训练集5条提示，test集全部评分。自定义数据每行须含非空 `question` 和 `answer` 字符串。旧配置省略 `few_shot_path` 时仍保留从评分数据前缀提取示例的兼容行为，不能将该口径与训练集5-shot混为一谈；裸接口的 `num_examples` 默认100，模板显式配置覆盖该默认值。
 
 吞吐按长度 × 并发 × 轮次逐点执行，实际结果独立列出，不把多个模型或不同长度混算。模板只演示编排；每个模型都需要经过验证的启动参数，本地模拟回归不代替真实 HCU 性能验证。

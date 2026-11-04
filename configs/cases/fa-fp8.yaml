@@ -1,0 +1,27 @@
+# 已有匹配Torch/FlashAttention FP8扩展的容器内执行，不自动补装扩展。
+version: 1
+name: fa-fp8-performance
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  fa_fp8_forward:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../../testpacks/operators/manifest.yaml
+    nodes: [single]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: fa_fp8_forward
+      native_timeout_s: 1800

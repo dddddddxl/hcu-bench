@@ -1,0 +1,38 @@
+# 已有兼容rocblas-bench容器内执行；默认先校验再性能，未获认可的非零误差阻止计时。
+version: 1
+name: gemm-correctness-and-performance
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  gemm:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../../testpacks/operators/numeric/manifest.yaml
+    nodes: [single]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      gemm_profile: new                  # 5.2.0接口用new，4.3.0接口显式选legacy。
+      rocblas_bench: auto                # 检查镜像已有工具，不安装或替换原生库。
+      mode: perf                        # check=只校验；perf=校验通过后计时。
+      group: all                        # all/square/dlrm/bert/transformer/batched。
+      case_id: ""                       # 空=全部配方；功能验证可填square-1024。
+      max_norm_error: ""                # 空=仅零误差明确通过；非零且无认可阈值则不测性能。
+      warmup: 10
+      iters: 100
+      repeats: 3
+      native_timeout_s: 7200
+    matrix:
+      dtype: [fp32, fp16, bf16]
