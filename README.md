@@ -72,7 +72,7 @@ python3 -c 'import sys, yaml, psutil; assert sys.version_info >= (3, 10); print(
 | RCCL | 固定版本 rccl-tests 源码，按 collective 自动编译对应 MPI 工具 | make、HIP 编译器、Open MPI、DTK/RCCL 开发库 |
 | PCIe | rocm-bandwidth-test 2.6.0 逐对输出版本源码，自动编译 | CMake、C++ 编译器、HSA 开发库 |
 | memory | main-staging-1.0 hcu-stream 源码，自动按架构编译 | make、匹配架构的 AICC/DTK |
-| DeepEP | `test_low_latency.py`、`utils.py`，包含已验证的 11 项 handle 接口适配 | 匹配接口的 Torch/DeepEP、通信环境 |
+| DeepEP | 原生测试、接口探测；自动读取已识别 DAS weighted 接口的 handle 字段位置，先有限正确性测试再压测 | 匹配接口的 Torch/DeepEP、通信环境；未知结构明确报错，不自动换库 |
 | Mooncake | Hygon Transfer Engine、pybind11、yalantinglibs 源码，自动编译 | CMake、C++20 编译器、HIP、RDMA/numa/gflags/glog/jsoncpp/yaml-cpp 开发库、Python 开发头文件；两端共享可写目录 |
 | e2e_acc | GSM8K test JSONL、评测包装器、模型启动脚本模板 | 客户端使用执行环境中的 SGLang 0.5.12；另需模型服务框架、本地权重 |
 | e2e_perf | EvalScope 1.13.0 源码包、隔离客户端自动准备、模型启动脚本模板 | Python 3.10+ / venv / pip 22.3+（不要求 ensurepip）、模型服务框架、本地权重和 tokenizer；首次准备需可访问 Python 包源或已配置 wheelhouse |
