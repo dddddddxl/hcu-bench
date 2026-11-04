@@ -1,0 +1,51 @@
+# GLM-5.2 INT8 TP8独立复测：只测性能，不启动Qwen或精度任务。
+# 改好路径、卡号和iface后：bash bench.sh configs/glm52-perf.template.yaml all
+version: 1
+name: glm52-int8-tp8-performance
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0, 1, 2, 3, 4, 5, 6, 7]
+  iface: YOUR_ACTIVE_INTERFACE
+output_dir: "${vars.workspace}/results"
+build:
+  cache_dir: "${vars.workspace}/native-cache"
+  timeout_s: 3600
+nodes:
+  multi:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+models:
+  glm52_int8:
+    start_script: model_scripts/glm52_int8_tp8.sh
+    nodes: [multi]
+    env:
+      BENCH_MODEL_PATH: /YOUR_MODELS/GLM-5.2-Channel-INT8-w8a8
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
+    tokenizer_path: /YOUR_MODELS/GLM-5.2-Channel-INT8-w8a8
+    port: 30904
+    startup_timeout_s: 3600
+tests:
+  glm52_throughput:
+    enabled: true
+    suite: e2e_perf
+    models: [glm52_int8]
+    nodes: [multi]
+    timeout_s: 172800
+    params:
+      python: auto
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+      requests: 256
+      warmup_requests: 32
+      repeats: 1
+      seed: 42
+      request_timeout_s: 1800
+      extra_body: {}                       # 保留模型默认思考模式，记录实际输出长度。

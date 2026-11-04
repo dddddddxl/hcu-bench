@@ -26,10 +26,10 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_has_only_common_variables_and_no_optional_cases(self):
         document = load_document(MAIN)
-        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus'})
+        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface'})
         with patch('subprocess.Popen', side_effect=AssertionError('static only')):
             plan = make_plan(str(MAIN))
-        self.assertEqual(len(plan.cases), 18)
+        self.assertEqual(len(plan.cases), 19)
         self.assertFalse({'memory', 'migraphx', 'mooncake'} & {c.suite for c in plan.cases})
         self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in plan.cases))
         self.assertFalse(any(c.params.get('recipe') in ('gemm', 'fa_fp8_forward') for c in plan.cases))
@@ -49,8 +49,10 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_preserves_full_qwen_accuracy_and_performance_contracts(self):
         plan = make_plan(str(MAIN), 'e2e')
-        self.assertEqual(len(plan.cases), 2)
-        for case in plan.cases:
+        self.assertEqual(len(plan.cases), 3)
+        qwen = [c for c in plan.cases if c.params['session']['model_id'].startswith('qwen3_')]
+        self.assertEqual(len(qwen), 2)
+        for case in qwen:
             tasks = case.params['session']['tasks']
             self.assertEqual([t['suite'] for t in tasks], ['e2e_acc', 'e2e_perf'])
             accuracy, performance = (t['params'] for t in tasks)

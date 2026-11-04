@@ -20,7 +20,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `operators` | Conv、PA decode、FA FP16前向性能 | 原生校验、耗时、计算性能或带宽 |
 | `deepep` | 低延迟通信压测，默认10分钟 | 原生带宽、延迟、错误 |
 | `e2e_acc` | Qwen3-4B/8B，GSM8K全量1319题，训练集5-shot，非思考 | 精度分数、回答及原生报告 |
-| `e2e_perf` | Qwen3-4B/8B，多长度、多并发流式性能 | 输出吞吐、首token延迟等 |
+| `e2e_perf` | Qwen3-4B/8B及GLM-5.2 INT8 TP8，多长度、多并发流式性能 | 输出吞吐、首token延迟等 |
 
 `e2e` 为 `e2e_acc` 和 `e2e_perf` 的组合入口。每个模型按服务启动、精度评测、性能测试、服务清理的顺序执行，完成后切换至下一模型。
 
@@ -106,7 +106,7 @@ cp configs/bench.template.yaml configs/bench.yaml
 主配置按以下顺序组织：
 
 1. **通用配置**：仓库目录、结果目录、HCU 分配和编译环境。
-2. **模型部署**：4B/8B权重、启动脚本、端口，仅 e2e 使用。
+2. **模型部署**：Qwen3-4B/8B及GLM-5.2权重、启动脚本、端口，仅 e2e 使用。
 3. **Suite 配置**：RCCL、PCIe、算子、DeepEP、模型精度和模型性能，各项目参数分别配置。
 
 仅执行 RCCL 时，无需配置模型权重、PCIe 设备编号或 DeepEP 网卡。未执行的测试块可设为 `enabled: false`；使用 `all` 时，所有启用项目均须配置完整。`YOUR_*` 为待替换的占位符，不具有自动发现功能。
@@ -132,6 +132,7 @@ bash bench.sh all
 | `vars.workspace` | 可写输出目录，建议持久挂载，例如 `/workspace/bench-output` | 换平台时核对，用于保存结果和缓存 |
 | `vars.hcus` | 多卡测试允许使用的编号列表，例如 `[0,1,2,3]` | 必须核对实际可见设备和业务占用 |
 | `vars.single_hcus` | 单卡测试所用编号，例如 `[0]` | 仅分配一张卡，且属于 `vars.hcus` 范围 |
+| `vars.iface` | 平台实际socket网卡，例如 `ens65f0np0`；通过 `ip -br addr` 核对 | DeepEP和GLM分别引用，换平台只改这一处；不是RDMA HCA名或GID |
 | `failure_policy` | `continue` 或 `stop` | 普通失败清理后继续，或立即停止 |
 | `build.dtk_root` | 实际DTK安装根目录 | 核对 `/opt/dtk` 是否存在且对应当前环境 |
 | `build.mpi_home` | Open MPI安装根目录 | RCCL需要；可从 `command -v mpirun` 初步定位，再核对实际安装目录 |
@@ -145,6 +146,8 @@ bash bench.sh all
 | `HIP_VISIBLE_DEVICES` | 保留 `${hcu_ids}` | 由框架根据该用例的卡分配展开 |
 
 本模板的卡号以当前容器执行环境为准。若容器仅透传部分物理卡，应通过PCI地址或UUID核对与宿主机设备的映射关系。调整卡数时，须同步修改 RCCL `ranks` 和 DeepEP `num_processes`。
+
+启用GLM-5.2时，`vars.hcus` 必须分配8张空闲卡；不足8卡时应将 `tests.glm52_throughput.enabled` 改为false，不自动降低TP。`vars.iface` 只被需要的测试块/模型引用，不会把DeepEP的IB策略全局应用到模型服务。
 
 ### 测试块字段
 
@@ -283,7 +286,7 @@ models:
 
 | 参数 | 默认值与说明 |
 | --- | --- |
-| `models` | `all`使用所有模型；或 `[qwen3_4b]`只测一个 |
+| `models` | 主模板为 `[qwen3_4b, qwen3_8b]`，不包含GLM；也可只选一个。`all`会包含所有已声明模型，须明确是否适用于精度 |
 | `data_path` | `auto`明确指仓库 `vendor/gsm8k/test.jsonl` |
 | `few_shot_path` | `auto`明确指 `vendor/gsm8k/train-5shot.jsonl`，不从测试集扣除5题 |
 | `num_examples` | 0=全量1319题；功能短测可填100 |
@@ -314,6 +317,24 @@ models:
 | `timeout_s` | 每模型性能任务最多172800秒，即48小时，不是必须运行48小时 |
 
 默认采用月英参考表的4组长度及并发组合，共31个测试点。每模型包含7936次正式请求和992次预热请求，完整两模型测试预计耗时较长。功能验证可将 `workloads` 缩减为单个测试点，并减少正式及预热请求数；短测结果不能代替完整扫描。
+
+### e2e_perf：GLM-5.2 INT8 八卡
+
+主模板的 `models.glm52_int8` 和 `tests.glm52_throughput` 已启用，`all` / `e2e_perf` 会在Qwen之后运行GLM；`e2e_acc` 仍只测Qwen。GLM使用 `multi` 节点的8张卡，不能沿用Qwen的单卡分配。
+
+修改GLM的 `BENCH_MODEL_PATH` 和 `tokenizer_path` 为本地权重目录。启动脚本 `model_scripts/glm52_int8_tp8.sh` 采用官方BW1100 / SGLang0.5.12的INT8、TP8、EAGLE配方；其他平台/镜像须先验证后使用，不自动安装依赖或下载权重。
+
+网卡在 `vars.iface` 配置一次，模型的 `env.NCCL_SOCKET_IFNAME` / `env.GLOO_SOCKET_IFNAME` 分别引用，脚本只检查和继承，不覆盖为某台机器的固定名称。官方TP8配方不额外要求DeepEP的HCA/GID配置；如平台需指定其他通信环境变量，可在该模型的 `env` 中设置。
+
+GLM默认保留模型自身的思考模式，`extra_body: {}`，不继承Qwen的 `enable_thinking: false`。报告记录实际输入/输出token长度；不同思考模式的性能不可直接对比。其独立性能块也采用31点扫描；官方服务的 `max-running-requests=32`，客户端并发64/128将产生排队，需连同延迟阅读。
+
+只验证GLM时，可修改[独立性能模板](configs/glm52-perf.template.yaml)后执行：
+
+```bash
+bash bench.sh configs/glm52-perf.template.yaml all
+```
+
+小规模验证可把该模板的 `workloads` 改成128/128与1024/128、并发1/8，`requests` 改32、`warmup_requests` 改4、`repeats` 保持1；仅4个正式性能点，不作为完整31点验收。详见[GLM-5.2说明](docs/glm52.md)。
 
 ## 独立测例配置
 
