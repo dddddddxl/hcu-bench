@@ -252,7 +252,9 @@ bash container.sh stop NAME
 
 | 文件或目录 | 内容 |
 | --- | --- |
-| `summary.txt` / `summary.json` | 执行状态和分组指标汇总 |
+| `summary.txt` / `summary.md` | 按suite展示执行概览、关键性能、正确性、失败/取消原因及日志入口 |
+| `summary.json` | 保留原有机器可读的分组指标汇总 |
+| `report-details/suite-*.csv` | 摘要中对应suite的全部可展示指标，含参数、节点、轮次与统计口径 |
 | `metrics.csv` | 逐条指标，含 suite、节点、参数、单位、正确性及模拟标记 |
 | `e2e.csv` / `e2e.md` | 服务类模型流水线专用汇总，每个工作负载和轮次单独一行；保留失败及未出结果项 |
 | `state.json` / `results.jsonl` | 用例状态 / 标准结果记录 |
@@ -261,6 +263,22 @@ bash container.sh stop NAME
 | 配置、命令和环境快照 | 本次运行的复测依据 |
 
 日志使用执行环境本地时间及偏移。不同路径、参数、单位和原生统计口径分开汇总，Avg BW 不当成 Peak BW，DeepEP effective bandwidth 不当成 RCCL busbw。
+
+### 报告阅读
+
+测试结束后优先打开 `summary.md`（表格）或 `summary.txt`（纯文本）：先看执行概览，再看所需suite。每个suite分别列出执行状态、有效测量和正确性，未测量的项目不填0，也不把依赖准备当作模型测试完成。模型会话的精度/性能分别展示，但执行总数仍按父会话计一次。
+
+RCCL区分消息大小及原地/非原地；PCIe按同一用例、节点、轮次、配置和消息大小展示不同路径的Avg/Peak范围，不计算跨路径均值。其他suite保留原生指标名及单位；形状、rank或测试点较多时，摘要展示前12条，完整数据通过每节的suite CSV链接查看。模型吞吐与Wan耗时使用不同表格，百分位数不跨轮平均。
+
+错误原因仅来自结构化结果和执行状态。若只有非零退出码，报告会注明原因未确认并提供对应日志，不自动推断OOM或库版本问题；独占状态、外部CI归属等仍须结合资源监控记录判断。归档状态独立列出，不覆盖已采性能。模拟数据保留显著标记，不作为HCU实测数据。
+
+已有结果可重新生成报告，无需重跑测试：
+
+```bash
+bash bench.sh report /实际结果目录/RUN_ID
+```
+
+重新生成只读取该轮已有结果，更新报告及指标导出，不修改配置、测试状态、原生结果或日志。`summary.json` 和 `metrics.csv` 保持原有格式；若新版展示生成失败，会写入明确警告，并回退保留逐条指标摘要。
 
 固定算子和 MIGraphX 分别以 `operators`、`migraphx` 收入通用 `summary` / `metrics.csv`，原始日志与测量 JSON 归档到 `raw/`；MIGraphX 不写入服务类模型的 `e2e.csv`。MIGraphX 另保留 `rounds.json/csv`，指标统计口径为 `median_of_3_rounds`；如设置外层 `repeats`，框架汇总的是多组三轮中位数的均值。
 

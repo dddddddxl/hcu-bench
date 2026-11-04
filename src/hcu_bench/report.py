@@ -1,14 +1,17 @@
 import csv
 import json
+import sys
 from collections import Counter
 
 from .store import RunStore, write_json
 from .e2e_report import build_e2e_report
+from .suite_report import atomic_text, write_suite_report
 
 
 def build_report(store: RunStore) -> dict:
     state = store.read("state.json")
     groups = {}
+    records = []
     skipped = 0
     samples = store.path / "results.jsonl"
     with (store.path / "metrics.csv").open("w", newline="", encoding="utf-8-sig") as destination:
@@ -22,6 +25,7 @@ def build_report(store: RunStore) -> dict:
                         continue
                     sample = json.loads(line)
                     sample["case_status"] = state["cases"][sample["case_id"]]["status"]
+                    records.append(sample)
                     if sample["measurement_status"] not in ("measured", "simulated") or sample["correctness"] == "failed":
                         skipped += 1
                         continue
@@ -48,6 +52,13 @@ def build_report(store: RunStore) -> dict:
     for group in groups.values():
         prefix = "[SIMULATED - NOT HARDWARE DATA] " if group["simulated"] else ""
         lines.append(f"{prefix}{group['test_id']}/{group['node']} {group['name']}: reported-value mean={group['mean_of_reported_values']:.6g} {group['unit']}, range={group['min']:.6g}..{group['max']:.6g}, n={group['count']}, source={group['source_statistic']}, case_status={group['case_statuses']}, params={group['params']}")
-    (store.path / "summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     build_e2e_report(store, state)
+    try:
+        write_suite_report(store, state, records)
+    except Exception as exc:
+        # Presentation must not discard measurements or mask the workload's exit status.
+        warning = f"Suite report generation failed: {exc}; full data remains in metrics.csv and summary.json."
+        atomic_text(store.path / "summary.txt", warning + "\n\n" + "\n".join(lines) + "\n")
+        atomic_text(store.path / "summary.md", "# Report generation warning\n\n" + warning + "\n")
+        print(warning, file=sys.stderr, flush=True)
     return summary
