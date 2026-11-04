@@ -43,13 +43,34 @@ class Profiles(unittest.TestCase):
         old_with_new = cli.assess_interface(probes("4.3.0"), cli.required_options("new"), "new")
         self.assertEqual(old_with_new["missing_options"], ["--test", "--use_hipblaslt"])
 
-    def test_new_recipe_matches_original_diagnostic_commands(self):
+    def test_new_recipe_changes_only_initialization_from_original_commands(self):
         reference = json.loads((ROOT / "validation" / "new_recipe_reference.json").read_text(encoding="utf-8"))
         for self.args.dtype in suite.TYPES:
             for self.args.mode in ("check", "perf"):
                 rounds = 1 if self.args.mode == "check" else 3
                 actual = [suite.command(self.args, row)[1:] for row in self.rows for _ in range(rounds)]
-                self.assertEqual(actual, reference["commands"][self.args.dtype + "-" + self.args.mode])
+                expected = []
+                for original in reference["commands"][self.args.dtype + "-" + self.args.mode]:
+                    updated = list(original)
+                    index = updated.index("--initialization") + 1
+                    self.assertEqual(updated[index], "trig_float")
+                    updated[index] = "rand_int"
+                    expected.append(updated)
+                self.assertEqual(actual, expected)
+
+    def test_initialization_matches_dtk_default_for_every_profile(self):
+        defaults = (ROOT / "rocblas_common.yaml").read_text(encoding="utf-8").split("Defaults:\n", 1)[1]
+        initialization = next(line.split(":", 1)[1].strip() for line in defaults.splitlines()
+                              if line.strip().startswith("initialization:"))
+        self.assertEqual(initialization, "rand_int")
+        source = json.loads((ROOT / "gemm_sources.json").read_text(encoding="utf-8"))
+        self.assertEqual(source["fixed_settings"]["initialization"], initialization)
+        for self.args.profile in ("new", "legacy"):
+            for self.args.dtype in suite.TYPES:
+                for self.args.mode in ("check", "perf"):
+                    for row in self.rows:
+                        argv = suite.command(self.args, row)
+                        self.assertEqual(argv[argv.index("--initialization") + 1], initialization)
 
     def test_legacy_retains_every_shared_setting(self):
         for self.args.dtype in suite.TYPES:

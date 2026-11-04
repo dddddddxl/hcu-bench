@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import re
 
+from run_gemm_cases import INITIALIZATION
+
 ROOT = Path(__file__).resolve().parent
 source_path = ROOT / "rocblas_general.yaml"
 lines = source_path.read_text(encoding="utf-8-sig").splitlines()
@@ -67,7 +69,7 @@ fields = ("case_id", "group", "function", "M", "N", "K", "transA", "transB",
           "lda", "ldb", "ldc", "ldd", "alpha", "beta", "batch_count",
           "stride_a", "stride_b", "stride_c", "stride_d", "source", "source_line")
 with (ROOT / "gemm_cases.csv").open("w", encoding="utf-8", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=fields)
+    writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
 
@@ -79,9 +81,10 @@ provenance = {
     "cases": {"total": 14, "added_square_sweep": 4, "selected_source_cases": 10},
     "selected_scalars": "Selected source Tests bind alpha_1_beta_0; alpha=1 and beta=0 retained.",
     "dtype_scope": "Selected model cases were SGEMM. FP16/BF16 variants with FP32 accumulation are new extensions.",
-    "fixed_settings": {"initialization": "trig_float", "math_mode": 0, "use_hipblaslt": 0, "flush_batch_count": 1},
+    "fixed_settings": {"initialization": INITIALIZATION, "math_mode": 0, "use_hipblaslt": 0, "flush_batch_count": 1},
     "scope": "Starter suite, not the full YAML workload and not established as the nightly workload.",
     "verification": "CLI help and version inspected in megatron_test; no GPU benchmark executed.",
 }
-(ROOT / "gemm_sources.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
+with (ROOT / "gemm_sources.json").open("w", encoding="utf-8", newline="\n") as handle:
+    handle.write(json.dumps(provenance, indent=2))
 print("Generated %d cases: 4 added square cases and 10 selected source cases" % len(rows))

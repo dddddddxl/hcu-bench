@@ -66,7 +66,10 @@ def parse_conv(text, direction, check):
 
 
 def parse_gemm(text, check, threshold, expected=None):
-    lines = clean(text).splitlines()
+    text = clean(text)
+    if re.search(r"^.*:\d+:\s*Failure\b", text, re.M):
+        raise VerificationError("rocblas-bench unit/equality check failed; norm tolerance cannot override it")
+    lines = text.splitlines()
     records = []
     for index, line in enumerate(lines[:-1]):
         header = [cell.strip() for cell in next(csv.reader([line]))]

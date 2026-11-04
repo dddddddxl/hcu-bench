@@ -7,7 +7,7 @@ GEMM 矩阵乘测试 两套接口与运行命令
 
 1. 环境与工具准备
 将测试包上传到对应完整 DTK 容器，在 Bash 中执行：
-unzip gemm_test_cases_dual_20261102.zip -d gemm_test
+unzip gemm_test_cases_dual_rand_int_20261104.zip -d gemm_test
 cd gemm_test
 source /opt/dtk/env.sh
 mkdir -p bin
@@ -86,7 +86,9 @@ HIP_VISIBLE_DEVICES=0 bash commands/legacy_perf.sh
 FP32：gemm / gemm_strided_batched，f32_r。
 FP16：gemm_ex / gemm_strided_batched_ex，A/B/C/D 为 f16_r，compute_type=f32_r。
 BF16：gemm_ex / gemm_strided_batched_ex，A/B/C/D 为 bf16_r，compute_type=f32_r。
-alpha=1，beta=0，initialization=trig_float，math_mode=0，flush_batch_count=1。
+alpha=1，beta=0，initialization=rand_int，math_mode=0，flush_batch_count=1。
+两版 check/perf 均使用 rand_int，与随包 DTK common YAML 的默认初始化一致。
+rand_int 只改变输入值，不改变 FP16/BF16 输入输出类型或 FP32 累加。
 普通 GEMM：C=alpha*op(A)*op(B)+beta*C。
 GEMM_EX：D=alpha*op(A)*op(B)+beta*C，本套件使用默认 C/D 同址方式。
 矩阵按列主序解释，leading dimension 与 batch stride 均保留 CSV 配置；stride 单位是元素。
@@ -125,5 +127,5 @@ python3 generate_commands.py
 无 GPU 回归检查：
 python3 -m unittest discover -s validation -p "test_*.py" -v
 
-已基于现场保存的 4.3.0/5.2.0 原生 CLI 输出核对 profile 与参数，新版命令与原配方逐项比对。
+已基于现场保存的 4.3.0/5.2.0 原生 CLI 输出核对 profile 与参数，新版命令对照原始配方仅变更初始化为 rand_int。
 两版尚未完成实际 GPU 正确性和性能验收；旧版输出协议及数值校验仍需在目标环境执行验证。

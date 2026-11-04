@@ -20,6 +20,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 TYPES = {"fp32": "f32_r", "fp16": "f16_r", "bf16": "bf16_r"}
+INITIALIZATION = "rand_int"
 
 
 def positive_int(text):
@@ -85,7 +86,7 @@ def command(args, r):
     cmd.extend(["--device", "0", "--math_mode", "0"])
     if args.profile == "new":
         cmd.extend(["--use_hipblaslt", "0"])
-    cmd.extend(["--flush_batch_count", "1", "--initialization", "trig_float"])
+    cmd.extend(["--flush_batch_count", "1", "--initialization", INITIALIZATION])
     if args.mode == "check":
         if args.profile == "new":
             cmd.extend(["--test", "1"])

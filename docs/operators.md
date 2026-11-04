@@ -23,6 +23,22 @@ GEMM 默认关闭：当前标准 SGLang 镜像的原生接口与配方不匹配�
 
 GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段使用 `--test 1 --verify 1`，并显式设置 `--use_hipblaslt 0`。旧版 **4.3.0** 必须选择 `gemm_profile: legacy`，仅发送该版本支持的 `--verify 1`，不发送 `--test` 和 `--use_hipblaslt`。两版校验语义分别记录，不自动回退，不把旧版一个检查称为新版两个检查均已通过。
 
+两版 GEMM 的正确性与性能阶段均默认 `--initialization rand_int`，与保留的 DTK `rocblas_common.yaml` 默认初始化一致；FP16/BF16 的输入输出类型和 FP32 累加保持不变。原生 `unit.hpp:行号: Failure` 始终判为数值校验失败，配置的 norm 阈值不能覆盖该失败，也不会继续该项性能测试。
+
+### 与 DTK 来源配置的对照
+
+下表对照随包保留的 common/general YAML 默认值，不代表 DTK 团队实际 nightly 命令的全部覆盖参数。比较外部结果前还需核对实际命令和完整 DTK 环境。
+
+| 项目 | DTK 来源配置 | 当前 GEMM 封装及影响 |
+| --- | --- | --- |
+| 输入初始化 | common 默认 `rand_int` | 已对齐；正确性与性能使用相同初始化 |
+| 算子后端 | common 默认 `use_hipblaslt: -1`，自动选择 | 新版固定 `--use_hipblaslt 0`；最初采集的镜像未编入 hipBLASLt，在支持它的其他镜像中可能影响内核选择及性能；旧版不发送该参数 |
+| 预热与计时 | common 默认 `cold_iters=2`、`iters=10` | 正确性使用 2/1，性能默认 10/100、3 个独立进程，汇总三轮原生平均值的中位数；次数和统计口径不同，不能直接当成相同条件的性能结果 |
+| 数值判定 | common 默认 `unit_check=1`、`norm_check=0` | 新版同时启用 unit 与 norm；封装未配置容差时要求 norm 为零，这是额外的严格判定，不是 DTK 官方通用容差。逐元素校验失败不会因 norm 较小而通过 |
+| 用例覆盖 | general 中选取的模型条目为 FP32 | 保留其中 10 项，另加 4 个方阵及 FP16/BF16 变体；FP16 输入输出、FP32 累加是 DTK smoke 中已有的类型组合，但这些扩展 shape 不等于原 smoke/nightly 全量覆盖 |
+
+抽取的 10 项尺寸、转置、leading dimension、batch stride 和其对应的 alpha=1/beta=0 已与来源核对。`math_mode=0`、`flush_batch_count=1`、默认 C/D 同址与 common 默认一致；`flush_batch_count=1` 不表示每次迭代都主动刷空缓存。跨环境比较还要保持精度、输出类型、后端、缓存策略、库版本、设备和时钟状态一致。
+
 执行任何 GEMM 用例前先检查原生 `--version`、`--help` 和所选 profile 所需选项。不匹配立即失败，`cli_check.json` 和 `cli-probe.log` 保留原始输出；不会进入 GEMM 计算。两版仍要求显式有限 norm error 满足配置阈值才能继续性能，缺失校验输出不会被当成通过。两套共用 14 项 size 和三种精度，FP16/BF16 保持 FP32 累加，默认预热10次、100次计时、3轮。
 
 现场已核验 CLI 的新版环境是 `10.16.1.152:5000/hcu/base/dtk:26.10-ubuntu22.04-py3.12`；旧版可使用其完整的 DTK 26.04 环境。工具与库应来自同一环境，不混拷二进制。若原文件为0644，复制到任务自有目录并 `chmod u+x` 后，用 `rocblas_bench` 指向可执行副本。**CLI匹配只证明接口适用，两套 GEMM 的GPU正确性、输出协议及性能仍待实测。**

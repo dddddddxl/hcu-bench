@@ -63,11 +63,26 @@ class NumericTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             numeric.parse_gemm("rocblas-Gflops,us\n10,1\n", True, "")
 
-    def run_fixture(self, check, profile="new", cli_error=False):
+    def test_gemm_unit_failure_cannot_be_overridden_by_norm_tolerance(self):
+        text = ("unit.hpp:159: Failure\nExpected equality of these values:\n"
+                "  float(hCPU[i + idx])\n    Which is: -0.2800293\n"
+                "  float(hGPU[i + idx])\n    Which is: -0.27978516\n"
+                + GEMM.replace(",17.2,0,0", ",17.2,6.13645e-05,6.13645e-05"))
+        for check, threshold in ((True, ""), (True, "0.0001"), (False, "")):
+            with self.subTest(check=check, threshold=threshold), self.assertRaisesRegex(
+                    numeric.VerificationError, "unit/equality check failed"):
+                numeric.parse_gemm(text, check, threshold)
+        code, commands, result = self.run_fixture(text, threshold="0.0001")
+        self.assertEqual(code, 2)
+        self.assertEqual(len(commands), 3)  # CLI/device probes and check; no performance rounds.
+        self.assertEqual(result["results"][0]["correctness"], "failed")
+        self.assertEqual(result["results"][0]["metrics"], [])
+
+    def run_fixture(self, check, profile="new", cli_error=False, threshold=""):
         with tempfile.TemporaryDirectory() as folder:
             args = SimpleNamespace(recipe="gemm", dtype="fp16", mode="perf", group="square", case_id="square-1024",
                 device="auto", driver="auto", rocblas_bench="auto", conv_suite="all", direction="all",
-                warmup=10, iters=100, repeats=3, native_timeout_s=60, max_norm_error="", hcu_ids="0,1",
+                warmup=10, iters=100, repeats=3, native_timeout_s=60, max_norm_error=threshold, hcu_ids="0,1",
                 nnodes=1, node_rank=0, output_dir=folder, gemm_profile=profile)
             commands = []
             def execute(argv, name, out, env, stopped, executions, timeout_s):

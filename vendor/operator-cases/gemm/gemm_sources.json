@@ -14,7 +14,7 @@
   "selected_scalars": "Selected source Tests bind alpha_1_beta_0; alpha=1 and beta=0 retained.",
   "dtype_scope": "Selected model cases were SGEMM. FP16/BF16 variants with FP32 accumulation are new extensions.",
   "fixed_settings": {
-    "initialization": "trig_float",
+    "initialization": "rand_int",
     "math_mode": 0,
     "use_hipblaslt": 0,
     "flush_batch_count": 1

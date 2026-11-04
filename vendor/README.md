@@ -18,6 +18,7 @@
 ## 来源与修改
 
 - `operator-cases/conv` 和 `operator-cases/gemm` 保留飞书测试指导附件原始脚本、CSV 及来源材料，提供方于 2026-10-30 允许随公开仓库分发；没有附带根许可证，不另行声称 MIT/Apache。GEMM 于2026-11-02按用户授权更新为双profile附件：默认rocBLAS5.2.0、显式legacy4.3.0，尺寸共用；生成命令文件由generate_commands.py生成。validation目录的原生CLI输出仅用作接口回归夹具，不是GPU测量。包装器调用附件脚本的参数构造函数，额外实现原生校验和计时解析、进程清理及标准结果收集。
+- GEMM 于2026-11-04将两版check/perf默认初始化统一为DTK common默认的`rand_int`，重新生成命令与来源配置；保留原始CLI和命令参考不变，回归只允许该初始化差异。其余与DTK来源默认值的差异见[算子说明](../docs/operators.md)。
 
 - rocm-bandwidth-test 过滤 extended-scope fine-grained HCU 内存池，避免新 DTK 下 Device ID 与传输池索引错位；计时和带宽公式不变。包装器拒绝一设备多池的歧义枚举。
 
