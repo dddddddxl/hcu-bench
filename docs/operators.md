@@ -170,6 +170,20 @@ HIP_VISIBLE_DEVICES=0 FLASH_ATTENTION_HG_92A_MODE=fp8 \
 
 batch=8、heads=16、groups=8、seq=16384、dim=128、FP8 e4m3、scale=0.088、causal、window=(-1,0)、seed=123；iterations=5，第一轮舍弃，`do_bench(rep=20, return_mode="mean")`。沿用原脚本先剔除低于均值 0.8 倍、再剔除高于新均值 1.25 倍的样本及其 fallback。结果分别标记原始吞吐均值、筛选后均值、由筛选后吞吐换算的耗时，不冒充未筛选中位数。
 
+框架先在实际执行环境（使用容器时为镜像内部）检查已安装扩展的 `fwd` 接口；匹配原配方的 19 个位置参数及类型后才进入性能测试。三个独立的 `q_descale/k_descale/v_descale` 必须保留。现场常见的 16 参数接口、未知签名、缺失或无法加载的扩展，均记录为 `skipped` 并继续后续用例，即使 `failure_policy: stop` 也不会因这种跳过而停止。`skipped` 不计作性能完成或正确性通过，也不填充零指标。接口匹配后发生的计算、超时或结果解析错误仍按失败处理。
+
+`fa-fp8-interface.json` 保存版本、扩展路径与 SHA256、导出签名和兼容性判断，随 `device.json`、`device-probe.log`、`assessment.json` 归档。匹配签名只证明调用接口相容，FP8 内核支持和实际性能仍以运行结果为准。独立原生脚本也在分配输入张量前检查；不兼容时退出并保存报告。
+
+只检查接口、不启动性能测试：
+
+```bash
+python testpacks/operators/native/_flash_attn_build_loader.py --output fa-fp8-interface.json
+```
+
+该检查返回 0 表示接口匹配，2 表示应跳过此配方；它不会安装或替换 wheel，也不会用 16 参数调用替代 19 参数调用。
+
+需要自动选择“匹配才测、不匹配跳过”时，填写独立配置 `configs/cases/fa-fp8.yaml` 的路径和卡号，再执行 `bash bench.sh configs/cases/fa-fp8.yaml all`。原生脚本单独执行时仍会用非零退出码提示不兼容；框架入口负责把预检查结论路由为正式的跳过状态。
+
 ## 脚本适配与结果
 
 - FA 压测的 `/fa_debug` 改为 wrapper 必填的 `BENCH_FA_CACHE_DIR`，每次运行唯一；独立调用该脚本时也必须设置一个新的可写目录。缓存不进入归档，结果日志保留。

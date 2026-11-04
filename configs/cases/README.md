@@ -21,5 +21,6 @@ bash bench.sh configs/cases/wan.yaml all
 - 独立压力测试默认为100次smoke。改为100万次正式压力时，须同步调整原生和框架超时。
 - Wan默认TP4；单卡TP1须同时修改HCU列表和profile，TP1尚未完成实机验证。
 - GEMM默认对齐 DTK unit_check=1/norm_check=0；非空 max_norm_error 仅追加 norm 检查。hipDNN test_conv 使用原脚本与原生校验，不额外设置迭代或预热。
+- FA FP8在实际容器内检查已安装扩展的19参数接口；匹配才测，不匹配明确记为skipped并继续，不计作性能通过。
 
 如需加入主计划，合并所需测试块和节点定义至 `configs/bench.yaml`。复制测试块后，`pack` 从 `../../testpacks/...` 改为 `../testpacks/...`。仅增加suite名称不会自动导入本目录文件。

@@ -239,6 +239,38 @@ class ConfigurationTests(Fixture):
 
 
 class RuntimeTests(Fixture):
+    def test_explicit_case_skip_continues_under_stop_policy_without_metrics(self):
+        sample = dict(measurement_status="skipped", skip_case=True, correctness="not_checked",
+                      metrics=[], reason="FA FP8 interface requires 19 arguments; found 16")
+        self.command_pack(f"print({'BENCH_RESULT ' + json.dumps(sample)!r})")
+        self.data["failure_policy"] = "stop"
+        self.data["tests"]["next"] = {"suite": "rccl", "adapter": "mock", "nodes": ["local"], "timeout_s": 5}
+        code, store, summary = self.execute()
+        self.assertEqual(code, 0)
+        self.assertEqual([c["status"] for c in store.read("state.json")["cases"].values()], ["skipped", "completed"])
+        self.assertEqual(summary["case_counts"], {"skipped": 1, "completed": 1})
+        self.assertFalse(any(m["test_id"] == "demo" for m in summary["metrics"]))
+        report = (store.path / "summary.txt").read_text(encoding="utf-8")
+        self.assertIn("已跳过", report)
+        self.assertIn(sample["reason"], report)
+
+    def test_case_skip_cannot_hide_nonzero_exit_or_invalid_samples(self):
+        sample = dict(measurement_status="skipped", skip_case=True, correctness="not_checked",
+                      metrics=[], reason="interface incompatible")
+        for suffix in ("raise SystemExit(7)", "print('BENCH_RESULT not-json')"):
+            with self.subTest(suffix=suffix):
+                self.command_pack(f"print({'BENCH_RESULT ' + json.dumps(sample)!r})\n{suffix}")
+                code, store, _ = self.execute()
+                self.assertEqual(code, 1)
+                self.assertIn(next(iter(store.read("state.json")["cases"].values()))["status"], ("failed", "invalid"))
+
+    def test_case_skip_protocol_rejects_measurements_or_missing_reason(self):
+        sample = dict(measurement_status="skipped", skip_case=True, correctness="not_checked", metrics=[], reason="incompatible")
+        for update in ({"reason": ""}, {"skip_case": "true"}, {"measurement_status": "measured"},
+                       {"correctness": "passed"}, {"metrics": [{"name": "latency", "unit": "us", "statistic": "mean", "value": 1}]}):
+            with self.subTest(update=update), self.assertRaises(BenchError):
+                parse_sample("BENCH_RESULT " + json.dumps({**sample, **update}))
+
     def test_mock_runs_and_marks_simulated(self):
         code, store, summary = self.execute()
         self.assertEqual(code, 0)

@@ -190,7 +190,15 @@ def run(args, stopped):
                    versions=versions(["torch", "triton", "flash-attn", "numpy", "einops"])))
         hardware = execute(probe_command(args.recipe), "device-probe", out, env, stopped, executions,
                            min(60, args.native_timeout_s))
-        write_json(out / "device.json", parse_probe(hardware))
+        device = parse_probe(hardware)
+        write_json(out / "device.json", device)
+        if args.recipe == "fa_fp8_forward" and not device["fa_fp8_interface"]["interface_compatible"]:
+            reason = device["fa_fp8_interface"]["reason"]
+            write_json(out / "assessment.json", dict(complete=False, status="skipped", measurements=0,
+                       correctness="not_checked", reason=reason, interface_report="fa-fp8-interface.json"))
+            emit(dict(measurement_status="skipped", skip_case=True, correctness="not_checked",
+                      recipe=args.recipe, metrics=[], reason=reason))
+            return 0
         text = execute(command(args.recipe), "native", out, env, stopped, executions, args.native_timeout_s)
         rows = parse(args.recipe, text, out, getattr(args, "stress_iterations", STRESS_COUNT))
         if stopped.is_set():

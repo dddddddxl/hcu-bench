@@ -9,7 +9,7 @@ import uuid
 
 LABELS = {"completed": "完成", "duration_reached": "达到计划时长", "failed": "失败",
           "cancelled": "取消", "not_run": "未执行", "pending": "等待", "running": "运行中",
-          "queued": "排队", "timed_out": "超时", "invalid": "结果无效",
+          "queued": "排队", "timed_out": "超时", "invalid": "结果无效", "skipped": "已跳过",
           "cleanup_unconfirmed": "清理未确认", "passed": "通过", "not_checked": "未校验"}
 ORDER = ("rccl", "pcie", "memory", "operators", "migraphx", "deepep", "mooncake", "e2e_acc", "e2e_perf")
 LIMIT = 12

@@ -9,7 +9,7 @@ from .models import BenchError, Plan
 from .results import parse_sample
 from .store import RunStore, now
 
-GOOD = {"completed", "duration_reached"}
+GOOD = {"completed", "duration_reached", "skipped"}
 FINAL_FAILURE = {"failed", "timed_out", "invalid", "cleanup_unconfirmed"}
 
 
@@ -36,6 +36,7 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
             def execute_node(node_id):
                 valid = 0
                 invalid = 0
+                skips = []
                 correctness_failed = False
                 logs = store.path / "logs" / case.id
                 logs.mkdir(exist_ok=True)
@@ -99,6 +100,8 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
                             invalid += 1
                             timed.write(f"[{timestamp}] [warning] Invalid sample skipped: {sample.get('reason', 'not supplied')}\n")
                             timed.flush()
+                        elif sample.get("skip_case"):
+                            skips.append(sample["reason"])
                         correctness_failed |= sample["correctness"] == "failed"
                         store.append("results.jsonl", {**sample, "run_id": store.path.name, "case_id": case.id, "test_id": test_id,
                                      "suite": suite, "node": node_id, "node_rank": case.nodes.index(node_id), "params": params,
@@ -123,6 +126,8 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
                     elif result["status"] in GOOD and case.pack.get("id") == "e2e.script-session" and invalid:
                         result["status"] = "invalid"
                         result["error"] = "Model session emitted invalid results"
+                    elif result["status"] in GOOD and skips and valid == 0 and invalid == 0:
+                        result.update(status="skipped", reason="; ".join(skips))
                     elif result["status"] in GOOD and case.pack["requires_metrics"] and valid == 0:
                         result["status"] = "invalid"
                         result["error"] = "No valid measurement samples; process exit alone is not a performance result"
@@ -145,7 +150,8 @@ def run_plan(plan: Plan, store: RunStore, quiet=False) -> int:
             elif not statuses <= GOOD:
                 status = next((value for value in ("failed", "timed_out", "invalid", "cancelled") if value in statuses), "failed")
             else:
-                status = "duration_reached" if "duration_reached" in statuses else "completed"
+                status = ("skipped" if statuses == {"skipped"} else
+                          "duration_reached" if "duration_reached" in statuses else "completed")
             store.case(case.id, status=status, finished_at=now(), nodes=results)
             if status in FINAL_FAILURE and plan.failure_policy == "stop":
                 aborted = True
