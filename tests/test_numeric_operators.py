@@ -18,22 +18,34 @@ from hcu_bench.report import build_report
 from testpacks.operators.numeric import run as numeric
 
 ROOT = Path(__file__).resolve().parents[1]
-GEMM = "transA,transB,M,N,K,lda,ldb,ldc,rocblas-Gflops,us,norm_error_1,norm_error_2\nN,N,1024,1024,1024,1024,1024,1024,123.5,17.2,0,0\n"
+GEMM = "transA,transB,M,N,K,lda,ldb,ldc,rocblas-Gflops,us,norm_error_1,norm_error_2\nN,N,65,33,33,128,128,128,123.5,17.2,0,0\n"
 
 
 class NumericTests(unittest.TestCase):
+    def test_complex_scalars_and_explicit_native_ld_adjustments(self):
+        text = 'transA,transB,M,N,K,lda,ldb,ldc,alpha,beta,rocblas-Gflops,us\nC,N,65,33,33,128,128,128,(-0.5,0.5),(-0.5,0.5),10,2\n'
+        self.assertEqual(numeric.parse_gemm(text, True, '')['native']['alpha'], '(-0.5,0.5)')
+        expected = dict(dtype='fp32', function='gemm', transA='N', transB='N', M='65', N='33', K='33',
+                        lda='32', ldb='128', ldc='128')
+        text = GEMM
+        with self.assertRaises(ValueError):
+            numeric.parse_gemm(text, True, '', expected)
+        text = 'rocblas-bench INFO: lda < min_lda, setting lda = 128\n' + text
+        result = numeric.parse_gemm(text, True, '', expected)
+        self.assertEqual(result['native_adjustments']['lda'], dict(requested='32', native='128'))
+
     def test_native_csv_coverage(self):
         for dtype in ("fp32", "fp16"):
             args = SimpleNamespace(recipe="conv", dtype=dtype, conv_suite="all", direction="all", group="all", case_id="")
             _, cases = numeric.selected(args, numeric.native_module("conv"), "/bin/driver")
             self.assertEqual(len(cases), 28)
             self.assertEqual({c["direction"] for c in cases}, {"1", "2", "4"})
-        for dtype in ("fp32", "fp16", "bf16"):
+        for dtype, count in dict(fp32=2207, fp64=819, fp16=27, complex64=27, complex128=27).items():
             args = SimpleNamespace(recipe="gemm", dtype=dtype, conv_suite="all", direction="all", group="all",
-                                   case_id="", warmup=10, iters=100, gemm_profile="new")
+                                   case_id="", warmup=0, iters=0, gemm_profile="new", max_norm_error="")
             _, cases = numeric.selected(args, numeric.native_module("gemm"), "/bin/bench")
-            self.assertEqual(len(cases), 14)
-            self.assertEqual({c["row"]["group"] for c in cases}, {"square", "dlrm", "bert", "transformer", "batched"})
+            self.assertEqual(len(cases), count)
+            self.assertTrue({c["row"]["group"] for c in cases} <= {"general", "smoke"})
 
     def test_conv_verdicts_and_native_timer(self):
         for direction, label in numeric.VERIFY_LABEL.items():
@@ -49,19 +61,19 @@ class NumericTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             numeric.parse_conv("Everything looks good; exit 0", "1", True)
 
-    def test_gemm_requires_explicit_zero_or_approved_threshold(self):
-        self.assertEqual(numeric.parse_gemm(GEMM, True, "")["tolerance"], 0)
+    def test_gemm_native_unit_check_and_optional_norm_threshold(self):
+        self.assertEqual(numeric.parse_gemm(GEMM, True, "")["tolerance"], None)
         nonzero = GEMM.replace(",17.2,0,0", ",17.2,0.0001,0.0002")
-        with self.assertRaisesRegex(ValueError, "unconfirmed"):
-            numeric.parse_gemm(nonzero, True, "")
+        self.assertIsNone(numeric.parse_gemm(nonzero, True, "")["tolerance"])
         self.assertEqual(numeric.parse_gemm(nonzero, True, "0.001")["tolerance"], .001)
         with self.assertRaises(numeric.VerificationError):
             numeric.parse_gemm(nonzero, True, "0.00001")
         for text in ("", GEMM + GEMM, GEMM.replace(",17.2,0,0", ",nan,0,0"), GEMM + "\nERROR: mismatch"):
             with self.assertRaises(ValueError):
                 numeric.parse_gemm(text, True, "")
+        self.assertEqual(numeric.parse_gemm("rocblas-Gflops,us\n10,1\n", True, "")["norm_errors"], {})
         with self.assertRaises(ValueError):
-            numeric.parse_gemm("rocblas-Gflops,us\n10,1\n", True, "")
+            numeric.parse_gemm("rocblas-Gflops,us\n10,1\n", True, "0")
 
     def test_gemm_unit_failure_cannot_be_overridden_by_norm_tolerance(self):
         text = ("unit.hpp:159: Failure\nExpected equality of these values:\n"
@@ -80,7 +92,7 @@ class NumericTests(unittest.TestCase):
 
     def run_fixture(self, check, profile="new", cli_error=False, threshold=""):
         with tempfile.TemporaryDirectory() as folder:
-            args = SimpleNamespace(recipe="gemm", dtype="fp16", mode="perf", group="square", case_id="square-1024",
+            args = SimpleNamespace(recipe="gemm", dtype="fp16", mode="perf", group="smoke", case_id="dtk-smoke-59-0001",
                 device="auto", driver="auto", rocblas_bench="auto", conv_suite="all", direction="all",
                 warmup=10, iters=100, repeats=3, native_timeout_s=60, max_norm_error=threshold, hcu_ids="0,1",
                 nnodes=1, node_rank=0, output_dir=folder, gemm_profile=profile)
@@ -109,26 +121,26 @@ class NumericTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(len(commands), 6)
         self.assertIn("--verify", commands[2])
-        self.assertEqual(commands[2][commands[2].index("--verify") + 1], "1")
+        self.assertEqual(commands[2][commands[2].index("--verify") + 1], "0")
         self.assertTrue(result["complete"])
         self.assertEqual(result["results"][0]["metrics"][0]["statistic"], "median_of_native_means")
 
-    def test_unconfirmed_check_never_launches_or_publishes_perf(self):
-        code, commands, result = self.run_fixture(GEMM.replace(",17.2,0,0", ",17.2,0.1,0.1"))
+    def test_additional_norm_failure_never_publishes_perf(self):
+        code, commands, result = self.run_fixture(GEMM.replace(",17.2,0,0", ",17.2,0.1,0.1"), threshold="0.001")
         self.assertEqual(code, 2)
         self.assertEqual(len(commands), 3)
         self.assertEqual(result["results"][0]["metrics"], [])
-        self.assertEqual(result["results"][0]["correctness"], "not_checked")
+        self.assertEqual(result["results"][0]["correctness"], "failed")
 
-    def test_template_has_five_dtype_sweeps(self):
+    def test_template_has_seven_dtype_sweeps(self):
         plan = make_plan(str(ROOT / "configs/numeric-operators.template.yaml"), "operators",
                          ["tests.gemm.enabled=true"])
-        self.assertEqual(len(plan.cases), 5)
+        self.assertEqual(len(plan.cases), 7)
         self.assertEqual({(c.params["recipe"], c.params["dtype"]) for c in plan.cases},
-                         {("conv", "fp32"), ("conv", "fp16"), ("gemm", "fp32"), ("gemm", "fp16"), ("gemm", "bf16")})
+                         {("conv", "fp32"), ("conv", "fp16"), ("gemm", "fp32"), ("gemm", "fp16"), ("gemm", "fp64"), ("gemm", "complex64"), ("gemm", "complex128")})
 
     def test_wrong_shape_is_not_published(self):
-        code, commands, result = self.run_fixture(GEMM.replace("N,N,1024,", "N,N,2048,"))
+        code, commands, result = self.run_fixture(GEMM.replace("N,N,65,", "N,N,2048,"))
         self.assertEqual(code, 2)
         self.assertEqual(len(commands), 3)
         self.assertIn("requested M", result["results"][0]["reason"])
@@ -160,7 +172,7 @@ class NumericTests(unittest.TestCase):
             data = dict(version=1, name="synthetic-numeric-contract", output_dir="runs",
                         nodes=dict(local=dict(executor="local", hcus=[0], env=dict(HIP_VISIBLE_DEVICES="0"))),
                         tests=dict(gemm=dict(suite="operators", adapter="command", pack="pack.yaml", nodes=["local"],
-                                   timeout_s=60, params=dict(bench_root=str(ROOT), recipe="gemm", case_id="square-1024"))))
+                                   timeout_s=60, params=dict(bench_root=str(ROOT), recipe="gemm", case_id="dtk-smoke-59-0001"))))
             config = root / "bench.yaml"
             config.write_text(yaml.safe_dump(data), encoding="utf-8")
             plan = make_plan(str(config))

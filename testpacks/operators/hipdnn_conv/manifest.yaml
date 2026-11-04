@@ -1,0 +1,18 @@
+version: 1
+id: operators.hipdnn-conv
+suite: operators
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  binary: {type: string, default: auto}
+  source_root: {type: string, default: ""}
+  case_id: {type: string, default: ""}
+  build_jobs: {type: integer, default: 2, min: 1, max: 64}
+  native_timeout_s: {type: integer, default: 14400, min: 1, max: 604800}
+command: [python3, -u, "${p_bench_root}/testpacks/operators/hipdnn_conv/run.py", --binary, "${p_binary}", --source-root, "${p_source_root}", --case-id, "${p_case_id}", --build-jobs, "${p_build_jobs}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+cwd: "${case_dir}"
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.csv", "${case_dir}/*.receipt"]
+artifact_limit_mb: 200

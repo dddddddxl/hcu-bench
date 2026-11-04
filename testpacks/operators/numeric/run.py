@@ -76,6 +76,9 @@ def parse_gemm(text, check, threshold, expected=None):
         if "rocblas-Gflops" not in header or "us" not in header:
             continue
         values = [cell.strip() for cell in next(csv.reader([lines[index + 1]]))]
+        if len(header) != len(values):
+            # Native complex scalars can contain unquoted '(real,imag)' pairs.
+            values = [cell.strip() for cell in re.split(r",(?![^()]*\))", lines[index + 1])]
         if len(header) != len(set(header)) or len(header) != len(values):
             raise ValueError("Invalid rocblas-bench CSV record")
         records.append(dict(zip(header, values)))
@@ -84,22 +87,32 @@ def parse_gemm(text, check, threshold, expected=None):
     row = records[0]
     if expected is not None:
         fields = ["M", "N", "K", "lda", "ldb", "ldc", "transA", "transB"]
-        if expected["function"] == "gemm_strided_batched":
-            fields += ["batch_count", "stride_a", "stride_b", "stride_c"]
+        if "batched" in expected["function"]:
+            fields += ["batch_count"]
+        if "strided" in expected["function"]:
+            fields += ["stride_a", "stride_b", "stride_c"]
+        adjustments = {}
         for field in fields:
             if row.get(field) != expected[field]:
-                raise ValueError("rocblas-bench result does not match requested " + field)
+                adjusted = row.get(field, "")
+                notice = rf"rocblas-bench INFO: {field} .*setting {field} = {re.escape(adjusted)}\b"
+                if expected.get("dtype") and field in ("lda", "ldb", "ldc", "stride_c", "batch_count") and re.search(notice, text):
+                    adjustments[field] = dict(requested=expected[field], native=adjusted)
+                else:
+                    raise ValueError("rocblas-bench result does not match requested " + field)
     result = dict(latency_us=finite(row["us"], True), gflops=finite(row["rocblas-Gflops"], True), native=row)
     if check:
         errors = {key: finite(value) for key, value in row.items() if re.fullmatch(r"norm_error(?:_\d+)?", key)}
-        if not errors:
-            raise ValueError("rocblas-bench did not report norm errors; cannot confirm correctness")
-        bound = 0.0 if threshold == "" else finite(threshold)
-        if any(value > bound for value in errors.values()):
-            if threshold == "":
-                raise ValueError("Nonzero norm error without an approved threshold; correctness unconfirmed, performance skipped")
-            raise VerificationError("rocblas-bench norm error exceeds configured threshold")
-        result.update(norm_errors=errors, tolerance=bound, reference="rocblas-bench CPU reference")
+        bound = None if threshold == "" else finite(threshold)
+        if bound is not None:
+            if not errors:
+                raise ValueError("Additional norm check requested but no norm errors were reported")
+            if any(value > bound for value in errors.values()):
+                raise VerificationError("rocblas-bench norm error exceeds configured threshold")
+        result.update(norm_errors=errors, tolerance=bound, reference="rocblas-bench native CPU comparison",
+                      verification="native_comparison" if bound is None else "native_comparison_and_norm")
+    if expected is not None and adjustments:
+        result["native_adjustments"] = adjustments
     return result
 
 
@@ -133,7 +146,7 @@ def executable(value, recipe):
 
 def selected(args, module, binary):
     if args.recipe == "conv":
-        if args.dtype == "bf16" or args.group != "all":
+        if args.dtype not in ("fp32", "fp16") or args.group != "all":
             raise ValueError("Conv supports fp32/fp16 and no GEMM group filter")
         native = SimpleNamespace(suite=args.conv_suite, direction=args.direction, dtype=args.dtype, driver=binary)
         cases, _ = module.load_cases(native)
@@ -144,7 +157,7 @@ def selected(args, module, binary):
             raise ValueError("GEMM does not accept Conv filters")
         native = SimpleNamespace(cases=SOURCE / "gemm/gemm_cases.csv", group=args.group, case_id=args.case_id,
                                  bench=Path(binary), dtype=args.dtype, mode="check", profile=args.gemm_profile,
-                                 warmup=args.warmup, iters=args.iters)
+                                 warmup=args.warmup or None, iters=args.iters or None, max_norm_error=args.max_norm_error)
         cases = [dict(id=row["case_id"], row=row) for row in module.load_cases(native)]
     if not cases:
         raise ValueError("No selected native cases")
@@ -156,8 +169,11 @@ def run(args, stopped):
     executions, results, failed = [], [], False
     deadline = time.monotonic() + args.native_timeout_s
     try:
-        if min(args.warmup, args.iters, args.repeats, args.native_timeout_s) < 1:
-            raise ValueError("Iterations, repeats and timeout must be positive")
+        if min(args.warmup, args.iters, args.repeats) < 0 or args.native_timeout_s < 1:
+            raise ValueError("Iteration overrides must be nonnegative and timeout positive")
+        if args.recipe == "conv":
+            args.warmup, args.iters = args.warmup or 10, args.iters or 100
+        args.repeats = args.repeats or (3 if args.recipe == "conv" else 1)
         if args.max_norm_error != "":
             finite(args.max_norm_error)
         env = dict(os.environ)
@@ -233,7 +249,7 @@ def run(args, stopped):
                     row["samples"] = samples
                     fields = [("latency_ms", "ms")] if args.recipe == "conv" else [("latency_us", "us"), ("gflops", "GFLOPS")]
                     row["metrics"] = [dict(name=f"{case_id}_{field}", value=statistics.median(s[field] for s in samples),
-                                           unit=unit, statistic="median_of_native_means") for field, unit in fields]
+                                           unit=unit, statistic="native_mean" if args.repeats == 1 else "median_of_native_means") for field, unit in fields]
                 results.append(row)
                 emit(row)
             except CleanupError:
@@ -269,7 +285,7 @@ def run(args, stopped):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recipe", choices=("conv", "gemm"), required=True)
-    parser.add_argument("--dtype", choices=("fp32", "fp16", "bf16"), default="fp16")
+    parser.add_argument("--dtype", choices=("fp32", "fp16", "fp64", "complex64", "complex128"), default="fp16")
     parser.add_argument("--mode", choices=("check", "perf"), default="perf")
     parser.add_argument("--driver", default="auto")
     parser.add_argument("--rocblas-bench", default="auto")
@@ -280,7 +296,7 @@ def main():
     parser.add_argument("--case-id", default="")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--max-norm-error", default="")
-    for key, default in (("warmup", 10), ("iters", 100), ("repeats", 3), ("native-timeout-s", 7200)):
+    for key, default in (("warmup", 0), ("iters", 0), ("repeats", 0), ("native-timeout-s", 7200)):
         parser.add_argument("--" + key, type=int, default=default)
     parser.add_argument("--hcu-ids", required=True)
     parser.add_argument("--nnodes", type=int, default=1)

@@ -1,0 +1,6 @@
+DTK original hipdnn/api_test/cpp/test_case/test_conv.sh, read-only verified 2026-11-04.
+Original command payload SHA256: 9711f3a21218eb32e16d2fbe758ae13b5affaefb476966e3dda4b02884b14c9c
+68 original commands, including ordered TF32 environment exports. Only two integration/copyright comment lines were prepended; the original command payload is byte-identical.
+The original test_conv C++ program is not bundled: use the matching DTK executable or build the original api_test source with its CMakeLists and the installed SDK.
+The source timer performs one initial graph execution, then 100 event-timed executions and prints avg times in milliseconds. CPU validation is native and is unsupported for int8 in this reference.
+No added numerical tolerance, timing iterations, warmup loop or repeated rounds.

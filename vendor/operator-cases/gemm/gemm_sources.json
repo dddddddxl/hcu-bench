@@ -1,24 +1,16 @@
 {
-  "source_host_alias": "nmz36",
-  "source_hostname": "github-nmz2",
   "source_directory": "/public/dtk/autotest_platform/dcc_cp/rocblas",
   "source_sha256": {
     "rocblas_general.yaml": "e1f0359940d6a2854bae367248b51170115a7ffa94845713cd94e65a2e9b578c",
-    "rocblas_common.yaml": "5a5cbd05cec1c47c1bd1cd950c727a8adc5e8645131b593e722251e56f9821da"
+    "rocblas_common.yaml": "5a5cbd05cec1c47c1bd1cd950c727a8adc5e8645131b593e722251e56f9821da",
+    "rocblas_smoke.yaml": "649392057654efee50d79297220ba8b96aac13d23f4a3b0acae88f5dfbe8d4e5",
+    "rocblas_gentest.py": "143151645ed8aceba9c7a6cd7ba22bf79090e25a5ef5cb510609858e786e2601"
   },
   "cases": {
-    "total": 14,
-    "added_square_sweep": 4,
-    "selected_source_cases": 10
+    "general": 2972,
+    "gemm_smoke": 135,
+    "total": 3107
   },
-  "selected_scalars": "Selected source Tests bind alpha_1_beta_0; alpha=1 and beta=0 retained.",
-  "dtype_scope": "Selected model cases were SGEMM. FP16/BF16 variants with FP32 accumulation are new extensions.",
-  "fixed_settings": {
-    "initialization": "rand_int",
-    "math_mode": 0,
-    "use_hipblaslt": 0,
-    "flush_batch_count": 1
-  },
-  "scope": "Starter suite, not the full YAML workload and not established as the nightly workload.",
-  "verification": "CLI help and version inspected in megatron_test; no GPU benchmark executed."
+  "scope": "Only retained DTK general and GEMM smoke. No added shapes or precision variants. Not all BLAS or gtest branches.",
+  "settings": "Original per-case initialization, types, scalars, shapes, strides and iteration counts. New profile uses unit_check=1, norm_check=0 and use_hipblaslt=-1."
 }

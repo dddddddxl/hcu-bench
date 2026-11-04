@@ -11,19 +11,19 @@ GEMM 默认关闭：当前标准 SGLang 镜像的原生接口与配方不匹配�
 | recipe | 精度 | 用例范围 | 原生工具 |
 | --- | --- | --- | --- |
 | `conv` | fp32 / fp16 | Conv2D 13 项、Conv3D 15 项，含普通/分组/Depthwise、前向/dgrad/wgrad；共 56 组精度配置 | 镜像已有 MIOpenDriver |
-| `gemm` | fp32 / fp16 / bf16 | 方阵 4、DLRM 3、BERT 3、Transformer 2、Strided Batched 2；共 42 组精度配置 | 镜像已有 rocblas-bench |
+| `gemm` | fp32 / fp16 / fp64 / complex64 / complex128 | DTK 原始 general 2,972 条 + GEMM smoke 135 条，无自行扩展 | 镜像已有 rocblas-bench |
 
-`mode: check` 只校验；`mode: perf` 对每个用例先执行原生校验，确认后才计时。Conv 采用 MIOpen 明确的 `Verifies OK` 及其原生容差；GEMM 要求存在有限的 `norm_error`。默认 `max_norm_error: ""` 仅将零误差判为通过，非零记为未确认并跳过该项性能，不把退出码 0 当正确性通过。用户有验收标准时可按测试精度配置字符串阈值，如 `max_norm_error: "0.001"`，这不是工具默认推荐值。
+`mode: check` 只校验；`mode: perf` 对每个用例先执行原生校验，通过后才计时。Conv 使用 MIOpen 的 `Verifies OK` 和原生容差。新版 GEMM 默认与 DTK common 对齐：`unit_check=1`、`norm_check=0`，对应 `--test 1 --verify 0`，不再额外要求 norm 为零。原生逐元素校验失败始终阻止该项计时。`max_norm_error: ""` 表示仅使用原生校验；填写非空阈值时追加 `--verify 1` 并要求有限 norm 不超过该值，不能覆盖 unit Failure。
 
-默认预热 10 次、每轮原生计时 100 次、3 轮。Conv 记录 GPU Kernel Time，GEMM 记录原生 us 和 rocblas-Gflops；统一指标是三轮原生平均值的中位数，逐轮值也保留。
+Conv 的现有 MIOpenDriver 路径仍为 10 次预热、每轮 100 次、3 轮，取三轮中位数；这不是 DTK 原命令原样执行。GEMM 默认只执行一轮原生计时，保留来源 cold_iters=2、iters=10（部分 HPL 为 5），不额外取三轮；记录原生 us 和 rocblas-Gflops。显式设置 warmup/iters/repeats 是参数覆盖，结果对比前需核对。
 
-可调参数：`dtype`、`mode`、`device`、`warmup`、`iters`、`repeats`、`native_timeout_s`；Conv 可调 `conv_suite`、`direction`，GEMM 可调 `group`，两者可用 `case_id` 选择单项。`device: auto` 使用本次已分配的第一张卡，不寻找或抢占其他卡；可显式指定已分配集合中的某一张。每个原生进程只可见一张卡，并记录 HIP 逻辑编号及 PCI 地址。
+可调参数：`dtype`、`mode`、`device`、`warmup`、`iters`、`repeats`、`native_timeout_s`；Conv 可调 `conv_suite`、`direction`，GEMM 可调 `group`（all/general/smoke），两者可用 `case_id` 选择单项。`device: auto` 使用本次已分配的第一张卡，不寻找或抢占其他卡；可显式指定已分配集合中的某一张。每个原生进程只可见一张卡，并记录 HIP 逻辑编号及 PCI 地址。
 
 `driver` / `rocblas_bench` 默认 `auto`，在现有 DTK 常规路径中查找，也可填写绝对路径。不下载安装工具，不修改 DTK 或频率。失败用例保留原始日志、命令和原因，其他用例继续；清理无法确认时停止整个计划。
 
-GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段使用 `--test 1 --verify 1`，并显式设置 `--use_hipblaslt 0`。旧版 **4.3.0** 必须选择 `gemm_profile: legacy`，仅发送该版本支持的 `--verify 1`，不发送 `--test` 和 `--use_hipblaslt`。两版校验语义分别记录，不自动回退，不把旧版一个检查称为新版两个检查均已通过。
+GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段默认使用 `--test 1 --verify 0`，并显式设置 `--use_hipblaslt -1`。旧版 **4.3.0** 必须选择 `gemm_profile: legacy`，仅发送该版本支持的 `--verify 1`，不发送 `--test` 和 `--use_hipblaslt`。两版校验语义分别记录，不自动回退，不把旧版一个检查称为新版两个检查均已通过。
 
-两版 GEMM 的正确性与性能阶段均默认 `--initialization rand_int`，与保留的 DTK `rocblas_common.yaml` 默认初始化一致；FP16/BF16 的输入输出类型和 FP32 累加保持不变。原生 `unit.hpp:行号: Failure` 始终判为数值校验失败，配置的 norm 阈值不能覆盖该失败，也不会继续该项性能测试。
+两版 GEMM 的正确性与性能阶段均默认 `--initialization rand_int`；来源中 HPL 显式指定的 `trig_float` 覆盖默认值，与保留的 DTK `rocblas_common.yaml` 默认初始化一致；FP16 输入输出、FP32 累加按 smoke 原配置保留。原生 `unit.hpp:行号: Failure` 始终判为数值校验失败，配置的 norm 阈值不能覆盖该失败，也不会继续该项性能测试。
 
 ### 与 DTK 来源配置的对照
 
@@ -31,17 +31,19 @@ GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段使�
 
 | 项目 | DTK 来源配置 | 当前 GEMM 封装及影响 |
 | --- | --- | --- |
-| 输入初始化 | common 默认 `rand_int` | 已对齐；正确性与性能使用相同初始化 |
-| 算子后端 | common 默认 `use_hipblaslt: -1`，自动选择 | 新版固定 `--use_hipblaslt 0`；最初采集的镜像未编入 hipBLASLt，在支持它的其他镜像中可能影响内核选择及性能；旧版不发送该参数 |
-| 预热与计时 | common 默认 `cold_iters=2`、`iters=10` | 正确性使用 2/1，性能默认 10/100、3 个独立进程，汇总三轮原生平均值的中位数；次数和统计口径不同，不能直接当成相同条件的性能结果 |
-| 数值判定 | common 默认 `unit_check=1`、`norm_check=0` | 新版同时启用 unit 与 norm；封装未配置容差时要求 norm 为零，这是额外的严格判定，不是 DTK 官方通用容差。逐元素校验失败不会因 norm 较小而通过 |
-| 用例覆盖 | general 中选取的模型条目为 FP32 | 保留其中 10 项，另加 4 个方阵及 FP16/BF16 变体；FP16 输入输出、FP32 累加是 DTK smoke 中已有的类型组合，但这些扩展 shape 不等于原 smoke/nightly 全量覆盖 |
+| 输入初始化 | common 默认 `rand_int`，HPL 显式 `trig_float` | 保留默认及逐项覆盖；正确性与性能使用相同初始化 |
+| 算子后端 | common 默认 `use_hipblaslt: -1`，自动选择 | 新版对齐为 `--use_hipblaslt -1`，由完整原生库选择；旧版没有该参数，不发送 |
+| 预热与计时 | common 默认 `cold_iters=2`、`iters=10` | 正确性与性能都保留来源 2/10（部分 HPL 为 2/5）；性能默认一轮，直接保留原生均值 |
+| 数值判定 | common 默认 `unit_check=1`、`norm_check=0` | 新版默认对齐，norm 阈值仅为可选追加检查。旧版保留其原生 `--verify 1`，不宣称两个版本接口完全相同 |
+| 用例覆盖 | general 全量 + smoke 中 GEMM | 仅 2,972 + 135 条原始配置全部展开；已移除自加方阵和精度变体，不是 DTK 全部 BLAS/nightly |
 
-抽取的 10 项尺寸、转置、leading dimension、batch stride 和其对应的 alpha=1/beta=0 已与来源核对。`math_mode=0`、`flush_batch_count=1`、默认 C/D 同址与 common 默认一致；`flush_batch_count=1` 不表示每次迭代都主动刷空缓存。跨环境比较还要保持精度、输出类型、后端、缓存策略、库版本、设备和时钟状态一致。
+来源 YAML 通过随包保留的原生 `rocblas_gentest.py` 展开为 `gemm_cases.csv`；运行时仅需标准库。保留尺寸、转置（含复数共轭）、leading dimension、stride、batch、实虚标量和类型。原生 bench 对 LD/输出 stride 的显式调整会记录为 `native_adjustments`，不静默修改来源。`math_mode=0`、`flush_batch_count=1` 和 C/D 同址方式沿用默认值。这里仍采用 bench 的调用路径；不是直接运行 rocblas-test/gtest，不能宣称其所有 pointer-mode/API 分支均已覆盖。
 
-执行任何 GEMM 用例前先检查原生 `--version`、`--help` 和所选 profile 所需选项。不匹配立即失败，`cli_check.json` 和 `cli-probe.log` 保留原始输出；不会进入 GEMM 计算。两版仍要求显式有限 norm error 满足配置阈值才能继续性能，缺失校验输出不会被当成通过。两套共用 14 项 size 和三种精度，FP16/BF16 保持 FP32 累加，默认预热10次、100次计时、3轮。
+默认共 3,107 条原始配置：FP32 2,207、FP64 819、FP16 27、complex64 27、complex128 27。原始 general/GEMM smoke 没有 BF16，不额外添加。完整扫描可能超过默认超时，应按资源设置 `native_timeout_s` 与外层 `timeout_s`；超时和筛选运行不能称为完整扫描通过。
 
-现场已核验 CLI 的新版环境是 `10.16.1.152:5000/hcu/base/dtk:26.10-ubuntu22.04-py3.12`；旧版可使用其完整的 DTK 26.04 环境。工具与库应来自同一环境，不混拷二进制。若原文件为0644，复制到任务自有目录并 `chmod u+x` 后，用 `rocblas_bench` 指向可执行副本。**CLI匹配只证明接口适用，两套 GEMM 的GPU正确性、输出协议及性能仍待实测。**
+每次执行先检查原生版本和 CLI，不匹配立即失败并保留原始输出。新版默认不依赖 norm 字段；必须有与计划尺寸一致的原生记录，且无原生错误或 unit Failure。独立附件脚本只记录原生结果，hcu-bench 封装负责检查后才进入性能阶段。
+
+现场已核验 CLI 的新版环境是 `10.16.1.152:5000/hcu/base/dtk:26.10-ubuntu22.04-py3.12`；旧版可使用其完整的 DTK 26.04 环境。工具与库应来自同一环境，不混拷二进制。若原文件为0644，复制到任务自有目录并 `chmod u+x` 后，用 `rocblas_bench` 指向可执行副本。**CLI匹配不代替目标机器上的数值与性能实测。**
 
 ```bash
 # 默认新版
@@ -50,12 +52,24 @@ bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=
 bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.gemm_profile=legacy
 ```
 
-独立附件入口保存在 `vendor/operator-cases/gemm`：默认 `run_gemm_cases.py`，旧版 `run_gemm_cases_legacy.py`；`commands/new_check.sh`、`new_perf.sh`、`legacy_check.sh`、`legacy_perf.sh` 分别覆盖三种精度。完整说明见 [RUNNING.txt](../vendor/operator-cases/gemm/RUNNING.txt)。独立脚本的perf需人工先审核check日志；上面的 hcu-bench perf入口会自动先check，再决定是否计时。
+独立附件入口保存在 `vendor/operator-cases/gemm`：默认 `run_gemm_cases.py`，旧版 `run_gemm_cases_legacy.py`；`commands/new_check.sh`、`new_perf.sh`、`legacy_check.sh`、`legacy_perf.sh` 分别覆盖五种来源精度。完整说明见 [RUNNING.txt](../vendor/operator-cases/gemm/RUNNING.txt)。独立脚本的perf需人工先审核check日志；上面的 hcu-bench perf入口会自动先check，再决定是否计时。
 
 ```bash
 bash bench.sh operators --set tests.conv.params.mode=check --set tests.gemm.params.mode=check
-bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.group=batched
+bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=true --set tests.gemm.params.group=smoke
 ```
+
+## DTK hipDNN 原始 test_conv
+
+独立配置 [configs/cases/hipdnn-conv.yaml](../configs/cases/hipdnn-conv.yaml) 执行随包原样保留的 `test_conv.sh` 68 条命令，属于 `operators` suite，与上面的 MIOpenDriver 路径分开。原脚本的 FP32/FP16/BF16（参数原文 `bfp16`）/TF32/INT8、布局、前后 padding、方向和 TF32 环境开关全部保留。封装没有增加迭代、预热或轮次；当前来源 C++ 原生代码执行一次准备调用，再用 HIP event 计时 100 次并输出平均毫秒数。
+
+已有完整 DTK 环境可用时填写 `binary`，或将 `test_conv` 放入 PATH。若尚未编译，可填写原始 `hipdnn/api_test` 的 `source_root`；工具用原始 CMakeLists 与已有 CMake/Ninja/SDK 构建 `test_conv`，不下载依赖、不安装库、不删 `-Werror` 或替换实现。构建并行数只影响编译调度。缺少 SDK、CLI 不兼容或编译失败都会保留原始错误并失败。
+
+```bash
+bash bench.sh configs/cases/hipdnn-conv.yaml all
+```
+
+`case_id` 默认空，执行全部 68 条；指定 `dtk-conv-001` 仅用于诊断，不能称整套通过。日志必须有明确的 `CPU validation result: successful` 和对应方向的原生计时；`Graph validation successful` 仅表示图构建，不能代替数值校验。原生 `CPU validation result: failed` 即失败。来源代码对 INT8 明确不支持 CPU 校验，这类项保留原始提示并标记未验收，不因 exit 0 放行性能。失败项继续记录，最终不会把部分成功报成整套成功。保存逐项原生命令/环境、二进制与构建输入哈希、编译及运行日志。
 
 ## 配置与执行
 

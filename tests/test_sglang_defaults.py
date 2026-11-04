@@ -51,9 +51,9 @@ class SglangDefaultsTests(unittest.TestCase):
             self.assertNotIn("memory", {case.suite for case in plan.cases})
             self.assertFalse(any(case.params.get("recipe") == "gemm" for case in plan.cases))
             enabled = make_plan(path, overrides=["tests.memory_bandwidth.enabled=true", "tests.gemm.enabled=true"])
-            self.assertEqual(len(enabled.cases), 20)
+            self.assertEqual(len(enabled.cases), 22)
             self.assertEqual(sum(case.suite == "memory" for case in enabled.cases), 1)
-            self.assertEqual(sum(case.params.get("recipe") == "gemm" for case in enabled.cases), 3)
+            self.assertEqual(sum(case.params.get("recipe") == "gemm" for case in enabled.cases), 5)
 
     def test_nmz6_keeps_supported_attention_and_short_stress(self):
         plan = make_plan(str(ROOT / "configs/nmz6.sglang-smoke.yaml"))

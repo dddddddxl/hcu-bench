@@ -1,0 +1,57 @@
+# Profile: new; dtype: complex128; mode: perf
+# Command reference: run from the package root after DTK setup.
+# Prefer commands/new_perf.sh for logged execution and automatic CLI checks.
+# dtk-smoke-58-0082 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0083 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0084 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0085 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0086 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0087 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0088 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0089 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0090 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0091 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0092 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0093 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0094 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0095 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0096 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0097 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0098 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0099 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0100 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 4224 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0101 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 4224 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0102 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA N --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 4224 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0103 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0104 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0105 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA T --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0106 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB N --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0107 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB T --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10
+# dtk-smoke-58-0108 round1
+HIP_VISIBLE_DEVICES=0 ./bin/rocblas-bench -f gemm_strided_batched -r f64_c -m 65 -n 33 -k 33 --transposeA C --transposeB C --lda 128 --ldb 128 --ldc 128 --alpha -0.5 --beta -0.5 --alphai 0.5 --betai 0.5 --batch_count 2 --stride_a 8320 --stride_b 4224 --stride_c 4224 --device 0 --math_mode 0 --use_hipblaslt -1 --flush_batch_count 1 --initialization rand_int --test 0 --verify 0 --cold_iters 2 --iters 10

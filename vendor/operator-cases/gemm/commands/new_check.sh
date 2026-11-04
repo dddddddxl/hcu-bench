@@ -7,4 +7,6 @@ export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"
 # Review native check diagnostics before executing the perf script.
 python3 run_gemm_cases.py --dtype fp32 --mode check "$@"
 python3 run_gemm_cases.py --dtype fp16 --mode check "$@"
-python3 run_gemm_cases.py --dtype bf16 --mode check "$@"
+python3 run_gemm_cases.py --dtype fp64 --mode check "$@"
+python3 run_gemm_cases.py --dtype complex64 --mode check "$@"
+python3 run_gemm_cases.py --dtype complex128 --mode check "$@"
