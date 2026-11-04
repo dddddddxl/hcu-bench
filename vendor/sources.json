@@ -8,7 +8,7 @@
       "gemm_test_cases_dual_20261102.zip": "ac7199abca41d685588ecf11642fe1f92530cc7694bb308e0e7b44847e466ed0"
     },
     "license": "No root license supplied; original source notices retained",
-    "tree_sha256": "f729108f83c541dd810b69cb5bfb0958d7dc84bbc82631113b748ae74aeb1e99",
+    "tree_sha256": "0eeb16c631a6372dd6f79d0881e877e54c271bac839b394e582bf3015dc6a039",
     "modifications": "Only original DTK general (2972) and GEMM smoke (135) entries, expanded by the preserved native generator; custom shapes and precision variants removed. Original per-entry initialization and iterations, automatic new-profile hipBLASLt selection, and native unit/norm defaults retained. Original hipdnn test_conv.sh (68 calls) added unchanged; wrapper uses the existing binary or original external api_test CMake source. Conv MIOpenDriver path is distinct and retains its prior timing settings. Generated catalogs/commands and original CLI captures remain traceable."
   },
   "rccl-tests": {

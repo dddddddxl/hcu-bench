@@ -31,8 +31,8 @@ class NumericTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             numeric.parse_gemm(text, True, '', expected)
         text = 'rocblas-bench INFO: lda < min_lda, setting lda = 128\n' + text
-        result = numeric.parse_gemm(text, True, '', expected)
-        self.assertEqual(result['native_adjustments']['lda'], dict(requested='32', native='128'))
+        with self.assertRaisesRegex(ValueError, 'Native adjusted original DTK lda from 32 to 128'):
+            numeric.parse_gemm(text, True, '', expected)
 
     def test_native_csv_coverage(self):
         for dtype in ("fp32", "fp16"):

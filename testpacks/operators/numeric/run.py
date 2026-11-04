@@ -91,15 +91,13 @@ def parse_gemm(text, check, threshold, expected=None):
             fields += ["batch_count"]
         if "strided" in expected["function"]:
             fields += ["stride_a", "stride_b", "stride_c"]
-        adjustments = {}
         for field in fields:
             if row.get(field) != expected[field]:
                 adjusted = row.get(field, "")
                 notice = rf"rocblas-bench INFO: {field} .*setting {field} = {re.escape(adjusted)}\b"
                 if expected.get("dtype") and field in ("lda", "ldb", "ldc", "stride_c", "batch_count") and re.search(notice, text):
-                    adjustments[field] = dict(requested=expected[field], native=adjusted)
-                else:
-                    raise ValueError("rocblas-bench result does not match requested " + field)
+                    raise ValueError(f"Native adjusted original DTK {field} from {expected[field]} to {adjusted}; measurement not accepted")
+                raise ValueError("rocblas-bench result does not match requested " + field)
     result = dict(latency_us=finite(row["us"], True), gflops=finite(row["rocblas-Gflops"], True), native=row)
     if check:
         errors = {key: finite(value) for key, value in row.items() if re.fullmatch(r"norm_error(?:_\d+)?", key)}
@@ -111,8 +109,6 @@ def parse_gemm(text, check, threshold, expected=None):
                 raise VerificationError("rocblas-bench norm error exceeds configured threshold")
         result.update(norm_errors=errors, tolerance=bound, reference="rocblas-bench native CPU comparison",
                       verification="native_comparison" if bound is None else "native_comparison_and_norm")
-    if expected is not None and adjustments:
-        result["native_adjustments"] = adjustments
     return result
 
 

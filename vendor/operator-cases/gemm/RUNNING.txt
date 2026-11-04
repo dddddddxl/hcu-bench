@@ -6,7 +6,7 @@ GEMM 测试：仅 DTK 原始 general + GEMM smoke
 完整扫描可能耗时较长，先用 smoke/单项验证环境。不是全部 BLAS/nightly 或完整 gtest 分支覆盖。
 
 1. 准备完整 DTK 环境（工具与库必须来自同一环境）
-unzip gemm_test_cases_dtk_aligned_20261104.zip -d gemm_test
+unzip gemm_test_cases_dtk_reference_20261104.zip -d gemm_test
 cd gemm_test
 source /opt/dtk/env.sh
 mkdir -p bin
@@ -57,7 +57,7 @@ HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases_legacy.py --dtype fp16 --mode perf 
 来源完整保留实虚 alpha/beta、N/T/C 转置、LD、stride、batch_count、输入输出和累加类型。
 FP16 为低精度输入输出、FP32 累加；原始配置没有 BF16，不自行添加；复数保留共轭转置及虚标量。
 默认 rand_int；HPL 原始条目显式 trig_float，按来源保留，check/perf 一致。
-默认 C/D 同址；stride 单位为元素。来源 LD 如由 native 自动调整，保留日志，hcu-bench 会记录 native_adjustments。
+默认 C/D 同址；stride 单位为元素。来源 LD 如由 native 自动调整，hcu-bench 将该项标为参数不符并保留日志，不接受为原始参数的测量。
 只保留原始来源条目，不添加尺寸或精度变体。
 
 5. 证据和生成文件

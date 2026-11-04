@@ -37,7 +37,7 @@ GEMM 默认 `gemm_profile: new`，要求 rocBLAS **5.2.0**，正确性阶段默�
 | 数值判定 | common 默认 `unit_check=1`、`norm_check=0` | 新版默认对齐，norm 阈值仅为可选追加检查。旧版保留其原生 `--verify 1`，不宣称两个版本接口完全相同 |
 | 用例覆盖 | general 全量 + smoke 中 GEMM | 仅 2,972 + 135 条原始配置全部展开；已移除自加方阵和精度变体，不是 DTK 全部 BLAS/nightly |
 
-来源 YAML 通过随包保留的原生 `rocblas_gentest.py` 展开为 `gemm_cases.csv`；运行时仅需标准库。保留尺寸、转置（含复数共轭）、leading dimension、stride、batch、实虚标量和类型。原生 bench 对 LD/输出 stride 的显式调整会记录为 `native_adjustments`，不静默修改来源。`math_mode=0`、`flush_batch_count=1` 和 C/D 同址方式沿用默认值。这里仍采用 bench 的调用路径；不是直接运行 rocblas-test/gtest，不能宣称其所有 pointer-mode/API 分支均已覆盖。
+来源 YAML 通过随包保留的原生 `rocblas_gentest.py` 展开为 `gemm_cases.csv`；运行时仅需标准库。保留尺寸、转置（含复数共轭）、leading dimension、stride、batch、实虚标量和类型。原生 bench 如自动调整 LD/输出 stride，该项会明确失败并保留原生日志，不将调整后的结果当成原始参数的测量。`math_mode=0`、`flush_batch_count=1` 和 C/D 同址方式沿用默认值。这里仍采用 bench 的调用路径；不是直接运行 rocblas-test/gtest，不能宣称其所有 pointer-mode/API 分支均已覆盖。
 
 默认共 3,107 条原始配置：FP32 2,207、FP64 819、FP16 27、complex64 27、complex128 27。原始 general/GEMM smoke 没有 BF16，不额外添加。完整扫描可能超过默认超时，应按资源设置 `native_timeout_s` 与外层 `timeout_s`；超时和筛选运行不能称为完整扫描通过。
 
