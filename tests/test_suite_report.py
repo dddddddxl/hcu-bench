@@ -82,6 +82,7 @@ class SuiteReportTests(unittest.TestCase):
         self.report()
         self.assertIn("达到计划时长", self.md)
         self.assertIn("完整稳定性", self.md)
+        self.assertNotIn("具体原因未确认", self.md)
         self.assertIn("warnings=1", self.md)
         self.assertEqual(self.detail()[0]["value"], "44")
 
