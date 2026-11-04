@@ -66,7 +66,7 @@ models:
 
 # ==================== 3. 各 suite：只改需要测的那段 ====================
 # 下方每个测试块都有 enabled；不运行的块可以改 false。
-# 独立测例不放在这里，不参与默认 all。
+# GLM、FA FP8、GEMM和hipDNN参与默认all；memory/MIGraphX等仍使用独立配置。
 tests:
   # -------------------- RCCL：单机10类通信 --------------------
   rccl_collectives:
@@ -130,6 +130,41 @@ tests:
     matrix:
       dtype: [fp32, fp16]
 
+  # -------------------- operators：GEMM原生性能 --------------------
+  gemm:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/numeric/manifest.yaml
+    nodes: [single]
+    timeout_s: 7320
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: gemm
+      gemm_profile: new                  # rocBLAS 5.2.0接口；4.3.0显式改legacy，不自动替换库。
+      rocblas_bench: auto                # 使用镜像已有工具。
+      mode: perf                        # 原生benchmark计时，correctness=not_checked。
+      group: all                        # DTK原始general + GEMM smoke，共3107条。
+      case_id: ""                       # 空=全部；诊断时可筛选一个原始case ID。
+      max_norm_error: ""                # 不追加norm检查；check模式或非空阈值显式启用校验。
+      native_timeout_s: 7200
+    matrix:
+      dtype: [fp32, fp16, fp64, complex64, complex128]
+
+  # -------------------- operators：hipDNN原始API卷积 --------------------
+  hipdnn_conv:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/hipdnn_conv/manifest.yaml
+    nodes: [single]
+    timeout_s: 14520
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto                       # 现有test_conv；没有时须提供下方原始源码目录。
+      source_root: ""                    # DTK hipdnn/api_test目录；缺少程序和源码时明确失败。
+      native_timeout_s: 14400            # 68条原始调用，保留CPU校验和原生计时。
+
   # -------------------- operators：PA性能 --------------------
   pa_decode:
     enabled: true
@@ -154,6 +189,19 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       recipe: fa_fp16_forward
+      native_timeout_s: 1800
+
+  # -------------------- operators：FA FP8接口预检及性能 --------------------
+  fa_fp8_forward:
+    enabled: true                         # all执行预检；接口不匹配记skipped，不计作通过。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/operators/manifest.yaml
+    nodes: [single]
+    timeout_s: 1920
+    params:
+      bench_root: "${vars.bench_root}"
+      recipe: fa_fp8_forward
       native_timeout_s: 1800
 
   # -------------------- DeepEP：低延迟压测 --------------------
