@@ -176,6 +176,33 @@ class SuiteReportTests(unittest.TestCase):
         self.assertEqual(result["metrics"][0]["mean_of_reported_values"], 5)
         self.assertTrue((self.path / "metrics.csv").is_file())
 
+    def test_native_rank_cycle_and_extra_metric_fields_survive_export(self):
+        self.case("pressure", suite="deepep")
+        sample = self.sample("pressure", native_rank=3, cycle=7, sample_id=9)
+        sample["metrics"][0]["native_annotation"] = "extra field is permitted"
+        self.report()
+        row = self.detail()[0]
+        self.assertEqual((row["native_rank"], row["cycle"], row["sample_id"]), ("3", "7", "9"))
+        self.assertIn("native_rank=3", self.md)
+
+    def test_known_metric_with_different_unit_is_not_silently_relabelled(self):
+        self.case("rccl")
+        self.sample("rccl", "x_algbw", 123, "MiB/s", collective="all_reduce")
+        self.report()
+        self.assertNotIn("| 123 |", self.md)
+        self.assertEqual(self.detail()[0]["unit"], "MiB/s")
+
+    def test_each_model_has_preview_even_when_first_model_has_many_points(self):
+        for model in ("model1", "model2"):
+            self.case(model, suite="e2e_perf")
+            for concurrency in range(1, 15):
+                self.sample(model, "output_throughput", concurrency, "tok/s", model_id=model,
+                            workload=dict(input_tokens=128, output_tokens=128, concurrency=concurrency, repeat=0))
+        self.report()
+        self.assertIn("### model1", self.md)
+        self.assertIn("### model2", self.md)
+        self.assertEqual(len(self.detail()), 28)
+
 
 if __name__ == "__main__":
     unittest.main()

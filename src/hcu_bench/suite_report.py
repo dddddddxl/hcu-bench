@@ -161,15 +161,20 @@ def render_metrics(doc, suite, samples):
         llm = [s for s in samples if value(s, "output_throughput", "mean", unit="tok/s") is not None]
         wan = [s for s in samples if value(s, "pixel_total_time", "value", unit="s") is not None]
         if llm:
-            rows = []
+            by_model = defaultdict(list)
             for s in llm:
-                w = s.get("workload") or {}
-                rows.append([s.get("model_id", "未知"), doc.case_label(s["case_id"]), s["node"], s.get("repeat", 0), w.get("repeat", "未知"),
-                             f"{w.get('input_tokens', '?')}/{w.get('output_tokens', '?')}", w.get("concurrency", "未知"),
-                             number(value(s, "output_throughput", "mean", unit="tok/s")), number(value(s, "ttft", "mean", unit="ms")),
-                             number(value(s, "tpot", "mean", unit="ms")), number(value(s, "successful_requests")), number(value(s, "failed_requests"))])
-            doc.paragraph("输入/输出为目标token长度，实际长度及P99见明细。吞吐tok/s，TTFT/TPOT为均值ms；不同模型、并发、轮次不合并。")
-            doc.table(["模型", "用例ID", "节点", "外层轮次", "测量轮次", "输入/输出", "并发", "输出吞吐", "TTFT", "TPOT", "成功", "失败"], rows[:LIMIT])
+                by_model[(s.get("model_id", "未知"), s["case_id"], s["node"], s.get("repeat", 0))].append(s)
+            doc.paragraph("输入/输出为目标token长度，实际长度及P99见明细。吞吐tok/s，TTFT/TPOT为均值ms；每模型/节点/外层轮次分表，不合并。")
+            for (model, case_id, node, repeat), group in by_model.items():
+                doc.heading(f"{model} / {doc.case_label(case_id)} / {node} / 外层轮次{repeat}", 3)
+                rows = []
+                for s in group:
+                    w = s.get("workload") or {}
+                    rows.append([f"{w.get('input_tokens', '?')}/{w.get('output_tokens', '?')}", w.get("concurrency", "未知"),
+                                 w.get("repeat", "未知"), number(value(s, "output_throughput", "mean", unit="tok/s")),
+                                 number(value(s, "ttft", "mean", unit="ms")), number(value(s, "tpot", "mean", unit="ms")),
+                                 f"{number(value(s, 'successful_requests'))}/{number(value(s, 'failed_requests'))}"])
+                doc.table(["输入/输出", "并发", "测量轮次", "输出吞吐", "TTFT", "TPOT", "成功/失败"], rows[:LIMIT])
         if wan:
             rows = []
             for s in wan:
@@ -244,19 +249,32 @@ def write_suite_report(store, state, samples):
         for e in group:
             ss = e["samples"]
             correction = Counter(s.get("correctness", "未记录") for s in ss)
-            rows.append([e["model"] or e["test_id"], doc.case_label(e["case_id"]), LABELS.get(e["case"]["status"], e["case"]["status"]),
+            p = e["case"].get("params", {})
+            label = e["model"] or p.get("collective") or p.get("recipe") or e["test_id"]
+            label += "".join(f" / {k}={p[k]}" for k in ("dtype", "batch") if k in p)
+            rows.append([label, doc.case_label(e["case_id"]), LABELS.get(e["case"]["status"], e["case"]["status"]),
                          sum(usable(s) for s in ss), "/".join(f"{LABELS.get(k, k)}{v}" for k, v in correction.items()) or "无结果", reason(e)])
         doc.table(["项目/模型", "用例", "执行/父会话状态", "可展示样本", "正确性(样本数)", "原因/说明"], rows)
+        configurations = defaultdict(list)
         for e in group:
             p = e["case"].get("params", {})
             keys = ("ranks", "datatype", "warmup_iters", "iters", "size_mib", "recipe", "dtype", "batch", "presets",
                     "model_mhz", "num_processes", "num_tokens", "hidden", "num_topk", "num_experts", "stress_iterations")
             settings = "; ".join(f"{key}={p[key]}" for key in keys if key in p)
             if settings:
-                doc.paragraph(f"{doc.case_label(e['case_id'])} 配置：{settings}")
+                configurations[settings].append(doc.case_label(e["case_id"]))
+        for settings, labels in configurations.items():
+            doc.paragraph(f"{'、'.join(labels)} 配置：{settings}")
         usable_samples = [s for e in group for s in e["samples"] if usable(s)]
         if usable_samples:
-            render_metrics(doc, suite, usable_samples)
+            if suite in ("rccl", "pcie", "e2e_acc", "e2e_perf"):
+                render_metrics(doc, suite, usable_samples)
+            else:
+                for e in group:
+                    selected = [s for s in e["samples"] if usable(s)]
+                    if selected:
+                        doc.heading(f"{doc.case_label(e['case_id'])} 关键指标", 3)
+                        render_metrics(doc, suite, selected)
         else:
             doc.paragraph("未获得可展示的性能/精度结果；不以进程退出或依赖准备作为测量完成。")
         target = details / f"suite-{index + 1}.csv"
