@@ -62,6 +62,7 @@ class SuiteReportTests(unittest.TestCase):
         self.assertNotIn("999", self.md)
         self.assertNotIn("888", self.md)
         self.assertIn("numerical mismatch", self.md)
+        self.assertNotIn("具体原因未确认", self.md)
         self.assertIn("[SIMULATED - NOT HARDWARE DATA]", self.txt)
         self.assertEqual(len(self.detail()), 1)  # memory sorts before operators
         self.assertEqual(self.detail()[0]["simulated"], "True")

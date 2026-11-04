@@ -99,7 +99,9 @@ def reason(entry):
     case = entry["case"]
     messages = [case[k] for k in ("reason", "error") if case.get(k)]
     messages += [s["reason"] for s in entry["samples"] if s.get("reason")]
+    known_reason = bool(messages)
     for node, result in case.get("nodes", {}).items():
+        known_reason |= any(result.get(k) for k in ("error", "reason"))
         messages += [f"{node}: {result[k]}" for k in ("error", "reason") if result.get(k)]
         if result.get("returncode") not in (None, 0):
             messages.append(f"{node}: returncode={result['returncode']}")
@@ -111,7 +113,7 @@ def reason(entry):
         messages.insert(0, "该子任务无结果；父模型会话状态不作为子任务通过依据")
     if case["status"] == "duration_reached":
         messages.append("计划终止不等于压力循环自然结束或完整稳定性通过")
-    if case["status"] not in ("completed", "pending", "running", "queued") and not any(case.get(k) for k in ("reason", "error")):
+    if case["status"] not in ("completed", "pending", "running", "queued") and not known_reason:
         messages.append("具体原因未确认，见日志；不从退出码推断OOM或接口错误")
     return text("；".join(dict.fromkeys(map(str, messages)))) or "—"
 
