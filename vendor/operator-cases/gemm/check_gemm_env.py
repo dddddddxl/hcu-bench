@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import run_gemm_cases as suite
 
 PROFILES = {
-    "new": ("5.2.0", "--test 1 tolerance/equality check plus --verify 1 norm check"),
+    "new": ("5.2.0", "check mode: --test 1 --verify 0; native benchmark perf: --test 0 --verify 0, correctness not checked"),
     "legacy": ("4.3.0", "--verify 1 GPU vs CPU validation; legacy native diagnostics"),
 }
 
@@ -64,9 +64,9 @@ def required_options(profile="new"):
     # Generate requirements from the runner so both entry points use the same recipe.
     args = SimpleNamespace(cases=suite.ROOT / "gemm_cases.csv", group="all", case_id=None,
                            bench="rocblas-bench", warmup=10, iters=100, profile=profile)
-    rows = suite.load_cases(args)
     required = set()
     for args.dtype in suite.TYPES:
+        rows = suite.load_cases(args)
         for args.mode in ("check", "perf"):
             for row in rows:
                 required.update(suite.command(args, row)[1::2])

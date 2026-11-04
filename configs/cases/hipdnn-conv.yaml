@@ -1,0 +1,28 @@
+# Run the unchanged DTK test_conv.sh set, using the existing complete DTK environment.
+version: 1
+name: dtk-hipdnn-conv
+failure_policy: continue
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  hcus: [0]
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: "${vars.hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+tests:
+  hipdnn_conv:
+    enabled: true
+    suite: operators
+    adapter: command
+    pack: ../../testpacks/operators/hipdnn_conv/manifest.yaml
+    nodes: [single]
+    timeout_s: 14520
+    params:
+      bench_root: "${vars.bench_root}"
+      binary: auto
+      source_root: "" # Original DTK hipdnn/api_test root, used only if test_conv is not installed.
+      native_timeout_s: 14400

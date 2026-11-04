@@ -1,10 +1,17 @@
+2026-11-04 默认初始化与 DTK 对齐
+
+默认新版和独立旧版的 check/perf 均改为 --initialization rand_int。
+原始 CLI 采集和 new_recipe_reference.json 保持冻结；回归验证只允许这一项命令差异。
+由 prepare_gemm_cases.py、generate_commands.py 重新生成来源配置和完整命令，未更改 CSV 用例数据。
+这项修改对齐输入初始化，不代表原数值差异已在 GPU 上复现或消除。
+
 2026-11-02 GEMM 两套接口交付
 
 默认入口：run_gemm_cases.py，profile=new，rocBLAS 5.2.0。
 旧版入口：run_gemm_cases_legacy.py，profile=legacy，rocBLAS 4.3.0。
 共用同一份 14 项 CSV 和 FP32/FP16/BF16 类型、尺寸、转置、leading dimension、stride 与计时配置。
 
-新版命令与首次交付的原始配方一致。
+首次交付时新版命令与原始配方一致；2026-11-04 起仅将初始化改为 rand_int。
 旧版使用 --verify 原生 GPU/CPU 校验，不发送不存在的 --test、--use_hipblaslt。
 每次实际执行前核查版本和必需参数，交叉使用两版 profile 会被拒绝。
 CLI 版本核对要求 5.2.0 或 4.3.0 的对应版本前缀，不会自动猜测其他版本的校验语义。

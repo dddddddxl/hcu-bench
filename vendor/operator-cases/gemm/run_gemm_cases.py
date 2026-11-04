@@ -3,7 +3,8 @@
 
 Default profile: new (rocBLAS 5.2.0); legacy profile: rocBLAS 4.3.0.
 Inspect native validation diagnostics; process exit codes alone are not a
-correctness verdict. Perf mode requires prior successful checks.
+correctness verdict. Perf mode follows native benchmark defaults without a
+required correctness check; use check mode separately for native validation.
 """
 import argparse
 import csv
@@ -19,7 +20,9 @@ sys.dont_write_bytecode = True
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-TYPES = {"fp32": "f32_r", "fp16": "f16_r", "bf16": "bf16_r"}
+TYPES = {"fp32": "f32_r", "fp16": "f16_r", "fp64": "f64_r",
+         "complex64": "f32_c", "complex128": "f64_c"}
+INITIALIZATION = "rand_int"
 
 
 def positive_int(text):
@@ -31,7 +34,7 @@ def positive_int(text):
 
 def load_cases(args):
     with args.cases.open(encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        rows = [row for row in csv.DictReader(handle) if row["dtype"] == args.dtype]
     rows = [r for r in rows if (args.group == "all" or r["group"] == args.group)
             and (not args.case_id or r["case_id"] == args.case_id)]
     if not rows:
@@ -43,57 +46,51 @@ def load_cases(args):
         ids.add(r["case_id"])
         m, n, k = (int(r[x]) for x in ("M", "N", "K"))
         ta, tb = r["transA"], r["transB"]
-        if min(m, n, k) <= 0 or ta not in ("N", "T") or tb not in ("N", "T"):
+        if min(m, n, k) <= 0 or ta not in ("N", "T", "C") or tb not in ("N", "T", "C"):
             raise ValueError("Invalid shape or transpose: " + r["case_id"])
-        minimums = {"lda": m if ta == "N" else k,
-                    "ldb": k if tb == "N" else n, "ldc": m, "ldd": m}
-        if any(int(r[key]) < value for key, value in minimums.items()):
-            raise ValueError("Invalid leading dimension: " + r["case_id"])
-        if r["function"] not in ("gemm", "gemm_strided_batched"):
+        if r["function"] not in ("gemm", "gemm_batched", "gemm_strided_batched", "gemm_ex", "gemm_ex_batched", "gemm_ex_strided_batched"):
             raise ValueError("Unsupported function")
         if int(r["batch_count"]) < 1:
             raise ValueError("Invalid batch count")
-        if r["function"] == "gemm_strided_batched":
-            minimums = {"stride_a": int(r["lda"]) * (k if ta == "N" else m),
-                        "stride_b": int(r["ldb"]) * (n if tb == "N" else k),
-                        "stride_c": int(r["ldc"]) * n, "stride_d": int(r["ldd"]) * n}
-            if any(int(r[key]) < value for key, value in minimums.items()):
-                raise ValueError("This starter suite requires non-overlapping batch strides: " + r["case_id"])
-        elif int(r["batch_count"]) != 1:
-            raise ValueError("Non-batched GEMM requires batch_count=1")
     return rows
 
 
 def command(args, r):
-    extended = args.dtype != "fp32"
-    function = r["function"] + ("_ex" if extended else "")
+    extended = "_ex" in r["function"]
+    function = r["function"]
+    function = {"gemm_ex_batched": "gemm_batched_ex", "gemm_ex_strided_batched": "gemm_strided_batched_ex"}.get(function, function)
     cmd = [str(args.bench), "-f", function, "-r", TYPES[args.dtype]]
     if extended:
         for name in ("a", "b", "c", "d"):
-            cmd.extend(["--" + name + "_type", TYPES[args.dtype]])
-        cmd.extend(["--compute_type", "f32_r", "--ldd", r["ldd"]])
+            cmd.extend(["--" + name + "_type", r.get(name + "_type", TYPES[args.dtype])])
+        cmd.extend(["--compute_type", r.get("compute_type", "f32_r"), "--ldd", r["ldd"]])
     for column, flag in (("M", "-m"), ("N", "-n"), ("K", "-k"),
                          ("transA", "--transposeA"), ("transB", "--transposeB"),
                          ("lda", "--lda"), ("ldb", "--ldb"), ("ldc", "--ldc"),
                          ("alpha", "--alpha"), ("beta", "--beta")):
         cmd.extend([flag, r[column]])
-    if r["function"] == "gemm_strided_batched":
-        for column in ("batch_count", "stride_a", "stride_b", "stride_c"):
+    if args.dtype in ("complex64", "complex128"):
+        cmd.extend(["--alphai", r["alphai"], "--betai", r["betai"]])
+    if "batched" in function:
+        cmd.extend(["--batch_count", r["batch_count"]])
+    if "strided" in function:
+        for column in ("stride_a", "stride_b", "stride_c"):
             cmd.extend(["--" + column, r[column]])
         if extended:
             cmd.extend(["--stride_d", r["stride_d"]])
     cmd.extend(["--device", "0", "--math_mode", "0"])
     if args.profile == "new":
-        cmd.extend(["--use_hipblaslt", "0"])
-    cmd.extend(["--flush_batch_count", "1", "--initialization", "trig_float"])
+        cmd.extend(["--use_hipblaslt", r["use_hipblaslt"]])
+    cmd.extend(["--flush_batch_count", "1", "--initialization", r.get("initialization", INITIALIZATION)])
     if args.mode == "check":
         if args.profile == "new":
             cmd.extend(["--test", "1"])
-        cmd.extend(["--verify", "1", "--cold_iters", "2", "--iters", "1"])
+        verify = "1" if args.profile == "legacy" or getattr(args, "max_norm_error", "") != "" else "0"
+        cmd.extend(["--verify", verify, "--cold_iters", r.get("cold_iters", "2"), "--iters", r.get("check_iters", "10")])
     else:
         if args.profile == "new":
             cmd.extend(["--test", "0"])
-        cmd.extend(["--verify", "0", "--cold_iters", str(args.warmup), "--iters", str(args.iters)])
+        cmd.extend(["--verify", "0", "--cold_iters", str(args.warmup or r["cold_iters"]), "--iters", str(args.iters or r["check_iters"])])
     return cmd
 
 
@@ -106,12 +103,13 @@ def main(profile=None):
     parser.add_argument("--dtype", required=True, choices=TYPES)
     parser.add_argument("--mode", required=True, choices=("check", "perf"))
     parser.add_argument("--cases", type=Path, default=ROOT / "gemm_cases.csv")
+    parser.add_argument("--max-norm-error", default="", help="optional additional norm check threshold")
     parser.add_argument("--bench", type=Path, default=ROOT / "bin" / "rocblas-bench")
-    parser.add_argument("--group", default="all", choices=("all", "square", "dlrm", "bert", "transformer", "batched"))
+    parser.add_argument("--group", default="all", choices=("all", "general", "smoke"))
     parser.add_argument("--case-id")
-    parser.add_argument("--warmup", type=positive_int, default=10)
-    parser.add_argument("--iters", type=positive_int, default=100)
-    parser.add_argument("--repeats", type=positive_int, default=3)
+    parser.add_argument("--warmup", type=positive_int, default=None)
+    parser.add_argument("--iters", type=positive_int, default=None)
+    parser.add_argument("--repeats", type=positive_int, default=1)
     parser.add_argument("--output", type=Path, default=ROOT / "logs")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

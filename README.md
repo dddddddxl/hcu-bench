@@ -35,6 +35,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
 | `configs/cases/migraphx-resnet50.yaml` | `migraphx` | ResNet50 FP16/INT8；需 MIGraphX driver 和本地 ONNX |
 | `configs/cases/migraphx-bert.yaml` | `migraphx` | BERT-large FP16；需 MIGraphX driver、本地 ONNX、兼容的原生库 |
+| `configs/cases/hipdnn-conv.yaml` | `operators` | DTK 原始 test_conv.sh 68 条 hipDNN API 卷积命令 |
 | `configs/cases/gemm.yaml` | `operators` | GEMM正确性/性能；需匹配 rocblas-bench，误差标准明确后才测性能 |
 | `configs/cases/fa-fp8.yaml` | `operators` | FA FP8前向性能；需匹配的 FP8 扩展 |
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
@@ -345,7 +346,7 @@ bash bench.sh configs/glm52-perf.template.yaml all
 | memory | 目标卡、兼容AICC/DTK或已编译hcu-stream | `binary`、`devices`、`presets`（zd1/zd2/both）、`model_mhz`、`array_size`、轮数 |
 | MIGraphX ResNet50 | 单卡、原生driver、ONNX、NUMA节点 | `model`、`numa_node`、`matrix.recipe`（fp16/int8）、`matrix.batch`（1/32）、`round_timeout_s` |
 | MIGraphX BERT | 单卡、原生driver、BERT ONNX、原生库兼容 | `model`、`numa_node`、`rocblas_dir`、`matrix.batch`（1/32）、`round_timeout_s` |
-| GEMM | rocblas-bench接口、认可的误差标准 | `gemm_profile`（new/legacy）、`rocblas_bench`、`group`、`case_id`、`matrix.dtype`、`mode`、`max_norm_error`、预热/迭代/轮次 |
+| GEMM | rocblas-bench接口与原生unit_check | `gemm_profile`（new/legacy）、`rocblas_bench`、`group`、`case_id`、`matrix.dtype`、`mode`、`max_norm_error`、预热/迭代/轮次 |
 | FA FP8 | 匹配的Torch/FA FP8扩展 | 固定 `recipe: fa_fp8_forward`，`native_timeout_s` |
 | 算子压力 | 单卡空闲窗口、BLAS/FA依赖 | `stress_iterations`=100短测或1000000正式；3个recipe，原生及外层超时 |
 | Mooncake | 至少两节点、RDMA、双方可写且内容相同的共享目录 | `nodes`、`addresses`、`shared_dir`、`topology`、`duration`、`hcu_id`、`min_bandwidth_gbps` |
@@ -353,7 +354,7 @@ bash bench.sh configs/glm52-perf.template.yaml all
 
 - memory的 `devices: ""` 表示使用已分配的全部卡，逐卡串行；非空字符串可填其子集。`model_mhz` 是原脚本换算参数，不锁频；`array_size` 是元素数，不是字节。
 - MIGraphX的 `numa_node` 须按目标卡PCI拓扑对应的实际NUMA节点配置，不预设为0。BERT的 `rocblas_dir: ""` 使用镜像原生库，仅在明确要求外置兼容库时指定目录。每个batch组合内部执行三轮并报告中位数，不包含模型精度评测。
-- GEMM的 `new` 对应当前5.2.0接口，`legacy` 对应4.3.0接口，实际版本应通过原生工具确认。`max_norm_error: ""` 沿用严格规则：非零误差未获阈值认可时不继续性能测试；可按精度拆分测试块并分别配置阈值。
+- GEMM的 `new` 对应当前5.2.0接口，`legacy` 对应4.3.0接口，实际版本应通过原生工具确认。新版默认对齐 DTK 的 unit_check=1/norm_check=0；`max_norm_error: ""` 仅使用原生校验，非空值追加 norm 检查。默认仅 DTK 原始 general + GEMM smoke，共 3,107 条；五种精度及筛选见 [算子说明](docs/operators.md)。
 - 独立压力测例默认100次，标记为smoke，不属于100万次压力验收。正式压力将 `stress_iterations` 改为1000000，并同步增大原生及外层超时；超时或中断不判为完成。
 - Mooncake的 `addresses` 须按 `nodes` 的顺序配置。`duration` 为原生测试时长，单位秒，不使用框架 `duration_s`；带宽阈值为空字符串时仅报告结果。该测例至少需要两台节点。
 - Wan的 `request` 包含prompt、size、num_frames、fps、num_inference_steps、seed、guidance_scale；初版采用1280×720、81帧、16 FPS、40步，1次预热和1次正式生成。TP4已完成实机流程验证，TP1尚未实测；视频质量未评估，不使用LLM吞吐或精度指标。

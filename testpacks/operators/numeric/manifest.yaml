@@ -6,20 +6,20 @@ duration_control: native
 parameters:
   bench_root: {type: string, required: true}
   recipe: {type: string, required: true, choices: [conv, gemm]}
-  dtype: {type: string, default: fp16, choices: [fp32, fp16, bf16]}
+  dtype: {type: string, default: fp16, choices: [fp32, fp16, fp64, complex64, complex128]}
   mode: {type: string, default: perf, choices: [check, perf]}
   driver: {type: string, default: auto}
   rocblas_bench: {type: string, default: auto}
   gemm_profile: {type: string, default: new, choices: [new, legacy]}
-  group: {type: string, default: all, choices: [all, square, dlrm, bert, transformer, batched]}
+  group: {type: string, default: all, choices: [all, general, smoke]}
   conv_suite: {type: string, default: all, choices: [all, conv2d, conv3d]}
   direction: {type: string, default: all, choices: [all, fwd, dgrad, wgrad]}
   case_id: {type: string, default: ""}
   device: {type: string, default: auto}
   max_norm_error: {type: string, default: ""}
-  warmup: {type: integer, default: 10, min: 1, max: 10000}
-  iters: {type: integer, default: 100, min: 1, max: 100000}
-  repeats: {type: integer, default: 3, min: 1, max: 100}
+  warmup: {type: integer, default: 0, min: 0, max: 10000}
+  iters: {type: integer, default: 0, min: 0, max: 100000}
+  repeats: {type: integer, default: 0, min: 0, max: 100}
   native_timeout_s: {type: integer, default: 7200, min: 1, max: 604800}
 command: [python3, -u, "${p_bench_root}/testpacks/operators/numeric/run.py", --recipe, "${p_recipe}", --dtype, "${p_dtype}", --mode, "${p_mode}", --driver, "${p_driver}", --rocblas-bench, "${p_rocblas_bench}", --gemm-profile, "${p_gemm_profile}", --group, "${p_group}", --conv-suite, "${p_conv_suite}", --direction, "${p_direction}", --case-id, "${p_case_id}", --device, "${p_device}", --max-norm-error, "${p_max_norm_error}", --warmup, "${p_warmup}", --iters, "${p_iters}", --repeats, "${p_repeats}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
 cwd: "${case_dir}"

@@ -65,7 +65,8 @@ class CaseConfigurationTests(unittest.TestCase):
     def test_independent_cases_preview_without_starting_processes(self):
         expected = {
             'memory': ('memory', 1), 'migraphx-resnet50': ('migraphx', 4),
-            'migraphx-bert': ('migraphx', 2), 'gemm': ('operators', 3),
+            'migraphx-bert': ('migraphx', 2), 'gemm': ('operators', 5),
+            'hipdnn-conv': ('operators', 1),
             'fa-fp8': ('operators', 1), 'operator-stress': ('operators', 3),
             'mooncake': ('mooncake', 1), 'wan': ('e2e_perf', 1),
         }

@@ -1,6 +1,6 @@
 {
   "operator-cases": {
-    "version": "feishu-revision-515-gemm-dual-20261102",
+    "version": "feishu-revision-515-gemm-dtk-aligned-20261104",
     "source": "User-provided Feishu Conv/GEMM attachments; public redistribution authorized on 2026-10-30",
     "archives_sha256": {
       "conv_test_cases.zip": "900f295a351fdb160d99f6ac59849aff0d0177c6c3e9b0dcd571418d8d5dfab8",
@@ -8,8 +8,8 @@
       "gemm_test_cases_dual_20261102.zip": "ac7199abca41d685588ecf11642fe1f92530cc7694bb308e0e7b44847e466ed0"
     },
     "license": "No root license supplied; original source notices retained",
-    "tree_sha256": "7d89dba1beeeaaa7c832fafe9614c175dcb578b1d6f8240a700237f1b666975a",
-    "modifications": "GEMM updated from user-supplied dual-profile package, authorized for publication on 2026-11-02. Default rocBLAS 5.2.0 and explicit legacy 4.3.0; shared shapes unchanged. Command files generated from the runner."
+    "tree_sha256": "2f652026fea53c6fc1a3f1de90c85bf76e9ee870de0e9a4eb6009c1ac7fd2b2c",
+    "modifications": "Only original DTK general (2972) and GEMM smoke (135) entries, expanded by the preserved native generator; custom shapes and precision variants removed. Original per-entry initialization and iterations, automatic new-profile hipBLASLt selection, and native unit/norm defaults retained. Original hipdnn test_conv.sh (68 calls) added unchanged; wrapper uses the existing binary or original external api_test CMake source. Conv MIOpenDriver path is distinct and retains its prior timing settings. Generated catalogs/commands and original CLI captures remain traceable."
   },
   "rccl-tests": {
     "version": "ae3e6357cb3514d5649b3b5dfaa80cb2d2af3532",

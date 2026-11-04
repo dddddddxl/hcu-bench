@@ -7,6 +7,7 @@ bash bench.sh configs/cases/memory.yaml all
 bash bench.sh configs/cases/migraphx-resnet50.yaml all
 bash bench.sh configs/cases/migraphx-bert.yaml all
 bash bench.sh configs/cases/gemm.yaml all
+bash bench.sh configs/cases/hipdnn-conv.yaml all
 bash bench.sh configs/cases/fa-fp8.yaml all
 bash bench.sh configs/cases/operator-stress.yaml all
 bash bench.sh configs/cases/mooncake.yaml all
@@ -19,7 +20,7 @@ bash bench.sh configs/cases/wan.yaml all
 - Mooncake需要至少两台节点；示例通过SSH调用两端已有Docker容器，使用密钥或SSH配置，不保存密码。
 - 独立压力测试默认为100次smoke。改为100万次正式压力时，须同步调整原生和框架超时。
 - Wan默认TP4；单卡TP1须同时修改HCU列表和profile，TP1尚未完成实机验证。
-- GEMM未批准非零误差阈值时保留严格判定，不自动跳过校验或降低标准。
+- GEMM默认对齐 DTK unit_check=1/norm_check=0；非空 max_norm_error 仅追加 norm 检查。hipDNN test_conv 使用原脚本与原生校验，不额外设置迭代或预热。
 - FA FP8在实际容器内检查已安装扩展的19参数接口；匹配才测，不匹配明确记为skipped并继续，不计作性能通过。
 
 如需加入主计划，合并所需测试块和节点定义至 `configs/bench.yaml`。复制测试块后，`pack` 从 `../../testpacks/...` 改为 `../testpacks/...`。仅增加suite名称不会自动导入本目录文件。

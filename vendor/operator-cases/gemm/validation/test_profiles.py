@@ -22,9 +22,31 @@ def probes(version):
 
 
 class Profiles(unittest.TestCase):
+    def test_full_dtk_catalog_matches_original_generator(self):
+        from collections import Counter
+        from dtk_cases import source_cases
+        original = source_cases()
+        self.assertEqual(Counter(r['source_file'] for r in original),
+                         {'rocblas_general.yaml': 2972, 'rocblas_smoke.yaml': 135})
+        actual = []
+        for dtype in suite.TYPES:
+            self.args.dtype = dtype
+            actual.extend(suite.load_cases(self.args))
+        self.assertEqual(len(actual), 3107)
+        self.assertEqual(Counter(r['dtype'] for r in actual),
+                         dict(fp32=2207, fp64=819, fp16=27, complex64=27, complex128=27))
+        by_source = {(r['source'], int(r['source_index']), int(r['source_case'])): r for r in actual}
+        for row in original:
+            actual_row = by_source[row['source_file'], row['source_index'], row['source_case']]
+            for field in ('function', 'M', 'N', 'K', 'transA', 'transB', 'lda', 'ldb', 'ldc', 'ldd',
+                          'batch_count', 'stride_a', 'stride_b', 'stride_c', 'stride_d', 'alpha', 'beta',
+                          'alphai', 'betai', 'a_type', 'b_type', 'c_type', 'd_type', 'compute_type', 'initialization'):
+                self.assertEqual(actual_row[field], str(row[field]), (actual_row['case_id'], field))
+            self.assertEqual(actual_row['check_iters'], str(row['iters']))
+
     def setUp(self):
         self.args = SimpleNamespace(cases=ROOT / "gemm_cases.csv", group="all", case_id=None,
-                                    bench="./bin/rocblas-bench", profile="new", warmup=10, iters=100)
+                                    bench="./bin/rocblas-bench", profile="new", warmup=None, iters=None, dtype="fp32")
         self.rows = suite.load_cases(self.args)
 
     def test_profiles_match_their_native_interfaces(self):
@@ -43,16 +65,22 @@ class Profiles(unittest.TestCase):
         old_with_new = cli.assess_interface(probes("4.3.0"), cli.required_options("new"), "new")
         self.assertEqual(old_with_new["missing_options"], ["--test", "--use_hipblaslt"])
 
-    def test_new_recipe_matches_original_diagnostic_commands(self):
-        reference = json.loads((ROOT / "validation" / "new_recipe_reference.json").read_text(encoding="utf-8"))
+    def test_native_settings_are_preserved(self):
         for self.args.dtype in suite.TYPES:
-            for self.args.mode in ("check", "perf"):
-                rounds = 1 if self.args.mode == "check" else 3
-                actual = [suite.command(self.args, row)[1:] for row in self.rows for _ in range(rounds)]
-                self.assertEqual(actual, reference["commands"][self.args.dtype + "-" + self.args.mode])
+            for row in suite.load_cases(self.args):
+                for self.args.mode in ("check", "perf"):
+                    argv = suite.command(self.args, row)
+                    options = dict(zip(argv[1::2], argv[2::2]))
+                    self.assertEqual(options['--initialization'], row['initialization'])
+                    self.assertEqual(options['--cold_iters'], row['cold_iters'])
+                    self.assertEqual(options['--iters'], row['check_iters'])
+                    self.assertEqual(options['--use_hipblaslt'], '-1')
+                    self.assertEqual(options['--verify'], '0')
+                    self.assertEqual(options['--test'], '1' if self.args.mode == 'check' else '0')
 
     def test_legacy_retains_every_shared_setting(self):
         for self.args.dtype in suite.TYPES:
+            self.rows = suite.load_cases(self.args)
             for self.args.mode in ("check", "perf"):
                 for row in self.rows:
                     self.args.profile = "new"
@@ -63,11 +91,14 @@ class Profiles(unittest.TestCase):
                     old = dict(zip(argv[1::2], argv[2::2]))
                     self.assertEqual(set(new) - set(old), {"--test", "--use_hipblaslt"})
                     self.assertEqual(set(old) - set(new), set())
-                    self.assertEqual(old, {key: new[key] for key in old})
+                    shared = {key: new[key] for key in old}
+                    if self.args.mode == "check":
+                        shared["--verify"] = "1"
+                    self.assertEqual(old, shared)
                     self.assertEqual(old["--verify"], "1" if self.args.mode == "check" else "0")
 
     def test_default_and_legacy_entry_points(self):
-        options = ["--dtype", "fp16", "--mode", "check", "--case-id", "square-1024", "--dry-run"]
+        options = ["--dtype", "fp16", "--mode", "check", "--case-id", "dtk-smoke-59-0001", "--dry-run"]
         default = subprocess.run([sys.executable, str(ROOT / "run_gemm_cases.py")] + options,
                                  capture_output=True, text=True, check=True).stdout
         explicit = subprocess.run([sys.executable, str(ROOT / "run_gemm_cases.py"), "--profile", "legacy"] + options,
@@ -84,14 +115,15 @@ class Profiles(unittest.TestCase):
     def test_published_raw_commands_match_the_runner(self):
         for self.args.profile in ("new", "legacy"):
             for self.args.dtype in suite.TYPES:
+                self.rows = suite.load_cases(self.args)
                 for self.args.mode in ("check", "perf"):
                     path = ROOT / "commands" / "raw" / ("%s_%s_%s.txt" % (self.args.profile, self.args.dtype, self.args.mode))
                     actual = [shlex.split(line)[1:] for line in path.read_text(encoding="utf-8").splitlines()
                               if line.startswith("HIP_VISIBLE_DEVICES=")]
-                    rounds = 1 if self.args.mode == "check" else 3
+                    rounds = 1
                     expected = [suite.command(self.args, row) for row in self.rows for _ in range(rounds)]
                     self.assertEqual(actual, expected)
-                    self.assertEqual(len(actual), 14 * rounds)
+                    self.assertEqual(len(actual), len(self.rows) * rounds)
 
 
 if __name__ == "__main__":

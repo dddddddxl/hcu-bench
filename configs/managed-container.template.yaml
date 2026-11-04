@@ -134,9 +134,9 @@ tests:
       recipe: gemm
       gemm_profile: new # rocBLAS 5.2.0; select legacy explicitly for 4.3.0.
       mode: perf
-      max_norm_error: ""
+      max_norm_error: "" # 默认原生校验；非空阈值追加 norm 检查。
     matrix:
-      dtype: [fp32, fp16, bf16]
+      dtype: [fp32, fp16, fp64, complex64, complex128]
   rccl_collectives:
     suite: rccl
     adapter: command
