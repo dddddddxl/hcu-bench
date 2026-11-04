@@ -13,6 +13,8 @@ def main():
         return run_plan(Plan.from_dict(store.read("plan.json")), store, quiet=True)
     finally:
         build_report(store)
+        print(f"Report: {store.path / 'summary.txt'}", flush=True)
+        print(f"Markdown report: {store.path / 'summary.md'}", flush=True)
 
 
 if __name__ == "__main__":
