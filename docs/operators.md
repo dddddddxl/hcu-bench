@@ -69,7 +69,7 @@ bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=
 bash bench.sh configs/cases/hipdnn-conv.yaml all
 ```
 
-`case_id` 默认空，执行全部 68 条；指定 `dtk-conv-001` 仅用于诊断，不能称整套通过。日志必须有明确的 `CPU validation result: successful` 和对应方向的原生计时；`Graph validation successful` 仅表示图构建，不能代替数值校验。原生 `CPU validation result: failed` 即失败。来源代码对 INT8 明确不支持 CPU 校验，这类项保留原始提示并标记未验收，不因 exit 0 放行性能。失败项继续记录，最终不会把部分成功报成整套成功。保存逐项原生命令/环境、二进制与构建输入哈希、编译及运行日志。
+`case_id` 默认空，执行全部 68 条；指定 `dtk-conv-001` 仅用于诊断，不能称整套通过。日志必须有明确的 `CPU validation result: successful` 和对应方向的原生计时；`Graph validation successful` 仅表示图构建，不能代替数值校验。原生 `CPU validation result: failed` 即失败。来源代码对 INT8 明确不支持 CPU 校验；若原生执行正常且有有效计时，仍记录原始性能，同时标记 `correctness: not_checked`、`validation_status: native_not_supported`，不能记为精度通过。流程完成与正确性完成分别记录。失败项继续记录，最终不会把部分成功报成整套成功。保存逐项原生命令/环境、二进制与构建输入哈希、编译及运行日志。
 
 ## 配置与执行
 

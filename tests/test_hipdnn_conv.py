@@ -60,14 +60,20 @@ class HipdnnConvTests(unittest.TestCase):
     def test_only_cpu_verified_native_times_are_accepted(self):
         for direction, label in hipdnn.LABELS.items():
             text = 'Graph validation successful\n%s avg times: 1.25 ms\nCPU validation result: successful\n' % label
-            self.assertEqual(hipdnn.parse_result(text, direction), 1.25)
+            self.assertEqual(hipdnn.parse_result(text, direction, 'fp16')['latency_ms'], 1.25)
             with self.assertRaises(hipdnn.VerificationError):
-                hipdnn.parse_result(text.replace('result: successful', 'result: failed'), direction)
+                hipdnn.parse_result(text.replace('result: successful', 'result: failed'), direction, 'fp16')
             for bad in (text.replace('CPU validation result: successful', ''), text + text,
                         text.replace('1.25', '0'), text + 'hipDNN Frontend Error: no engine',
                         text.replace('CPU validation result: successful', 'CPU validation is not supported for int8 input type.')):
                 with self.assertRaises(ValueError):
-                    hipdnn.parse_result(bad, direction)
+                    hipdnn.parse_result(bad, direction, 'fp16')
+            unsupported = text.replace('CPU validation result: successful',
+                                       'CPU validation is not supported for int8 input type.')
+            result = hipdnn.parse_result(unsupported, direction, 'int8')
+            self.assertEqual(result['latency_ms'], 1.25)
+            self.assertEqual(result['correctness'], 'not_checked')
+            self.assertEqual(result['validation_status'], 'native_not_supported')
 
     def test_config_has_one_unmodified_original_sweep(self):
         config = Path(__file__).resolve().parents[1] / 'configs/cases/hipdnn-conv.yaml'

@@ -55,9 +55,10 @@ def run(args, stopped):
                        recipe='hipdnn_conv', correctness='not_checked', measurement_status='invalid', metrics=[])
             try:
                 text = launch([binary] + case['argv'], case['case_id'], {**env, **case['env']})
-                latency = parse_result(text, case['direction'])
-                row.update(correctness='passed', measurement_status='measured',
-                           metrics=[dict(name=case['case_id'] + '_latency_ms', value=latency,
+                native = parse_result(text, case['direction'], case['dtype'])
+                row.update(correctness=native['correctness'], validation_status=native['validation_status'],
+                           measurement_status='measured',
+                           metrics=[dict(name=case['case_id'] + '_latency_ms', value=native['latency_ms'],
                                          unit='ms', statistic='native_mean')])
             except CleanupError:
                 raise
@@ -71,7 +72,9 @@ def run(args, stopped):
             if stopped.is_set() or time.monotonic() >= deadline:
                 break
         complete = len(results) == len(cases) and all(r['measurement_status'] == 'measured' for r in results)
-        write_json(out / 'assessment.json', dict(complete=complete, expected_cases=len(cases), results=results))
+        write_json(out / 'assessment.json', dict(complete=complete,
+                   correctness_complete=complete and all(r['correctness'] == 'passed' for r in results),
+                   expected_cases=len(cases), results=results))
         return 0 if complete else 2
     except CleanupError as exc:
         return cleanup_failure(out, exc)
@@ -130,14 +133,15 @@ class VerificationError(ValueError):
     pass
 
 
-def parse_result(text, direction):
+def parse_result(text, direction, dtype):
     if re.search(r'CPU validation result:\s*failed\b', text):
         raise VerificationError('Native CPU validation failed')
-    if 'CPU validation is not supported' in text:
-        raise ValueError('Native CPU validation is not supported for this dtype; not accepted')
+    unsupported = 'CPU validation is not supported for int8 input type.' in text
+    if unsupported and dtype != 'int8':
+        raise ValueError('Native validation dtype does not match the original case')
     if re.search(r'\b(?:HIP Error:|hipDNN(?: Frontend)? Error:|Exception:|Unsupported data type:)', text, re.I):
         raise ValueError('Native test_conv error; inspect original log')
-    if len(re.findall(r'CPU validation result:\s*successful\b', text)) != 1:
+    if not unsupported and len(re.findall(r'CPU validation result:\s*successful\b', text)) != 1:
         raise ValueError('Missing or ambiguous native CPU validation verdict')
     times = re.findall(r'\b' + LABELS[direction] + r' avg times:\s*([0-9.eE+-]+)\s+ms\b', text)
     if len(times) != 1:
@@ -145,7 +149,8 @@ def parse_result(text, direction):
     value = float(times[0])
     if not math.isfinite(value) or value <= 0:
         raise ValueError('Invalid native timing')
-    return value
+    return dict(latency_ms=value, correctness='not_checked' if unsupported else 'passed',
+                validation_status='native_not_supported' if unsupported else 'native_cpu_passed')
 
 
 def main():
