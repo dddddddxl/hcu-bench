@@ -11,6 +11,7 @@ vars:
   workspace: /YOUR_WRITABLE_WORKSPACE      # 必改：容器内可写、最好持久挂载的输出目录。
   hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # 必核对：多卡测试允许使用的 HCU 编号。
   single_hcus: [0]                         # 必核对：单卡算子和模型使用的卡，须属于 hcus。
+  iface: YOUR_ACTIVE_INTERFACE             # 必改/通信：实际socket网卡名；DeepEP和GLM引用，不在脚本写死。
 
 output_dir: "${vars.workspace}/results"
 build:
@@ -52,6 +53,16 @@ models:
     tokenizer_path: /YOUR_MODELS/Qwen3-8B
     port: 30903                             # 两模型串行、前者清理后启动，可复用端口。
     startup_timeout_s: 1800
+  glm52_int8:
+    start_script: model_scripts/glm52_int8_tp8.sh # 官方BW1100 / SGLang0.5.12配方；固定TP8。
+    nodes: [multi]                        # 仅性能；不能沿用Qwen单卡节点。
+    env:
+      BENCH_MODEL_PATH: /YOUR_MODELS/GLM-5.2-Channel-INT8-w8a8
+      NCCL_SOCKET_IFNAME: "${vars.iface}"
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
+    tokenizer_path: /YOUR_MODELS/GLM-5.2-Channel-INT8-w8a8
+    port: 30904
+    startup_timeout_s: 3600               # 大模型加载预留时间；不计入正式吞吐。
 
 # ==================== 3. 各 suite：只改需要测的那段 ====================
 # 下方每个测试块都有 enabled；不运行的块可以改 false。
@@ -165,8 +176,8 @@ tests:
       num_topk: 8
       num_experts: 256
     env:
-      NCCL_SOCKET_IFNAME: YOUR_ACTIVE_INTERFACE # 必改：实际 socket 网卡名。
-      GLOO_SOCKET_IFNAME: YOUR_ACTIVE_INTERFACE # 同上。
+      NCCL_SOCKET_IFNAME: "${vars.iface}"   # 复用通用socket网卡；仅作用于本测试块。
+      GLOO_SOCKET_IFNAME: "${vars.iface}"
       ROCSHMEM_IB_GID_INDEX: "YOUR_GID_INDEX"  # 必改：目标 RDMA 设备对应的 GID index。
       # 若平台要求指定 HCA，在本测试块按其原生运行库接口补充；不全局影响其他 suite。
       ROCSHMEM_HEAP_SIZE: "4737418240"
@@ -177,7 +188,7 @@ tests:
   model_accuracy:
     enabled: true
     suite: e2e_acc
-    models: all                           # models 中所有模型；也可填 [qwen3_4b]。
+    models: [qwen3_4b, qwen3_8b]           # GLM仅测性能，不加入GSM8K评测。
     nodes: [single]
     timeout_s: 14400                       # 每模型精度任务的故障时限。
     params:
@@ -194,7 +205,7 @@ tests:
   model_throughput:
     enabled: true
     suite: e2e_perf
-    models: all
+    models: [qwen3_4b, qwen3_8b]           # Qwen保持非思考口径；GLM使用独立性能块。
     nodes: [single]
     timeout_s: 172800                      # 每模型性能任务最多48小时，不是要求跑满。
     params:
@@ -210,3 +221,25 @@ tests:
       seed: 42
       request_timeout_s: 1800             # 每条请求的故障时限，不是整套时限。
       extra_body: {chat_template_kwargs: {enable_thinking: false}}
+
+  # -------------------- e2e_perf：GLM-5.2 INT8 八卡 --------------------
+  glm52_throughput:
+    enabled: true                          # 主配置all也执行；无8张空闲卡时改false。
+    suite: e2e_perf
+    models: [glm52_int8]
+    nodes: [multi]
+    timeout_s: 172800
+    params:
+      python: auto
+      workloads:
+        - {input_tokens: 128, output_tokens: 128, concurrency: [1, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 1024, output_tokens: 1024, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 2048, output_tokens: 128, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+        - {input_tokens: 3500, output_tokens: 1000, concurrency: [1, 2, 4, 8, 16, 32, 64, 128]}
+      requests: 256
+      warmup_requests: 32
+      repeats: 1
+      seed: 42
+      request_timeout_s: 1800
+      extra_body: {}                       # 保留模型默认思考模式，不沿用Qwen的enable_thinking:false。
+      # 官方服务max-running-requests=32；更高客户端并发会排队，报告记录其真实延迟。
