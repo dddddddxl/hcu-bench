@@ -219,13 +219,16 @@ def run(args, stopped):
             try:
                 if stopped.is_set() or time.monotonic() >= deadline:
                     raise InterruptedError("Operator case sweep cancelled or timed out")
+                check = None
                 if args.recipe == "conv":
                     check = parse_conv(launch(case["argv"] + ["-V", "1", "-i", "1", "-t", "1"], "check"), case["direction"], True)
-                else:
+                elif args.mode == "check" or args.max_norm_error != "":
                     native.mode = "check"
                     check = parse_gemm(launch(module.command(native, case["row"]), "check"), True, args.max_norm_error, case["row"])
                 row = dict(recipe=args.recipe, case_id=case_id, dtype=args.dtype, mode=args.mode,
-                           correctness="passed", check=check, measurement_status="measured")
+                           correctness="passed" if check is not None else "not_checked", measurement_status="measured")
+                if check is not None:
+                    row["check"] = check
                 if cli is not None:
                     row.update(gemm_profile=cli["profile"], rocblas_version=cli["rocblas_version"],
                                check_semantics=cli["check_semantics"])

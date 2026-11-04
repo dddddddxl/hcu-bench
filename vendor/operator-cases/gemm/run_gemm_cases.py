@@ -3,7 +3,8 @@
 
 Default profile: new (rocBLAS 5.2.0); legacy profile: rocBLAS 4.3.0.
 Inspect native validation diagnostics; process exit codes alone are not a
-correctness verdict. Perf mode requires prior successful checks.
+correctness verdict. Perf mode follows native benchmark defaults without a
+required correctness check; use check mode separately for native validation.
 """
 import argparse
 import csv

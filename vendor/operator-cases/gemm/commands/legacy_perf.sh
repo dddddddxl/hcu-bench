@@ -4,7 +4,7 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"
-# Review native check diagnostics before executing the perf script.
+# Perf follows native benchmark defaults; check is a separate explicit mode.
 python3 run_gemm_cases_legacy.py --dtype fp32 --mode perf "$@"
 python3 run_gemm_cases_legacy.py --dtype fp16 --mode perf "$@"
 python3 run_gemm_cases_legacy.py --dtype fp64 --mode perf "$@"

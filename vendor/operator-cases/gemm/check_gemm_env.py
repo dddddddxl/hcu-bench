@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import run_gemm_cases as suite
 
 PROFILES = {
-    "new": ("5.2.0", "--test 1 native equality/tolerance check; --verify 0 by default, matching DTK unit_check=1/norm_check=0"),
+    "new": ("5.2.0", "check mode: --test 1 --verify 0; native benchmark perf: --test 0 --verify 0, correctness not checked"),
     "legacy": ("4.3.0", "--verify 1 GPU vs CPU validation; legacy native diagnostics"),
 }
 

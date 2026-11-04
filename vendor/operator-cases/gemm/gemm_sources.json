@@ -12,5 +12,5 @@
     "total": 3107
   },
   "scope": "Only retained DTK general and GEMM smoke. No added shapes or precision variants. Not all BLAS or gtest branches.",
-  "settings": "Original per-case initialization, types, scalars, shapes, strides and iteration counts. New profile uses unit_check=1, norm_check=0 and use_hipblaslt=-1."
+  "settings": "Original per-case initialization, types, scalars, shapes, strides and iteration counts. Native perf uses unit_check=0/norm_check=0; explicit check mode uses unit_check=1/norm_check=0. New profile keeps use_hipblaslt=-1."
 }

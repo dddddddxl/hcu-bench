@@ -24,7 +24,7 @@ def main():
                            "set -euo pipefail",
                            'cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."',
                            'export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"',
-                           "# Review native check diagnostics before executing the perf script."]
+                           "# Perf follows native benchmark defaults; check is a separate explicit mode."]
             for args.dtype in suite.TYPES:
                 rows = suite.load_cases(args)
                 shell_lines.append('python3 %s --dtype %s --mode %s "$@"' % (runner, args.dtype, args.mode))

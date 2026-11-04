@@ -31,7 +31,7 @@ provenance = {
     "cases": {"general": sum(r["group"] == "general" for r in rows),
               "gemm_smoke": sum(r["group"] == "smoke" for r in rows), "total": len(rows)},
     "scope": "Only retained DTK general and GEMM smoke. No added shapes or precision variants. Not all BLAS or gtest branches.",
-    "settings": "Original per-case initialization, types, scalars, shapes, strides and iteration counts. New profile uses unit_check=1, norm_check=0 and use_hipblaslt=-1.",
+    "settings": "Original per-case initialization, types, scalars, shapes, strides and iteration counts. Native perf uses unit_check=0/norm_check=0; explicit check mode uses unit_check=1/norm_check=0. New profile keeps use_hipblaslt=-1.",
 }
 (ROOT / "gemm_sources.json").write_text(json.dumps(provenance, indent=2), encoding="utf-8", newline="\n")
 print("Generated %d unchanged DTK general/GEMM smoke entries" % len(rows))

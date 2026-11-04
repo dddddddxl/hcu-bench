@@ -21,19 +21,18 @@ CLI 匹配不能证明设备、库或数值正确。
 
 2. 新版最小用例与完整扫描
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode check --case-id dtk-smoke-59-0001
-审核该项原生校验日志后再运行：
+独立运行原生性能入口（不自动校验）：
 HIP_VISIBLE_DEVICES=0 python3 run_gemm_cases.py --dtype fp16 --mode perf --case-id dtk-smoke-59-0001
 
 五种来源精度全部检查：
 HIP_VISIBLE_DEVICES=0 bash commands/new_check.sh
-审核全部 check 日志后再运行：
+五种来源精度原生性能扫描：
 HIP_VISIBLE_DEVICES=0 bash commands/new_perf.sh
-独立脚本记录日志，perf 不自动读取以前的 check 结论。
-hcu-bench 的 mode=perf 入口则逐项自动 check，通过后才做性能。
+独立脚本及 hcu-bench 的 mode=perf 均沿用原生benchmark默认行为，不隐式先check；correctness=not_checked。
 
-新版默认校验 --test 1 --verify 0，与 DTK unit_check=1/norm_check=0 对齐。
+新版显式mode=check使用 --test 1 --verify 0；原生benchmark会覆盖YAML中的unit_check，不能把common的unit_check=1视为性能入口会自动校验。
 不再额外要求 norm 必须为零。unit.hpp:行号: Failure 始终失败。
---max-norm-error 0.001 会追加 --verify 1；hcu-bench 据该阈值作额外 norm 判定，不能覆盖 unit Failure。
+显式设置 --max-norm-error 0.001 会追加check阶段及 --verify 1；hcu-bench 据该阈值作额外 norm 判定，不能覆盖 unit Failure。这是可选诊断，不是原生性能默认流程。
 正确性预热及次数保留来源 cold_iters=2/iters=10（部分 HPL=5）。
 性能默认 --test 0 --verify 0 --cold_iters 2 --iters 10（部分 HPL=5），每项 1 轮。
 新版对齐 --use_hipblaslt -1，交给原生库自动选择，不再强制关闭 hipBLASLt。

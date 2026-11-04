@@ -90,9 +90,9 @@ class NumericTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["correctness"], "failed")
         self.assertEqual(result["results"][0]["metrics"], [])
 
-    def run_fixture(self, check, profile="new", cli_error=False, threshold=""):
+    def run_fixture(self, check, profile="new", cli_error=False, threshold="", mode="perf"):
         with tempfile.TemporaryDirectory() as folder:
-            args = SimpleNamespace(recipe="gemm", dtype="fp16", mode="perf", group="smoke", case_id="dtk-smoke-59-0001",
+            args = SimpleNamespace(recipe="gemm", dtype="fp16", mode=mode, group="smoke", case_id="dtk-smoke-59-0001",
                 device="auto", driver="auto", rocblas_bench="auto", conv_suite="all", direction="all",
                 warmup=10, iters=100, repeats=3, native_timeout_s=60, max_norm_error=threshold, hcu_ids="0,1",
                 nnodes=1, node_rank=0, output_dir=folder, gemm_profile=profile)
@@ -116,14 +116,25 @@ class NumericTests(unittest.TestCase):
                 code = numeric.run(args, threading.Event())
             return code, commands, json.loads((Path(folder) / "assessment.json").read_text())
 
-    def test_perf_runs_check_before_three_native_rounds(self):
+    def test_perf_uses_native_timing_without_implicit_check(self):
         code, commands, result = self.run_fixture(GEMM)
         self.assertEqual(code, 0)
-        self.assertEqual(len(commands), 6)
-        self.assertIn("--verify", commands[2])
-        self.assertEqual(commands[2][commands[2].index("--verify") + 1], "0")
+        self.assertEqual(len(commands), 5)
+        for command in commands[2:]:
+            self.assertEqual(command[command.index("--test") + 1], "0")
+            self.assertEqual(command[command.index("--verify") + 1], "0")
         self.assertTrue(result["complete"])
+        self.assertEqual(result["results"][0]["correctness"], "not_checked")
+        self.assertNotIn("check", result["results"][0])
         self.assertEqual(result["results"][0]["metrics"][0]["statistic"], "median_of_native_means")
+
+    def test_explicit_check_still_runs_native_unit_validation(self):
+        code, commands, result = self.run_fixture(GEMM, mode="check")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(commands[2][commands[2].index("--test") + 1], "1")
+        self.assertEqual(result["results"][0]["correctness"], "passed")
+        self.assertIn("check", result["results"][0])
 
     def test_additional_norm_failure_never_publishes_perf(self):
         code, commands, result = self.run_fixture(GEMM.replace(",17.2,0,0", ",17.2,0.1,0.1"), threshold="0.001")
@@ -140,7 +151,7 @@ class NumericTests(unittest.TestCase):
                          {("conv", "fp32"), ("conv", "fp16"), ("gemm", "fp32"), ("gemm", "fp16"), ("gemm", "fp64"), ("gemm", "complex64"), ("gemm", "complex128")})
 
     def test_wrong_shape_is_not_published(self):
-        code, commands, result = self.run_fixture(GEMM.replace("N,N,65,", "N,N,2048,"))
+        code, commands, result = self.run_fixture(GEMM.replace("N,N,65,", "N,N,2048,"), mode="check")
         self.assertEqual(code, 2)
         self.assertEqual(len(commands), 3)
         self.assertIn("requested M", result["results"][0]["reason"])
