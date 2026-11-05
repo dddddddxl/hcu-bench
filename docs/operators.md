@@ -65,6 +65,8 @@ bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=
 
 已有完整 DTK 环境可用时填写 `binary`，或将 `test_conv` 放入 PATH。若尚未编译，可填写原始 `hipdnn/api_test` 的 `source_root`；工具用原始 CMakeLists 与已有 CMake/Ninja/SDK 构建 `test_conv`，不下载依赖、不安装库、不删 `-Werror` 或替换实现。构建并行数只影响编译调度。缺少 SDK、CLI 不兼容或编译失败都会保留原始错误并失败。
 
+仓库和 DTK 镜像不保证自带该 C++ 源码或二进制。源码目录结构、容器挂载、完整手动编译命令、自动编译与复用二进制的配置见 [test_conv 编译与运行指南](hipdnn-conv.md)。先按该指南准备输入及配置中的仓库/可写目录路径，再执行下面的入口。
+
 ```bash
 bash bench.sh configs/cases/hipdnn-conv.yaml all
 ```
