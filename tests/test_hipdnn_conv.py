@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import contextlib
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -17,6 +19,31 @@ from testpacks.operators.hipdnn_conv import run as hipdnn
 
 
 class HipdnnConvTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('tar'), 'source extraction requires tar')
+    def test_missing_installed_binary_builds_bundled_original_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            args = SimpleNamespace(binary='auto', source_root='', build_jobs=2)
+            calls = []
+            def launch(argv, name):
+                calls.append(argv)
+                if name == 'source-extract':
+                    subprocess.run(argv, check=True, capture_output=True)
+            with patch.object(hipdnn.shutil, 'which', return_value=None):
+                binary = hipdnn.resolve_binary(args, out, launch)
+            source = out / 'native-source'
+            build = out / 'native-build'
+            self.assertEqual(calls, [
+                ['tar', '-xzf', str(hipdnn.ROOT / 'vendor/hipdnn-api-test/dtk-api-test-source.tar.gz'),
+                 '-C', str(source), '--strip-components=1', '--no-same-owner'],
+                ['cmake', '-S', str(source), '-B', str(build), '-G', 'Ninja'],
+                ['cmake', '--build', str(build), '--target', 'test_conv', '-j', '2'],
+            ])
+            self.assertEqual(binary, str(build / 'bin/test_conv'))
+            inputs = json.loads((out / 'build-inputs.json').read_text())
+            self.assertEqual(inputs['files'][str(source / 'cpp/test_conv/test_conv.cpp')],
+                             '49334673eb1f2709919d5277232b19cbdd1305feed63ca82c5a52932c8a44935')
+
     def test_native_commands_do_not_require_a_nonexistent_help_option(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -35,7 +35,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
 | `configs/cases/migraphx-resnet50.yaml` | `migraphx` | ResNet50 FP16/INT8；需 MIGraphX driver 和本地 ONNX |
 | `configs/cases/migraphx-bert.yaml` | `migraphx` | BERT-large FP16；需 MIGraphX driver、本地 ONNX、兼容的原生库 |
-| `configs/cases/hipdnn-conv.yaml` | `operators` | DTK 原始 test_conv.sh 68 条命令；需匹配的 test_conv 或完整 api_test 源码，见[编译与运行指南](docs/hipdnn-conv.md) |
+| `configs/cases/hipdnn-conv.yaml` | `operators` | DTK 原始 test_conv.sh 68 条命令；自带原始源码，复用已有 test_conv 或自动编译；需配套 DTK/hipDNN SDK，见[编译与运行指南](docs/hipdnn-conv.md) |
 | `configs/cases/gemm.yaml` | `operators` | GEMM正确性/性能；需匹配 rocblas-bench，误差标准明确后才测性能 |
 | `configs/cases/fa-fp8.yaml` | `operators` | FA FP8前向性能；需匹配的 FP8 扩展 |
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
