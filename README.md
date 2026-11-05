@@ -17,7 +17,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | --- | --- | --- |
 | `rccl` | 单机10类通信 | 延迟、algbw、busbw、原生正确性检查 |
 | `pcie` | CPU→HCU、HCU→CPU、HCU→HCU、CPU↔HCU、HCU↔HCU | 各路径平均/峰值带宽 |
-| `operators` | Conv、PA decode、FA FP16前向性能 | 原生校验、耗时、计算性能或带宽 |
+| `operators` | Conv、hipDNN Conv、GEMM、PA decode、FA FP16/FP8前向性能 | 原生校验状态、耗时、计算性能或带宽；FP8接口不兼容时跳过 |
 | `deepep` | 低延迟通信压测，默认10分钟 | 原生带宽、延迟、错误 |
 | `e2e_acc` | Qwen3-4B/8B，GSM8K全量1319题，训练集5-shot，非思考 | 精度分数、回答及原生报告 |
 | `e2e_perf` | Qwen3-4B/8B及GLM-5.2 INT8 TP8，多长度、多并发流式性能 | 输出吞吐、首token延迟等 |
@@ -26,7 +26,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 
 ### 独立测例
 
-原默认关闭的项目独立配置，保留原有 suite 名称。这些项目具有不同的镜像、工具或资源要求，不纳入默认执行范围。
+独立配置保留原有 suite 名称，可单项复测。GLM-5.2、FA FP8、GEMM、hipDNN Conv已纳入主模板，复制新主模板后使用 `all` 即会执行；其余独立项目不自动加入主计划。已有个人YAML不会随模板更新自动增加测试块。
 
 **显存带宽（`memory`）和 MIGraphX（`migraphx`）默认禁用（disabled）**，不随主配置的 `bash bench.sh all` 执行。主模板不包含这两个测试块；独立配置中的 `enabled: true` 仅在显式选择该配置时生效。SGLang 镜像不保证具备这两项所需的工具链和原生依赖。
 
@@ -35,9 +35,9 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
 | `configs/cases/migraphx-resnet50.yaml` | `migraphx` | ResNet50 FP16/INT8；需 MIGraphX driver 和本地 ONNX |
 | `configs/cases/migraphx-bert.yaml` | `migraphx` | BERT-large FP16；需 MIGraphX driver、本地 ONNX、兼容的原生库 |
-| `configs/cases/hipdnn-conv.yaml` | `operators` | DTK 原始 test_conv.sh 68 条命令；自带原始源码，复用已有 test_conv 或自动编译；需配套 DTK/hipDNN SDK，见[编译与运行指南](docs/hipdnn-conv.md) |
-| `configs/cases/gemm.yaml` | `operators` | GEMM正确性/性能；需匹配 rocblas-bench，误差标准明确后才测性能 |
-| `configs/cases/fa-fp8.yaml` | `operators` | FA FP8前向性能；需匹配的 FP8 扩展 |
+| `configs/cases/hipdnn-conv.yaml` | `operators` | 主模板已启用；DTK 原始 test_conv.sh 68 条命令；自带原始源码，复用已有 test_conv 或自动编译；需配套 DTK/hipDNN SDK，见[编译与运行指南](docs/hipdnn-conv.md) |
+| `configs/cases/gemm.yaml` | `operators` | 主模板已启用；需匹配 rocblas-bench，默认原生性能计时，不代表正确性通过 |
+| `configs/cases/fa-fp8.yaml` | `operators` | 主模板已启用；匹配19参数接口才测，不匹配记skipped |
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
 | `configs/cases/mooncake.yaml` | `mooncake` | 至少两节点、RDMA、共享可写目录 |
 | `configs/cases/wan.yaml` | `e2e_perf` | Wan2.2文生视频；不使用LLM token吞吐口径 |
@@ -50,7 +50,9 @@ bash bench.sh configs/cases/migraphx-resnet50.yaml all
 bash bench.sh configs/cases/wan.yaml all
 ```
 
-默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/` 或自动执行可选项目。如需纳入主测试计划，可将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
+默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/`。新主模板包含26个执行用例：RCCL 10类、PCIe、Conv两种精度、GEMM五种精度、hipDNN Conv、PA、FA FP16/FP8、DeepEP、两个Qwen模型会话和GLM性能会话。模型会话分别包含其精度/性能子任务，不能把26个执行用例理解为26个底层shape或请求。
+
+新增其他独立项目时，将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
 
 主配置未包含 memory 测试块时，`bash bench.sh memory` 不会自动加载独立配置，须显式指定文件路径。配置选择沿用现有 CLI 规则。
 
@@ -208,7 +210,7 @@ hy-smi
 
 上述编号仅用于演示格式，实际取值以目标环境的枚举结果为准。五类路径完整扫描至少需要两张HCU；平均值和峰值分别保存，双向带宽已包含两个方向之和，不再乘2。
 
-### operators：Conv、PA、FA FP16
+### operators：Conv、hipDNN、GEMM、PA、FA
 
 | 测试块 | 参数 | 取值与说明 |
 | --- | --- | --- |
@@ -221,9 +223,17 @@ hy-smi
 | `conv` | `native_timeout_s` | 原生执行时限；外层timeout另留清理余量 |
 | `pa_decode` | `recipe` | 固定 `pa_decode`；形状由当前固定配方定义 |
 | `fa_fp16_forward` | `recipe` | 固定 `fa_fp16_forward` |
+| `fa_fp8_forward` | `recipe` | 固定 `fa_fp8_forward`；预检实际扩展，不兼容则跳过且无性能指标 |
+| `gemm` | `gemm_profile` / `rocblas_bench` | 默认new，对应rocBLAS 5.2.0接口；legacy对应4.3.0，工具须已存在 |
+| `gemm` | `mode` / `max_norm_error` | 默认perf、空阈值：原生计时、正确性not_checked；check或非空阈值显式启用校验 |
+| `gemm` | `group` / `case_id` / `matrix.dtype` | 默认all、空ID、五种原始精度，共3107条；可用smoke或原始ID筛选 |
+| `hipdnn_conv` | `binary` / `source_root` | 默认优先复用已有test_conv，未安装时自动编译随包原始源码；可显式指定程序或外部源码目录 |
+| `hipdnn_conv` | `native_timeout_s` | 默认14400秒，外层14520秒；68条原始调用，不改原生校验或迭代 |
 | PA/FA | `native_timeout_s` | 默认1800秒；不是迭代次数 |
 
-PA/FA使用固定配方，暂不支持任意形状配置。FP8和重复性压力测试使用独立测例，不能仅通过修改dtype切换。
+PA/FA使用固定配方，暂不支持任意形状配置。FP8已加入主模板；不兼容接口的skipped不计作性能完成或正确性通过。依赖缺失、内核失败、超时仍保留实际状态，不自动安装原生库。hipDNN默认使用随包原始源码编译；镜像需具备匹配的DTK/hipDNN SDK。
+
+百万次重复性压力仍为独立测例，不随默认all执行：BLAS FP16、FA FP16、FA BF16。`configs/cases/operator-stress.yaml` 默认 `stress_iterations: 100`、`native_timeout_s: 1800`、外层 `timeout_s: 1920`；100次仅验证流程。正式长压将次数改为1000000，并按独占窗口同时增大两个超时。该次数不影响固定FA性能配方，也不是DeepEP的600秒压测。
 
 ### DeepEP
 
@@ -354,7 +364,7 @@ bash bench.sh configs/glm52-perf.template.yaml all
 
 - memory的 `devices: ""` 表示使用已分配的全部卡，逐卡串行；非空字符串可填其子集。`model_mhz` 是原脚本换算参数，不锁频；`array_size` 是元素数，不是字节。
 - MIGraphX的 `numa_node` 须按目标卡PCI拓扑对应的实际NUMA节点配置，不预设为0。BERT的 `rocblas_dir: ""` 使用镜像原生库，仅在明确要求外置兼容库时指定目录。每个batch组合内部执行三轮并报告中位数，不包含模型精度评测。
-- GEMM的 `new` 对应当前5.2.0接口，`legacy` 对应4.3.0接口，实际版本应通过原生工具确认。新版默认对齐 DTK 的 unit_check=1/norm_check=0；`max_norm_error: ""` 仅使用原生校验，非空值追加 norm 检查。默认仅 DTK 原始 general + GEMM smoke，共 3,107 条；五种精度及筛选见 [算子说明](docs/operators.md)。
+- GEMM的 `new` 对应当前5.2.0接口，`legacy` 对应4.3.0接口，实际版本应通过原生工具确认。默认perf沿用原生benchmark计时，不追加正确性检查，结果为 `not_checked`；check启用原生比较，非空 `max_norm_error` 追加norm检查。原生unit失败仍拒收，不因进程exit 0判为通过。默认仅DTK原始general + GEMM smoke，共3,107条；五种精度及筛选见[算子说明](docs/operators.md)。
 - 独立压力测例默认100次，标记为smoke，不属于100万次压力验收。正式压力将 `stress_iterations` 改为1000000，并同步增大原生及外层超时；超时或中断不判为完成。
 - Mooncake的 `addresses` 须按 `nodes` 的顺序配置。`duration` 为原生测试时长，单位秒，不使用框架 `duration_s`；带宽阈值为空字符串时仅报告结果。该测例至少需要两台节点。
 - Wan的 `request` 包含prompt、size、num_frames、fps、num_inference_steps、seed、guidance_scale；初版采用1280×720、81帧、16 FPS、40步，1次预热和1次正式生成。TP4已完成实机流程验证，TP1尚未实测；视频质量未评估，不使用LLM吞吐或精度指标。

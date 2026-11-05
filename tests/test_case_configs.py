@@ -24,15 +24,30 @@ class CaseConfigurationTests(unittest.TestCase):
             self.assertIn(content, reports)
         self.assertIn('默认禁用（disabled）', readme)
 
-    def test_main_has_only_common_variables_and_no_optional_cases(self):
+    def test_main_includes_merged_recipes_but_keeps_other_optional_cases_separate(self):
         document = load_document(MAIN)
         self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface'})
         with patch('subprocess.Popen', side_effect=AssertionError('static only')):
             plan = make_plan(str(MAIN))
-        self.assertEqual(len(plan.cases), 19)
+        self.assertEqual(len(plan.cases), 26)
         self.assertFalse({'memory', 'migraphx', 'mooncake'} & {c.suite for c in plan.cases})
         self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in plan.cases))
-        self.assertFalse(any(c.params.get('recipe') in ('gemm', 'fa_fp8_forward') for c in plan.cases))
+        self.assertEqual(sum(c.params.get('recipe') == 'gemm' for c in plan.cases), 5)
+        self.assertEqual(sum(c.params.get('recipe') == 'fa_fp8_forward' for c in plan.cases), 1)
+        hipdnn = [c for c in plan.cases if c.pack.get('id') == 'operators.hipdnn-conv']
+        self.assertEqual(len(hipdnn), 1)
+        self.assertEqual(hipdnn[0].params['case_id'], '')
+
+    def test_main_matches_standalone_merged_recipes_without_changing_native_settings(self):
+        main = make_plan(str(MAIN), 'operators')
+        for name, test_id in (('gemm', 'gemm'), ('fa-fp8', 'fa_fp8_forward'),
+                              ('hipdnn-conv', 'hipdnn_conv')):
+            with self.subTest(recipe=name):
+                standalone = make_plan(str(ROOT / 'configs/cases' / (name + '.yaml')))
+                actual = [case for case in main.cases if case.test_id == test_id]
+                self.assertEqual([c.params for c in actual], [c.params for c in standalone.cases])
+                self.assertEqual([c.timeout_s for c in actual], [c.timeout_s for c in standalone.cases])
+        self.assertFalse(any(c.params.get('recipe', '').endswith('_stress') for c in main.cases))
 
     def test_rccl_bounds_are_inherited_and_rank_count_matches_allocation(self):
         document = load_document(MAIN)
