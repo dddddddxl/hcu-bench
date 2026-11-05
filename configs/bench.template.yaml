@@ -161,8 +161,8 @@ tests:
     timeout_s: 14520
     params:
       bench_root: "${vars.bench_root}"
-      binary: auto                       # 现有test_conv；没有时须提供下方原始源码目录。
-      source_root: ""                    # DTK hipdnn/api_test目录；缺少程序和源码时明确失败。
+      binary: auto                       # 复用已有test_conv；没有时自动编译随包源码。
+      source_root: ""                    # 空=随包源码；非空=外部DTK hipdnn/api_test目录。
       native_timeout_s: 14400            # 68条原始调用，保留CPU校验和原生计时。
 
   # -------------------- operators：PA性能 --------------------

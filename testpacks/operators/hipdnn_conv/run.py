@@ -116,8 +116,15 @@ def resolve_binary(args, out, launch):
             found = shutil.which(name)
             if found:
                 return str(Path(found).resolve())
-        raise ValueError('test_conv is not installed; set source_root to the original DTK hipdnn/api_test directory to build it')
-    source = Path(args.source_root).resolve()
+        archive = ROOT / 'vendor/hipdnn-api-test/dtk-api-test-source.tar.gz'
+        expected = json.loads((ROOT / 'vendor/sources.json').read_text())['hipdnn-api-test']['archive_sha256']
+        if sha256(archive) != expected:
+            raise ValueError('Bundled hipDNN api_test source checksum mismatch')
+        source = out / 'native-source'
+        source.mkdir()
+        launch(['tar', '-xzf', str(archive), '-C', str(source), '--strip-components=1', '--no-same-owner'], 'source-extract')
+    else:
+        source = Path(args.source_root).resolve()
     files = [source / 'CMakeLists.txt', source / 'cpp/test_conv/test_conv.cpp', source / 'cpp/utils.hpp']
     write_json(out / 'build-inputs.json', dict(source_root=str(source), files={str(p): sha256(p) for p in files}))
     build = out / 'native-build'

@@ -35,7 +35,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `configs/cases/memory.yaml` | `memory` | zd1/zd2共24项；需目标架构兼容的 hcu-stream/AICC |
 | `configs/cases/migraphx-resnet50.yaml` | `migraphx` | ResNet50 FP16/INT8；需 MIGraphX driver 和本地 ONNX |
 | `configs/cases/migraphx-bert.yaml` | `migraphx` | BERT-large FP16；需 MIGraphX driver、本地 ONNX、兼容的原生库 |
-| `configs/cases/hipdnn-conv.yaml` | `operators` | 主模板已启用；DTK 原始 test_conv.sh 68 条 hipDNN API 卷积命令 |
+| `configs/cases/hipdnn-conv.yaml` | `operators` | 主模板已启用；DTK 原始 test_conv.sh 68 条命令；自带原始源码，复用已有 test_conv 或自动编译；需配套 DTK/hipDNN SDK，见[编译与运行指南](docs/hipdnn-conv.md) |
 | `configs/cases/gemm.yaml` | `operators` | 主模板已启用；需匹配 rocblas-bench，默认原生性能计时，不代表正确性通过 |
 | `configs/cases/fa-fp8.yaml` | `operators` | 主模板已启用；匹配19参数接口才测，不匹配记skipped |
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
@@ -227,11 +227,11 @@ hy-smi
 | `gemm` | `gemm_profile` / `rocblas_bench` | 默认new，对应rocBLAS 5.2.0接口；legacy对应4.3.0，工具须已存在 |
 | `gemm` | `mode` / `max_norm_error` | 默认perf、空阈值：原生计时、正确性not_checked；check或非空阈值显式启用校验 |
 | `gemm` | `group` / `case_id` / `matrix.dtype` | 默认all、空ID、五种原始精度，共3107条；可用smoke或原始ID筛选 |
-| `hipdnn_conv` | `binary` / `source_root` | 已有test_conv用auto或绝对路径；未安装时提供原始DTK hipdnn/api_test源码目录 |
+| `hipdnn_conv` | `binary` / `source_root` | 默认优先复用已有test_conv，未安装时自动编译随包原始源码；可显式指定程序或外部源码目录 |
 | `hipdnn_conv` | `native_timeout_s` | 默认14400秒，外层14520秒；68条原始调用，不改原生校验或迭代 |
 | PA/FA | `native_timeout_s` | 默认1800秒；不是迭代次数 |
 
-PA/FA使用固定配方，暂不支持任意形状配置。FP8已加入主模板；不兼容接口的skipped不计作性能完成或正确性通过。依赖缺失、内核失败、超时仍保留实际状态，不自动安装原生库。hipDNN的source_root为空且未安装test_conv时明确失败。
+PA/FA使用固定配方，暂不支持任意形状配置。FP8已加入主模板；不兼容接口的skipped不计作性能完成或正确性通过。依赖缺失、内核失败、超时仍保留实际状态，不自动安装原生库。hipDNN默认使用随包原始源码编译；镜像需具备匹配的DTK/hipDNN SDK。
 
 百万次重复性压力仍为独立测例，不随默认all执行：BLAS FP16、FA FP16、FA BF16。`configs/cases/operator-stress.yaml` 默认 `stress_iterations: 100`、`native_timeout_s: 1800`、外层 `timeout_s: 1920`；100次仅验证流程。正式长压将次数改为1000000，并按独占窗口同时增大两个超时。该次数不影响固定FA性能配方，也不是DeepEP的600秒压测。
 

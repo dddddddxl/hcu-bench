@@ -24,5 +24,5 @@ tests:
     params:
       bench_root: "${vars.bench_root}"
       binary: auto
-      source_root: "" # Original DTK hipdnn/api_test root, used only if test_conv is not installed.
+      source_root: "" # Empty: reuse installed test_conv, otherwise build the bundled DTK api_test source.
       native_timeout_s: 14400

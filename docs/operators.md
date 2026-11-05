@@ -63,7 +63,9 @@ bash bench.sh operators --set tests.conv.enabled=false --set tests.gemm.enabled=
 
 独立配置 [configs/cases/hipdnn-conv.yaml](../configs/cases/hipdnn-conv.yaml) 执行随包原样保留的 `test_conv.sh` 68 条命令，属于 `operators` suite，与上面的 MIOpenDriver 路径分开。原脚本的 FP32/FP16/BF16（参数原文 `bfp16`）/TF32/INT8、布局、前后 padding、方向和 TF32 环境开关全部保留。封装没有增加迭代、预热或轮次；当前来源 C++ 原生代码执行一次准备调用，再用 HIP event 计时 100 次并输出平均毫秒数。
 
-已有完整 DTK 环境可用时填写 `binary`，或将 `test_conv` 放入 PATH。若尚未编译，可填写原始 `hipdnn/api_test` 的 `source_root`；工具用原始 CMakeLists 与已有 CMake/Ninja/SDK 构建 `test_conv`，不下载依赖、不安装库、不删 `-Werror` 或替换实现。构建并行数只影响编译调度。缺少 SDK、CLI 不兼容或编译失败都会保留原始错误并失败。
+已有完整 DTK 环境可用时填写 `binary`，或将 `test_conv` 放入 PATH。默认 `binary: auto` 且 `source_root` 为空时，未找到已有程序便使用随包的 `vendor/hipdnn-api-test` 原始源码自动构建；也可填写外部 `source_root`。工具用原始 CMakeLists 与已有 CMake/Ninja/SDK 构建 `test_conv`，不下载依赖、不安装库、不删 `-Werror` 或替换实现。构建并行数只影响编译调度。缺少 SDK、CLI 不兼容或编译失败都会保留原始错误并失败。
+
+仓库已捆绑完整原始 C++ 构建输入，镜像仍需提供配套的 DTK/hipDNN SDK 和编译工具。容器挂载、完整手动编译命令、自动编译与复用二进制的配置见 [test_conv 编译与运行指南](hipdnn-conv.md)。先按该指南准备输入及配置中的仓库/可写目录路径，再执行下面的入口。
 
 ```bash
 bash bench.sh configs/cases/hipdnn-conv.yaml all

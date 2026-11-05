@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class BundledSourceTests(unittest.TestCase):
     def test_all_bundled_trees_match_recorded_checksums(self):
         manifest = json.loads((ROOT / "vendor/sources.json").read_text())
-        self.assertEqual(set(manifest), {*prepare.SOURCES.values(), "deepep-tests", "gsm8k", "evalscope", "operator-cases"})
+        self.assertEqual(set(manifest), {*prepare.SOURCES.values(), "deepep-tests", "gsm8k", "evalscope", "operator-cases", "hipdnn-api-test"})
         for name, entry in manifest.items():
             with self.subTest(source=name):
                 self.assertEqual(prepare.tree_hash(ROOT / "vendor" / name), entry["tree_sha256"])

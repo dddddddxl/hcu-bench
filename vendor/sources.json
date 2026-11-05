@@ -60,5 +60,13 @@
     "train_source_sha256": "17f347dc51477c50d4efb83959dbb7c56297aba886e5544ee2aaed3024813465",
     "license": "LICENSE",
     "tree_sha256": "2e4180a34b1c4b827b40a1786056ca10ba39985212ccdb0fd67d560ce6609b63"
+  },
+  "hipdnn-api-test": {
+    "version": "dtk-api-test-reference-20261104",
+    "source": "DTK hipDNN api_test source archive used for the DTK-aligned Conv reference; repository bundling requested by the user on 2026-11-05",
+    "archive_sha256": "eb7f2788e880ac988f7a24d5ff43a92e06de904a997acfa615ca531a960300d8",
+    "license": "No root LICENSE supplied; original per-file copyright and MIT SPDX notices retained. No blanket license is asserted for the archive.",
+    "tree_sha256": "a54cf67268e7c9061191b2d79c9152589897763216d7878ca7f0b68bb6230747",
+    "modifications": "Original archive retained byte for byte. Automatically extracted into the per-case writable directory; original CMake/cpp tree builds only the test_conv target. DTK libraries and SDKs are provided by the execution environment, not redistributed here."
   }
 }
