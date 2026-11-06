@@ -1,0 +1,36 @@
+# 在已准备的单卡 Linux 容器内运行；训练源码和 ImageNet 只读挂载。
+version: 1
+name: resnet50-imagenet-pretraining
+failure_policy: stop
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+  train_script: /YOUR_RESNET50_SOURCE/train.py
+  dataset: /YOUR_IMAGENET_ROOT
+output_dir: "${vars.workspace}/results"
+nodes:
+  node0:
+    executor: local
+    hcus: [0] # 必须是明确分配且确认空闲的单张卡。
+tests:
+  resnet50_pretraining:
+    enabled: true
+    suite: training
+    adapter: command
+    pack: ../testpacks/training/manifest.yaml
+    nodes: [node0]
+    timeout_s: 900 # 整体故障上限，不是计划停止窗口；不启动90轮。
+    params:
+      bench_root: "${vars.bench_root}"
+      train_script: "${vars.train_script}"
+      script_sha256: "" # 推荐填写已复核 train.py 的 SHA256。
+      dataset: "${vars.dataset}"
+      mode: throughput # 真实图片、10步预热+50步正式计时；full训练需显式选择。
+      epochs: 1
+      batch_size: 32
+      workers: 4
+      warmup_steps: 10
+      measured_steps: 50
+      precision: fp32 # amp 使用原脚本 Apex O1/dynamic，不自动替换为原生 AMP。
+      seed: 1
+      native_timeout_s: 300

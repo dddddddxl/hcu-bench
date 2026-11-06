@@ -49,6 +49,12 @@ tests:
     nodes: [local]
     params: {samples: 3}
     timeout_s: 10
+  training_demo:
+    suite: training
+    adapter: mock
+    nodes: [local]
+    params: {samples: 3}
+    timeout_s: 10
   e2e_demo:
     suite: e2e_acc
     adapter: mock
