@@ -7,6 +7,7 @@ bash bench.sh all           # 执行主配置中启用的测试
 bash bench.sh rccl          # 仅执行 RCCL
 bash bench.sh pcie,deepep   # 选择多个 suite
 bash bench.sh e2e           # 模型精度 + LLM 性能
+bash bench.sh training      # ResNet50 单卡训练吞吐短测
 ```
 
 ## 支持的测试
@@ -41,6 +42,7 @@ bash bench.sh e2e           # 模型精度 + LLM 性能
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
 | `configs/cases/mooncake.yaml` | `mooncake` | 至少两节点、RDMA、共享可写目录 |
 | `configs/cases/wan.yaml` | `e2e_perf` | Wan2.2文生视频；不使用LLM token吞吐口径 |
+| `configs/resnet50-training.template.yaml` | `training` | ResNet50 ImageNet从头训练；需外部训练源码、真实数据及匹配的Torch/TorchVision/Apex |
 
 每份独立配置仅包含该测例所需的公共信息和测试参数，测试块默认 `enabled: true`，通过指定配置文件执行。
 
@@ -50,7 +52,7 @@ bash bench.sh configs/cases/migraphx-resnet50.yaml all
 bash bench.sh configs/cases/wan.yaml all
 ```
 
-默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/`。新主模板包含26个执行用例：RCCL 10类、PCIe、Conv两种精度、GEMM五种精度、hipDNN Conv、PA、FA FP16/FP8、DeepEP、两个Qwen模型会话和GLM性能会话。模型会话分别包含其精度/性能子任务，不能把26个执行用例理解为26个底层shape或请求。
+默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/`。新主模板包含27个执行用例：RCCL 10类、PCIe、Conv两种精度、GEMM五种精度、hipDNN Conv、PA、FA FP16/FP8、DeepEP、ResNet50训练吞吐、两个Qwen模型会话和GLM性能会话。模型会话分别包含其精度/性能子任务，不能把27个执行用例理解为27个底层shape或请求。
 
 新增其他独立项目时，将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
 
@@ -79,6 +81,24 @@ bash bench.sh configs/cases/migraphx-bert.yaml all
 BERT 的 `params.rocblas_dir: ""` 使用镜像原生库；仅在需要外置兼容库时指定包含 `lib/` 的目录。MIGraphX 每组参数执行三轮，报告吞吐及耗时中位数，不包含模型精度评测。
 
 结果分别写入所选 YAML 的 `${vars.workspace}/results/RUN_ID`，状态与原因查看 `summary.txt`，性能指标查看 `metrics.csv`。详细环境要求见[显存带宽说明](docs/memory.md)和[MIGraphX说明](docs/migraphx.md)。
+
+### ResNet50 从头训练
+
+`training` 是独立suite，不属于MIGraphX推理或LLM的 `e2e`。新主模板默认 `enabled: true`，
+加入 `all`；填写 `vars.train_script` 和 `vars.imagenet` 并使用匹配的Torch/TorchVision/Apex环境。
+也可单独使用 [ResNet50训练模板](configs/resnet50-training.template.yaml)，填写只读训练源码、
+本地ImageNet、可写输出目录及唯一获分配的HCU后执行：
+
+```bash
+bash bench.sh configs/resnet50-training.template.yaml training
+```
+
+默认 `mode: throughput`、FP32、batch32、workers4、预热10步+计时50步，随机初始化，
+不下载预训练权重。单卡真实图像训练吞吐以同步墙钟窗口报告images/s，含加载/增强、前向、
+反向及SGD，不含初始化、预热、验证和存盘；仍保留有限loss、checkpoint及重载检查。
+各取少量真实图片覆盖1000类，不跑90轮；单次原生执行超时300秒、整体900秒上限，不要求跑满。
+完整训练需显式设置 `mode: full`、轮数及长超时；小子集分数不能称为全量精度或收敛验收。
+训练源码由用户提供并记录SHA256，不自动替换Apex或框架，详见[训练说明](docs/training.md)。
 
 ## 快速开始
 

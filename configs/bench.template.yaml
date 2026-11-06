@@ -12,6 +12,8 @@ vars:
   hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # 必核对：多卡测试允许使用的 HCU 编号。
   single_hcus: [0]                         # 必核对：单卡算子和模型使用的卡，须属于 hcus。
   iface: YOUR_ACTIVE_INTERFACE             # 必改/通信：实际socket网卡名；DeepEP和GLM引用，不在脚本写死。
+  train_script: /YOUR_RESNET50_SOURCE/train.py # 必改/training：已审核的原始ResNet50训练入口。
+  imagenet: /YOUR_IMAGENET_ROOT             # 必改/training：真实ImageFolder train/val，匹配的1000类。
 
 output_dir: "${vars.workspace}/results"
 build:
@@ -66,7 +68,7 @@ models:
 
 # ==================== 3. 各 suite：只改需要测的那段 ====================
 # 下方每个测试块都有 enabled；不运行的块可以改 false。
-# GLM、FA FP8、GEMM和hipDNN参与默认all；memory/MIGraphX等仍使用独立配置。
+# GLM、FA FP8、GEMM、hipDNN及ResNet50训练吞吐参与默认all；memory/MIGraphX等仍使用独立配置。
 tests:
   # -------------------- RCCL：单机10类通信 --------------------
   rccl_collectives:
@@ -231,6 +233,29 @@ tests:
       ROCSHMEM_HEAP_SIZE: "4737418240"
       HIP_BUFFER_EXTRA_SIZE: "0"
       NCCL_IB_DISABLE: "1"                # 保留当前单机配方，不代表禁用了 ROCSHMEM RDMA。
+
+  # -------------------- training：ResNet50单卡训练吞吐短测 --------------------
+  resnet50_pretraining:
+    enabled: true
+    suite: training
+    adapter: command
+    pack: ../testpacks/training/manifest.yaml
+    nodes: [single]
+    timeout_s: 900                        # 整体故障上限，不要求跑满；不启动90轮。
+    params:
+      bench_root: "${vars.bench_root}"
+      train_script: "${vars.train_script}"
+      script_sha256: ""                 # 推荐填写经复核原train.py的SHA256。
+      dataset: "${vars.imagenet}"
+      mode: throughput                    # 真实图像加载/增强+前向+反向+SGD；非推理吞吐。
+      epochs: 1
+      batch_size: 32
+      workers: 4
+      warmup_steps: 10
+      measured_steps: 50                  # 1600张正式图片，窗口首尾同步，报告images/s。
+      precision: fp32
+      seed: 1
+      native_timeout_s: 300               # 单次训练/验证故障上限；仍保存和重载checkpoint。
 
   # -------------------- e2e_acc：模型精度 --------------------
   model_accuracy:

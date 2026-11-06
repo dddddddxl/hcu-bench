@@ -26,10 +26,10 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_includes_merged_recipes_but_keeps_other_optional_cases_separate(self):
         document = load_document(MAIN)
-        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface'})
+        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface', 'train_script', 'imagenet'})
         with patch('subprocess.Popen', side_effect=AssertionError('static only')):
             plan = make_plan(str(MAIN))
-        self.assertEqual(len(plan.cases), 26)
+        self.assertEqual(len(plan.cases), 27)
         self.assertFalse({'memory', 'migraphx', 'mooncake'} & {c.suite for c in plan.cases})
         self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in plan.cases))
         self.assertEqual(sum(c.params.get('recipe') == 'gemm' for c in plan.cases), 5)
@@ -37,6 +37,23 @@ class CaseConfigurationTests(unittest.TestCase):
         hipdnn = [c for c in plan.cases if c.pack.get('id') == 'operators.hipdnn-conv']
         self.assertEqual(len(hipdnn), 1)
         self.assertEqual(hipdnn[0].params['case_id'], '')
+
+    def test_default_all_includes_bounded_training_throughput(self):
+        with patch('subprocess.Popen', side_effect=AssertionError('static only')):
+            plan = make_plan(str(MAIN), 'all')
+            standalone = make_plan(str(ROOT / 'configs/resnet50-training.template.yaml'), 'training')
+        training = [c for c in plan.cases if c.suite == 'training']
+        self.assertEqual(len(training), 1)
+        case = training[0]
+        self.assertEqual(case.nodes, ['single'])
+        for key in ('mode', 'epochs', 'batch_size', 'workers', 'warmup_steps', 'measured_steps',
+                    'precision', 'seed', 'native_timeout_s'):
+            self.assertEqual(case.params[key], standalone.cases[0].params[key])
+        self.assertEqual(case.params['mode'], 'throughput')
+        self.assertEqual(case.params['epochs'], 1)
+        self.assertEqual((case.params['warmup_steps'], case.params['measured_steps'], case.params['batch_size']), (10, 50, 32))
+        self.assertEqual(case.timeout_s, 900)
+        self.assertEqual(len(make_plan(str(MAIN), 'all', ['tests.resnet50_pretraining.enabled=false']).cases), 26)
 
     def test_main_matches_standalone_merged_recipes_without_changing_native_settings(self):
         main = make_plan(str(MAIN), 'operators')

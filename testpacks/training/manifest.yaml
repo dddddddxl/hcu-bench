@@ -1,0 +1,25 @@
+version: 1
+id: training.resnet50-imagenet
+suite: training
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  train_script: {type: string, required: true}
+  script_sha256: {type: string, default: ""}
+  dataset: {type: string, required: true}
+  mode: {type: string, default: throughput, choices: [full, smoke, throughput]}
+  epochs: {type: integer, default: 1, min: 1, max: 1000}
+  batch_size: {type: integer, default: 32, min: 2, max: 65536}
+  workers: {type: integer, default: 4, min: 0, max: 128}
+  warmup_steps: {type: integer, default: 10, min: 1, max: 100}
+  measured_steps: {type: integer, default: 50, min: 1, max: 500}
+  precision: {type: string, default: fp32, choices: [fp32, amp]}
+  seed: {type: integer, default: 1, min: 0, max: 2147483647}
+  native_timeout_s: {type: integer, default: 300, min: 1, max: 2592000}
+command: [python3, -u, "${p_bench_root}/testpacks/training/run.py", --train-script, "${p_train_script}", --script-sha256, "${p_script_sha256}", --dataset, "${p_dataset}", --mode, "${p_mode}", --epochs, "${p_epochs}", --batch-size, "${p_batch_size}", --workers, "${p_workers}", --warmup-steps, "${p_warmup_steps}", --measured-steps, "${p_measured_steps}", --precision, "${p_precision}", --seed, "${p_seed}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+cwd: ${case_dir}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.log", "${case_dir}/*.receipt"]
+artifact_limit_mb: 100
