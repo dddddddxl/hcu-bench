@@ -1,0 +1,24 @@
+# 默认关闭。仅gfx938 NMZ/BW1100，显式启用前确认单卡已分配且空闲。
+version: 1
+name: gemmpower-edpp-finite-smoke
+failure_policy: stop
+vars:
+  bench_root: /YOUR_BENCH_REPO
+  workspace: /YOUR_WRITABLE_WORKSPACE
+output_dir: "${vars.workspace}/results"
+nodes:
+  single:
+    executor: local
+    hcus: [0]
+tests:
+  gemmpower:
+    enabled: false
+    suite: operators
+    adapter: command
+    pack: ../testpacks/gemmpower/manifest.yaml
+    nodes: [single]
+    timeout_s: 240
+    params:
+      bench_root: "${vars.bench_root}"
+      iterations: 4
+      native_timeout_s: 30

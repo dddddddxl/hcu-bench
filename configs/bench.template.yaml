@@ -69,6 +69,19 @@ models:
 # 下方每个测试块都有 enabled；不运行的块可以改 false。
 # GLM、FA FP8、GEMM、hipDNN及ResNet50训练吞吐参与默认all；memory/MIGraphX等仍使用独立配置。
 tests:
+  # -------------------- 可选：gfx938专用gemmpower EDPP，默认关闭 --------------------
+  gemmpower:
+    enabled: false                        # 非跨架构负载；不随默认all/operators启动。
+    suite: operators
+    adapter: command
+    pack: ../testpacks/gemmpower/manifest.yaml
+    nodes: [single]
+    timeout_s: 240
+    params:
+      bench_root: "${vars.bench_root}"
+      iterations: 4                      # 有限循环smoke，非长稳/峰值功耗验收。
+      native_timeout_s: 30
+
   # -------------------- RCCL：单机10类通信 --------------------
   rccl_collectives:
     enabled: true
