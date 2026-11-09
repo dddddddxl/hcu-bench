@@ -1,11 +1,10 @@
-# 在已准备的单卡 Linux 容器内运行；训练源码和 ImageNet 只读挂载。
+# 在已准备的单卡 Linux 容器内运行；内置训练程序，仅需真实 ImageNet 数据。
 version: 1
 name: resnet50-imagenet-pretraining
 failure_policy: stop
 vars:
   bench_root: /YOUR_BENCH_REPO
   workspace: /YOUR_WRITABLE_WORKSPACE
-  train_script: /YOUR_RESNET50_SOURCE/train.py
   dataset: /YOUR_IMAGENET_ROOT
 output_dir: "${vars.workspace}/results"
 nodes:
@@ -22,8 +21,7 @@ tests:
     timeout_s: 900 # 整体故障上限，不是计划停止窗口；不启动90轮。
     params:
       bench_root: "${vars.bench_root}"
-      train_script: "${vars.train_script}"
-      script_sha256: "" # 推荐填写已复核 train.py 的 SHA256。
+      recipe: resnet50_imagenet
       dataset: "${vars.dataset}"
       mode: throughput # 真实图片、10步预热+50步正式计时；full训练需显式选择。
       epochs: 1
@@ -31,6 +29,6 @@ tests:
       workers: 4
       warmup_steps: 10
       measured_steps: 50
-      precision: fp32 # amp 使用原脚本 Apex O1/dynamic，不自动替换为原生 AMP。
+      precision: fp32 # 内置入口仅支持FP32；不隐式切换AMP。
       seed: 1
       native_timeout_s: 300

@@ -1,5 +1,6 @@
 """CPU training contract fixtures, not hardware performance evidence."""
 import json
+import importlib.util
 from pathlib import Path
 import tempfile
 import threading
@@ -12,6 +13,7 @@ from hcu_bench.models import BenchError
 from hcu_bench.planner import make_plan
 from testpacks.training import run
 from testpacks.training.throughput_entry import TrainingWindow
+from testpacks.training import train
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def args(root):
     script = root / 'train.py'
     script.write_text('# CPU contract fixture, not a training implementation\n')
-    return SimpleNamespace(train_script=str(script), script_sha256='', dataset=str(root / 'images'),
+    return SimpleNamespace(recipe='resnet50_imagenet', train_script=str(script), script_sha256='', dataset=str(root / 'images'),
                            mode='smoke', epochs=1, batch_size=8, workers=0, precision='fp32',
                            seed=1, native_timeout_s=30, warmup_steps=10, measured_steps=50,
                            hcu_ids='0', nnodes=1, node_rank=0,
@@ -32,6 +34,51 @@ def log(epochs=1):
 
 
 class TrainingContracts(unittest.TestCase):
+    def test_readme_and_templates_use_builtin_training(self):
+        table = (ROOT / 'README.md').read_text(encoding='utf-8').split('## 支持的测试', 1)[1].split('### 独立测例', 1)[0]
+        self.assertIn('| `training` |', table)
+        for name in ('bench.template.yaml', 'resnet50-training.template.yaml'):
+            text = (ROOT / 'configs' / name).read_text(encoding='utf-8')
+            self.assertNotIn('YOUR_RESNET50_SOURCE', text)
+            self.assertNotIn('vars.train_script', text)
+        self.assertNotIn('import apex', (ROOT / 'testpacks/training/train.py').read_text())
+        self.assertEqual(train.parser().parse_args(['/data', '--save-path', '/out']).arch, 'resnet50')
+
+    @unittest.skipUnless(importlib.util.find_spec('torch'), 'requires prepared Torch CPU environment')
+    def test_builtin_real_cpu_update_validation_and_nonfinite_rejection(self):
+        import torch
+        torch.set_num_threads(2)
+        network = torch.nn.Linear(4, 10)
+        optimizer = torch.optim.SGD(network.parameters(), lr=0.1, momentum=0.9)
+        data = [(torch.ones(2, 4), torch.tensor([0, 1]))]
+        initial = network.weight.detach().clone()
+        result = train.epoch(data, network, torch.nn.CrossEntropyLoss(), torch.device('cpu'), 0, optimizer)
+        self.assertFalse(torch.equal(initial, network.weight))
+        self.assertTrue(optimizer.state)
+        self.assertTrue(0 <= result['top1'] <= result['top5'] <= 100)
+        before = network.weight.detach().clone()
+        train.epoch(data, network, torch.nn.CrossEntropyLoss(), torch.device('cpu'), 0)
+        self.assertTrue(torch.equal(before, network.weight))
+        self.assertFalse(network.training)
+        with torch.no_grad():
+            network.weight.fill_(float('nan'))
+        with self.assertRaisesRegex(ValueError, 'Nonfinite'):
+            train.epoch(data, network, torch.nn.CrossEntropyLoss(), torch.device('cpu'), 0, optimizer)
+
+    def test_builtin_entry_requires_no_external_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            a = args(Path(folder)); a.train_script = 'auto'
+            digest = run.validate(a)
+            self.assertEqual(Path(a.train_script), ROOT / 'testpacks/training/train.py')
+            self.assertEqual(a.training_backend, 'builtin')
+            self.assertEqual(digest, run.sha256(a.train_script))
+            a.train_script = 'auto'; a.precision = 'amp'
+            with self.assertRaisesRegex(ValueError, 'FP32'):
+                run.validate(a)
+            a.recipe = 'unregistered'
+            with self.assertRaisesRegex(ValueError, 'Unknown training recipe'):
+                run.validate(a)
+
     def test_plan_training_is_independent_of_inference(self):
         config = str(ROOT / 'configs/resnet50-training.template.yaml')
         with patch('subprocess.Popen', side_effect=AssertionError('static preview started a process')):

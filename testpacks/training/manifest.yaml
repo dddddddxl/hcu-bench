@@ -5,7 +5,8 @@ max_nodes: 1
 duration_control: native
 parameters:
   bench_root: {type: string, required: true}
-  train_script: {type: string, required: true}
+  recipe: {type: string, default: resnet50_imagenet, choices: [resnet50_imagenet]}
+  train_script: {type: string, default: auto}
   script_sha256: {type: string, default: ""}
   dataset: {type: string, required: true}
   mode: {type: string, default: throughput, choices: [full, smoke, throughput]}
@@ -17,7 +18,7 @@ parameters:
   precision: {type: string, default: fp32, choices: [fp32, amp]}
   seed: {type: integer, default: 1, min: 0, max: 2147483647}
   native_timeout_s: {type: integer, default: 300, min: 1, max: 2592000}
-command: [python3, -u, "${p_bench_root}/testpacks/training/run.py", --train-script, "${p_train_script}", --script-sha256, "${p_script_sha256}", --dataset, "${p_dataset}", --mode, "${p_mode}", --epochs, "${p_epochs}", --batch-size, "${p_batch_size}", --workers, "${p_workers}", --warmup-steps, "${p_warmup_steps}", --measured-steps, "${p_measured_steps}", --precision, "${p_precision}", --seed, "${p_seed}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+command: [python3, -u, "${p_bench_root}/testpacks/training/run.py", --recipe, "${p_recipe}", --train-script, "${p_train_script}", --script-sha256, "${p_script_sha256}", --dataset, "${p_dataset}", --mode, "${p_mode}", --epochs, "${p_epochs}", --batch-size, "${p_batch_size}", --workers, "${p_workers}", --warmup-steps, "${p_warmup_steps}", --measured-steps, "${p_measured_steps}", --precision, "${p_precision}", --seed, "${p_seed}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
 cwd: ${case_dir}
 result_protocol: bench-jsonl-v1
 requires_metrics: true
