@@ -2,7 +2,7 @@
 
 此目录的配置不会由主配置自动加载。每个文件仅包含对应测例，选择文件后直接执行其中启用的项目：
 
-FA FP8、GEMM和hipDNN Conv也已显式写入主模板，默认all执行；此处保留其独立复测入口。memory、MIGraphX、长压力等仍需单独选择。
+FA FP8、GEMM、hipDNN Conv及Wan TP4已显式写入主模板，默认all执行；此处保留其独立复测入口。memory、MIGraphX、长压力等仍需单独选择。
 
 ```bash
 bash bench.sh configs/cases/memory.yaml all

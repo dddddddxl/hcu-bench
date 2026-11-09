@@ -2,7 +2,7 @@
 
 所有 suite 可以放在同一 YAML 中。公共路径和卡号放在 `vars`；执行位置放在 `nodes`；每个测试的参数放在 `tests.<测试名>.params`。
 
-新配置优先使用 [bench.template.yaml](../configs/bench.template.yaml)，按通用配置、模型部署和suite参数依次组织。默认主计划不包含可选测例；显存带宽、MIGraphX、GEMM、FP8、算子压力、Mooncake和Wan分别位于 [独立测例目录](../configs/cases/README.md)，通过 `bash bench.sh configs/cases/文件.yaml all` 显式执行。旧模板仍可使用，不自动覆盖个人配置。
+新配置优先使用 [bench.template.yaml](../configs/bench.template.yaml)，按通用配置、模型部署和suite参数依次组织。GEMM、FA FP8、hipDNN Conv和Wan TP4已加入默认主计划，独立目录保留单项复测入口；显存带宽、MIGraphX、长压力和Mooncake仍通过 [独立测例目录](../configs/cases/README.md) 显式执行。Wan模型路径由vars.wan_model_path配置、四卡分配由vars.wan_hcus配置，不覆盖通信八卡列表。旧个人配置不会自动增加测试块或被覆盖。
 
 ## 配置结构
 

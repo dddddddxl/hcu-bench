@@ -17,6 +17,15 @@ Wan 属于 `e2e_perf`，`e2e` 和 `all` 也会选中已启用的 Wan 项。它�
 
 ## 使用
 
+新主模板已默认启用四卡 `tests.wan_tp4`：填写 `vars.wan_model_path`（完整Diffusers目录，含model_index.json），
+并核对 `vars.wan_hcus`（默认[0,1,2,3]）、仓库/输出目录及端口后，`bash bench.sh all` 或 `e2e_perf` 即会包含它。
+Wan节点独立于八卡通信节点，不修改通信的vars.hcus；默认不同时开启TP1。
+模型和扩散运行库须已准备，不自动下载，不需要额外评测数据集。
+暂不运行时设 `tests.wan_tp4.enabled: false`；缺路径/依赖仍记实际失败，不静默跳过。
+旧个人bench.yaml不会自动迁移，须同步变量、节点及完整测试块；主模板中pack为 `../testpacks/wan/manifest.yaml`。
+
+单独复测TP4可直接使用 `configs/cases/wan.yaml`；需要同时比较TP1/TP4时使用下面的专用模板：
+
 ```bash
 cp configs/wan.template.yaml configs/bench.yaml
 # 填仓库、输出、模型路径及卡号；模型目录须有 model_index.json，不自动下载权重。
@@ -27,7 +36,8 @@ bash bench.sh e2e_perf
 
 部署参数放在 `model_scripts/wan22_t2v.sh`，YAML 的 `start_script` 可改为自己的脚本；最后必须 `exec` 前台启动，读取 `BENCH_MODEL_PATH`、`BENCH_HOST`、`BENCH_PORT`、`BENCH_OUTPUT_DIR` 和已分配的 `HIP_VISIBLE_DEVICES`。表中的物理卡 6 不会硬编码到脚本。自动容器/SSH 沿用已有节点及容器接口。
 
-将专用模板中两个 Wan 测试块、节点和相关变量合入个人 `bench.yaml`，启用后 `bash bench.sh all` 即可包含它们。保留 Qwen 流水线的 `models` 配置即可，两类模型不会混用启动流程。
+若使用旧个人配置，可从新主模板迁移wan_tp4及相关变量/节点；仅显式需要TP1时再从专用模板加入单卡项。
+保留Qwen流水线的models配置，两类模型不会混用启动流程。
 
 ## 依赖与结果
 
