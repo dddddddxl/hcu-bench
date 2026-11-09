@@ -20,7 +20,7 @@ class GLMConfigurationTests(unittest.TestCase):
         accuracy = make_plan(str(main), 'e2e_acc')
         self.assertEqual([c.params['session']['model_id'] for c in accuracy.cases], ['qwen3_4b', 'qwen3_8b'])
         performance = make_plan(str(main), 'e2e_perf', ['vars.iface=lo'])
-        glm = next(c for c in performance.cases if c.params['session']['model_id'] == 'glm52_int8')
+        glm = next(c for c in performance.cases if c.params.get('session', {}).get('model_id') == 'glm52_int8')
         self.assertEqual(glm.nodes, ['multi'])
         self.assertEqual(len(performance.nodes['multi']['gpus']), 8)
         self.assertEqual([t['suite'] for t in glm.params['session']['tasks']], ['e2e_perf'])
@@ -47,7 +47,7 @@ class GLMConfigurationTests(unittest.TestCase):
         standalone = make_plan(str(ROOT / 'configs/glm52-perf.template.yaml'))
         self.assertEqual(len(standalone.cases), 1)
         main = make_plan(str(ROOT / 'configs/bench.template.yaml'), 'e2e_perf')
-        glm = next(c for c in main.cases if c.params['session']['model_id'] == 'glm52_int8')
+        glm = next(c for c in main.cases if c.params.get('session', {}).get('model_id') == 'glm52_int8')
         self.assertEqual(standalone.cases[0].params['session']['tasks'], glm.params['session']['tasks'])
 
 

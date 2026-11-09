@@ -13,6 +13,8 @@ vars:
   single_hcus: [0]                         # 必核对：单卡算子和模型使用的卡，须属于 hcus。
   iface: YOUR_ACTIVE_INTERFACE             # 必改/通信：实际socket网卡名；DeepEP和GLM引用，不在脚本写死。
   imagenet: /YOUR_IMAGENET_ROOT             # 必改/training：真实ImageFolder train/val，匹配的1000类。
+  wan_model_path: /YOUR_MODELS/Wan2.2-T2V-A14B-Diffusers # 必改/Wan：完整Diffusers目录，含model_index.json。
+  wan_hcus: [0, 1, 2, 3]                  # Wan TP4专用四卡分配，不改变上面的八卡通信配置。
 
 output_dir: "${vars.workspace}/results"
 build:
@@ -33,6 +35,12 @@ nodes:
   single:
     executor: local
     hcus: "${vars.single_hcus}"
+    env:
+      HIP_VISIBLE_DEVICES: "${hcu_ids}"
+
+  wan:
+    executor: local
+    hcus: "${vars.wan_hcus}"
     env:
       HIP_VISIBLE_DEVICES: "${hcu_ids}"
 
@@ -67,7 +75,7 @@ models:
 
 # ==================== 3. 各 suite：只改需要测的那段 ====================
 # 下方每个测试块都有 enabled；不运行的块可以改 false。
-# GLM、FA FP8、GEMM、hipDNN及ResNet50训练吞吐参与默认all；memory/MIGraphX等仍使用独立配置。
+# GLM、FA FP8、GEMM、hipDNN、ResNet50训练及Wan TP4参与默认all；memory/MIGraphX等仍为独立配置。
 tests:
   # -------------------- RCCL：单机10类通信 --------------------
   rccl_collectives:
@@ -254,6 +262,33 @@ tests:
       precision: fp32
       seed: 1
       native_timeout_s: 300               # 单次训练/验证故障上限；仍保存和重载checkpoint。
+
+  # -------------------- e2e_perf：Wan2.2 TP4文生视频 --------------------
+  wan_tp4:
+    enabled: true                         # 默认all/e2e/e2e_perf选中；不进入LLM精度会话。
+    suite: e2e_perf
+    adapter: command
+    pack: ../testpacks/wan/manifest.yaml
+    nodes: [wan]
+    timeout_s: 18000
+    params:
+      bench_root: "${vars.bench_root}"
+      start_script: model_scripts/wan22_t2v.sh
+      model_path: "${vars.wan_model_path}"
+      profile: tp4
+      request:
+        prompt: A curious raccoon
+        size: 1280x720
+        num_frames: 81
+        fps: 16
+        num_inference_steps: 40
+        seed: 42
+        guidance_scale: 4.0
+      warmup_requests: 1
+      requests: 1
+      port: 31095                         # 确认视频服务端口可用。
+      startup_timeout_s: 1800
+      request_timeout_s: 7200
 
   # -------------------- e2e_acc：模型精度 --------------------
   model_accuracy:

@@ -12,7 +12,7 @@ bash bench.sh training      # ResNet50 单卡训练吞吐短测
 
 ## 支持的测试
 
-主配置包含以下项目。LLM需已有SGLang环境，内置训练需匹配的Torch/TorchVision及真实数据；不能假定任意SGLang镜像具备全部依赖。缺少依赖时记录失败原因，不自动替换运行库。
+主配置包含以下项目。LLM需已有SGLang环境，Wan需兼容的SGLang扩散服务/SLA后端，内置训练需匹配的Torch/TorchVision及真实数据；不能假定任意SGLang镜像具备全部依赖。缺少依赖时记录失败原因，不自动替换运行库。
 
 | Suite | 项目 | 收集结果 |
 | --- | --- | --- |
@@ -22,13 +22,13 @@ bash bench.sh training      # ResNet50 单卡训练吞吐短测
 | `deepep` | 低延迟通信压测，默认10分钟 | 原生带宽、延迟、错误 |
 | `training` | 内置ResNet50 ImageNet单卡FP32训练吞吐；默认batch32、预热10步+计时50步 | images/s、平均训练步耗时、loss、checkpoint/重载检查；不代表收敛通过 |
 | `e2e_acc` | Qwen3-4B/8B，GSM8K全量1319题，训练集5-shot，非思考 | 精度分数、回答及原生报告 |
-| `e2e_perf` | Qwen3-4B/8B及GLM-5.2 INT8 TP8，多长度、多并发流式性能 | 输出吞吐、首token延迟等 |
+| `e2e_perf` | Qwen3-4B/8B、GLM-5.2 INT8 TP8及Wan2.2文生视频TP4 | LLM输出吞吐/首token延迟；Wan视频各阶段耗时（秒） |
 
 `e2e` 为 `e2e_acc` 和 `e2e_perf` 的组合入口。每个模型按服务启动、精度评测、性能测试、服务清理的顺序执行，完成后切换至下一模型。
 
 ### 独立测例
 
-独立配置保留原有 suite 名称，可单项复测。GLM-5.2、FA FP8、GEMM、hipDNN Conv已纳入主模板，复制新主模板后使用 `all` 即会执行；其余独立项目不自动加入主计划。已有个人YAML不会随模板更新自动增加测试块。
+独立配置保留原有 suite 名称，可单项复测。GLM-5.2、FA FP8、GEMM、hipDNN Conv及Wan TP4已纳入主模板，复制新主模板后使用 `all` 即会执行；其余独立项目不自动加入主计划。已有个人YAML不会随模板更新自动增加测试块。
 
 **显存带宽（`memory`）和 MIGraphX（`migraphx`）默认禁用（disabled）**，不随主配置的 `bash bench.sh all` 执行。主模板不包含这两个测试块；独立配置中的 `enabled: true` 仅在显式选择该配置时生效。SGLang 镜像不保证具备这两项所需的工具链和原生依赖。
 
@@ -42,7 +42,7 @@ bash bench.sh training      # ResNet50 单卡训练吞吐短测
 | `configs/cases/fa-fp8.yaml` | `operators` | 主模板已启用；匹配19参数接口才测，不匹配记skipped |
 | `configs/cases/operator-stress.yaml` | `operators` | BLAS FP16、FA FP16/BF16重复性压力；可100次短测或100万次正式压测 |
 | `configs/cases/mooncake.yaml` | `mooncake` | 至少两节点、RDMA、共享可写目录 |
-| `configs/cases/wan.yaml` | `e2e_perf` | Wan2.2文生视频；不使用LLM token吞吐口径 |
+| `configs/cases/wan.yaml` | `e2e_perf` | 主模板已默认启用TP4；Wan2.2文生视频，不使用LLM token吞吐口径 |
 | `configs/resnet50-training.template.yaml` | `training` | 内置ResNet50从头训练吞吐；只需配置真实ImageNet及匹配的Torch/TorchVision环境，无需外部train.py或Apex |
 
 每份独立配置仅包含该测例所需的公共信息和测试参数，测试块默认 `enabled: true`，通过指定配置文件执行。
@@ -53,7 +53,12 @@ bash bench.sh configs/cases/migraphx-resnet50.yaml all
 bash bench.sh configs/cases/wan.yaml all
 ```
 
-默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/`。新主模板包含27个执行用例：RCCL 10类、PCIe、Conv两种精度、GEMM五种精度、hipDNN Conv、PA、FA FP16/FP8、DeepEP、ResNet50训练吞吐、两个Qwen模型会话和GLM性能会话。模型会话分别包含其精度/性能子任务，不能把27个执行用例理解为27个底层shape或请求。
+默认 `bash bench.sh all` 仅读取 `configs/bench.yaml`，不扫描 `cases/`。新主模板包含28个执行用例：RCCL 10类、PCIe、Conv两种精度、GEMM五种精度、hipDNN Conv、PA、FA FP16/FP8、DeepEP、ResNet50训练吞吐、Wan TP4、两个Qwen模型会话和GLM性能会话。模型会话分别包含其精度/性能子任务，不能把28个执行用例理解为28个底层shape或请求。
+
+Wan模型路径在主YAML的 `vars.wan_model_path` 填写完整本地Diffusers目录，卡号用 `vars.wan_hcus`（默认四卡），不覆盖通信使用的八卡 `vars.hcus`。
+默认1280×720、81帧、40步、1次预热和1次正式生成，无需额外数据集，不自动下载模型。
+换平台须核对扩散运行环境、SLA内核及显存；缺模型/依赖时明确失败。只想暂时不跑可设 `tests.wan_tp4.enabled: false`。
+已有个人配置需同步这两个变量、wan节点和wan_tp4测试块，并按目标YAML位置调整pack相对路径，不能仅补enabled。
 
 新增其他独立项目时，将对应测试块加入主配置的 `tests`，并补充所需的节点、模型或容器定义。迁移测试块时，须按新 YAML 所在目录调整 `pack` 相对路径。
 

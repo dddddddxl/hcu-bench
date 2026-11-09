@@ -26,12 +26,12 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_includes_merged_recipes_but_keeps_other_optional_cases_separate(self):
         document = load_document(MAIN)
-        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface', 'imagenet'})
+        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface', 'imagenet', 'wan_model_path', 'wan_hcus'})
         with patch('subprocess.Popen', side_effect=AssertionError('static only')):
             plan = make_plan(str(MAIN))
-        self.assertEqual(len(plan.cases), 27)
+        self.assertEqual(len(plan.cases), 28)
         self.assertFalse({'memory', 'migraphx', 'mooncake'} & {c.suite for c in plan.cases})
-        self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in plan.cases))
+        self.assertEqual(sum(c.pack.get('id') == 'e2e_perf.wan-video' for c in plan.cases), 1)
         self.assertEqual(sum(c.params.get('recipe') == 'gemm' for c in plan.cases), 5)
         self.assertEqual(sum(c.params.get('recipe') == 'fa_fp8_forward' for c in plan.cases), 1)
         hipdnn = [c for c in plan.cases if c.pack.get('id') == 'operators.hipdnn-conv']
@@ -54,7 +54,27 @@ class CaseConfigurationTests(unittest.TestCase):
         self.assertEqual(case.params['epochs'], 1)
         self.assertEqual((case.params['warmup_steps'], case.params['measured_steps'], case.params['batch_size']), (10, 50, 32))
         self.assertEqual(case.timeout_s, 900)
-        self.assertEqual(len(make_plan(str(MAIN), 'all', ['tests.resnet50_pretraining.enabled=false']).cases), 26)
+        self.assertEqual(len(make_plan(str(MAIN), 'all', ['tests.resnet50_pretraining.enabled=false']).cases), 27)
+
+    def test_default_wan_matches_standalone_and_uses_own_model_path_and_four_cards(self):
+        for selection in ('all', 'e2e', 'e2e_perf'):
+            with self.subTest(selection=selection), patch('subprocess.Popen', side_effect=AssertionError('static only')):
+                plan = make_plan(str(MAIN), selection, ['vars.wan_model_path=/models/custom-wan', 'vars.wan_hcus=[4,5,6,7]'])
+                videos = [c for c in plan.cases if c.pack.get('id') == 'e2e_perf.wan-video']
+                self.assertEqual(len(videos), 1)
+                case = videos[0]
+                self.assertEqual(case.params['model_path'], '/models/custom-wan')
+                self.assertEqual(plan.nodes['wan']['gpus'], [4, 5, 6, 7])
+                self.assertEqual(plan.nodes['multi']['gpus'], list(range(8)))
+                standalone = make_plan(str(ROOT / 'configs/cases/wan.yaml')).cases[0]
+                for key in ('start_script', 'profile', 'request', 'warmup_requests', 'requests', 'port', 'startup_timeout_s', 'request_timeout_s'):
+                    self.assertEqual(case.params[key], standalone.params[key])
+                self.assertEqual(case.timeout_s, standalone.timeout_s)
+        accuracy = make_plan(str(MAIN), 'e2e_acc')
+        self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in accuracy.cases))
+        disabled = make_plan(str(MAIN), 'all', ['tests.wan_tp4.enabled=false'])
+        self.assertEqual(len(disabled.cases), 27)
+        self.assertFalse(any(c.pack.get('id') == 'e2e_perf.wan-video' for c in disabled.cases))
 
     def test_main_matches_standalone_merged_recipes_without_changing_native_settings(self):
         main = make_plan(str(MAIN), 'operators')
@@ -82,8 +102,8 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_preserves_full_qwen_accuracy_and_performance_contracts(self):
         plan = make_plan(str(MAIN), 'e2e')
-        self.assertEqual(len(plan.cases), 3)
-        qwen = [c for c in plan.cases if c.params['session']['model_id'].startswith('qwen3_')]
+        self.assertEqual(len(plan.cases), 4)
+        qwen = [c for c in plan.cases if c.params.get('session', {}).get('model_id', '').startswith('qwen3_')]
         self.assertEqual(len(qwen), 2)
         for case in qwen:
             tasks = case.params['session']['tasks']
