@@ -26,7 +26,7 @@ class CaseConfigurationTests(unittest.TestCase):
 
     def test_main_includes_merged_recipes_but_keeps_other_optional_cases_separate(self):
         document = load_document(MAIN)
-        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface', 'train_script', 'imagenet'})
+        self.assertEqual(set(document['vars']), {'bench_root', 'workspace', 'hcus', 'single_hcus', 'iface', 'imagenet'})
         with patch('subprocess.Popen', side_effect=AssertionError('static only')):
             plan = make_plan(str(MAIN))
         self.assertEqual(len(plan.cases), 27)
@@ -50,6 +50,7 @@ class CaseConfigurationTests(unittest.TestCase):
                     'precision', 'seed', 'native_timeout_s'):
             self.assertEqual(case.params[key], standalone.cases[0].params[key])
         self.assertEqual(case.params['mode'], 'throughput')
+        self.assertEqual(case.params['train_script'], 'auto')
         self.assertEqual(case.params['epochs'], 1)
         self.assertEqual((case.params['warmup_steps'], case.params['measured_steps'], case.params['batch_size']), (10, 50, 32))
         self.assertEqual(case.timeout_s, 900)

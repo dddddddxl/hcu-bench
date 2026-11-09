@@ -1,96 +1,71 @@
-# ResNet50 ImageNet 从头训练
+# 内置训练测试
 
-`training` 是独立 suite，与 MIGraphX ResNet50 推理、LLM 精度和吞吐分开。
-目前只支持单节点、明确分配的单张 HCU。新主模板已默认启用训练吞吐短测并纳入 `all`，
-已有个人 YAML 不自动迁移或覆盖；需复制新的测试块和两个输入路径，或用独立模板。
+`training`与MIGraphX推理及LLM的e2e分开。主模板默认启用ResNet50训练吞吐并纳入all，
+已有个人YAML不会自动迁移或覆盖。
 
-## 输入和依赖
+## 配好数据就能跑
 
-本包复用已准备的海光 modelzoo `resnet50-pytorch/train.py`，不执行其写死卡号、
-NUMA、MPI、数据路径的 shell 启动器。上游参考：
-https://developer.hpccube.com/codes/modelzoo/resnet50-pytorch 。
-检查的用户副本没有单独许可证文件，因此不把它复制分发到本仓库；
-通过 `train_script` 提供已审核的外部源码，推荐同时填写 `script_sha256`。
-本包适配其CLI、日志和checkpoint合同，不支持任意名字为train.py的程序。
+训练循环已内置在 `testpacks/training/train.py`，网络结构调用已安装的TorchVision。
+无需外部train.py或模型权重，默认FP32不导入Apex。
+环境须已有匹配的Torch/TorchVision、Python3.10+、PyYAML、psutil及明确分配的单张HCU。
+不自动下载数据、权重、框架或SDK。
 
-环境须已有匹配的Torch、TorchVision、Apex、psutil、PyYAML。原脚本即使FP32也会
-在HCU可用时导入Apex，不自动安装或替换框架。
-数据是已解包的真实ImageNet ImageFolder：`train/<1000类>/图片`、`val/<相同1000类>/图片`。
-不下载数据或预训练权重，不用FakeData，不传 `--pretrained`。
-
-## 配置和执行
+ImageNet预先解包为 `train/<1000类>/图片` 和 `val/<相同1000类>/图片`。
+主模板填写vars.imagenet，独立模板填写vars.dataset；通用仓库路径、输出目录和卡号仍须符合节点：
 
 ```bash
 cp configs/resnet50-training.template.yaml configs/bench.yaml
-# 填写仓库、可写输出、外部train.py、ImageNet路径和获分配的唯一HCU。
+# 编辑vars.bench_root、vars.workspace、vars.dataset和nodes.node0.hcus。
 bash bench.sh check -c configs/bench.yaml --suite training
 bash bench.sh plan -c configs/bench.yaml --suite training
 bash bench.sh training
 ```
 
-## 默认训练吞吐短测
+默认recipe为resnet50_imagenet，train_script为auto（可省略），明确选择内置程序，不搜索用户目录。
 
-默认 `mode: throughput`、1 epoch、FP32、batch32、workers4、seed1，10步预热+50步正式更新。
-从原1000类分别取1或2张训练图片，合计1920张（正好60个完整batch），验证每类1张、共1000张。
-各类图片须直接位于对应类目录；数据复制到自有输出，保留原1000类索引，来源/大小/哈希全部记录。
-这不是完整ImageNet评测，不据此判断收敛。
+## 默认吞吐短测
 
-使用PyTorch optimizer post-hook观察原脚本的SGD更新，不替换训练循环、优化器或计算内核。
-第10次更新后同步设备并启动高精度墙钟，第60次更新后同步并结束。
-窗口只在首尾同步，不逐步额外同步；包含加载、增强、H2D、前向、loss/精度统计、反向、SGD及原脚本日志开销。
-`training_throughput` 为1600张正式图片/同步窗口秒数，单位images/s；`training_step_time`为窗口平均每步毫秒。
-不使用原日志四舍五入的Time求和，不把验证、存盘或整个进程启动时间当训练吞吐。
-计时完毕仍须完成原生验证、保存checkpoint、CPU检查与重载验证，才发布正式指标。
-多/少一步、原生失败、NaN/Inf、缺checkpoint、重载不一致均不能发布成功吞吐。
-该模式目前仅支持FP32，训练图片数限制1000..32768、batch<=64、1 epoch，避免意外跑长训。
+单卡FP32、batch32、workers4、seed1、1 epoch，10步预热+50步计时。
+从原1000类各取1或2张训练图，共1920张，正好60个完整batch；每类1张验证图，共1000张。
+图片直接位于类别目录，复制到自有输出并记录来源/大小/SHA256，标签不变，不修改共享数据。
+不是FakeData或完整ImageNet精度/收敛验收。
 
-默认单次原生执行300秒，外层900秒故障上限；正常不要求跑满。慢平台超时如实失败，不将部分窗口当完整结果。
-图片复制/扫描、运行环境和存储会影响整体耗时；跨平台比较必须保持batch、workers、数据布局、CPU配额及精度一致。
-主模板缺输入或依赖时明确失败，不自动降级为FakeData或跳过。
-实现依据PyTorch 2.7.1的[optimizer post-hook](https://github.com/pytorch/pytorch/blob/v2.7.1/torch/optim/optimizer.py)
-与[设备同步接口](https://docs.pytorch.org/docs/stable/generated/torch.cuda.synchronize.html)。
+TorchVision weights=None随机初始化，224随机裁剪/翻转、ImageNet归一化、交叉熵及SGD，
+lr0.1/momentum0.9/weight_decay1e-4。验证Resize256/CenterCrop224。
+固定seed、独立数据生成器、deterministic=True、benchmark=False，不保证跨SDK逐位相同。
+这是本仓库自有实现，不是原modelzoo程序的逐字副本或原性能复现，不能直接对比旧外部入口吞吐。
 
-## 显式完整训练和流程 smoke
+第10次SGD更新后同步设备并启动perf_counter，第60次更新后同步并停止，仅首尾额外同步。
+窗口包含数据加载/增强、H2D、前向、loss/精度统计、反向、SGD及日志开销；
+排除初始化、预热、验证和存盘，报告training_throughput（images/s）和training_step_time（平均ms/步）。
+窗口结束后仍须完成验证、checkpoint保存、CPU安全加载检查及重载验证，才发布指标。
+NaN/Inf、失败、部分窗口、缺checkpoint或重载不一致均失败；清理不明返回125并阻断后续。
+默认原生300秒、整体900秒是故障上限，不要求跑满；缺数据/依赖明确失败，不静默降级。
+跨平台比较须固定batch、worker、数据/存储、CPU配额与精度。
 
-需要完整训练时显式设置 `mode: full`、`epochs: 90`、`batch_size: 64`、`workers: 6`、
-`native_timeout_s: 604800`、外层 `timeout_s: 1209900`，不要仅将mode改full而保留短测超时。
-原始正式方案为ResNet50随机初始化、90 epoch、batch64、workers6、SGD，lr0.1、momentum0.9、
-weight_decay1e-4，每30 epoch原生衰减0.1。沿用原脚本的随机裁剪224/水平翻转，
-验证Resize256/CenterCrop224及ImageNet归一化。
-`fp32`不开AMP；`amp`使用原脚本Apex O1/dynamic，不等于纯FP16，也不替换为原生AMP。
+## 完整训练与兼容入口
 
-显式短测：
+完整训练显式设置mode full、epochs90、batch64、workers6、native_timeout_s604800及外层timeout_s1209900。
+每30轮学习率衰减0.1，每轮存盘，需充分磁盘；1000类目录检查不等于整个数据集无损验证。
+smoke保留早期64/16张流程检查，要求1 epoch和batch<=64，不输出正式吞吐窗口。
 
-```bash
-bash bench.sh configs/bench.yaml training \
-  --set tests.resnet50_pretraining.params.mode=smoke \
-  --set tests.resnet50_pretraining.params.epochs=1 \
-  --set tests.resnet50_pretraining.params.batch_size=8 \
-  --set tests.resnet50_pretraining.params.workers=2 \
-  --set tests.resnet50_pretraining.params.native_timeout_s=900 \
-  --set tests.resnet50_pretraining.timeout_s=2100
-```
+旧配置显式提供train_script绝对路径时仍支持原modelzoo CLI/日志/checkpoint合同及script_sha256校验。
+不支持任意同名程序；用户主动提供才执行。外部full/smoke的AMP仍是其Apex O1/dynamic，
+内置目前只支持FP32，不隐式更换AMP实现。默认模板不再声明外部源码路径。
 
-smoke从1000类前8类各复制8张训练、2张验证图片到本次输出，共64/16张真实图片，
-保持这些类原有0..7标签，模型仍输出1000类。清单记录来源、大小和SHA256，不改共享数据。
-仅允许1 epoch、batch<=64。该分数不是完整ImageNet准确率或90轮收敛结果。
-full不筛选图片；只检查1000类目录不等于已证明整个数据集完整无损。
+## 扩展其他训练测例
 
-## 完成条件与结果
+共享层负责卡号、超时/取消/进程树清理、数据来源、同步吞吐、结果/日志及checkpoint生命周期。
+同类ImageNet分类模型在testpacks/training/recipes.py注册architecture和权重变化检查参数，
+更新manifest的recipe choices，新增YAML测试块和合同测试；模型构造、训练/验证、checkpoint检查共同读取配方。
+目前仅支持resnet50_imagenet，不宣称其他模型已验证。
+检测或语言模型等不同数据/优化器/协议应增加独立training pack及配置，复用进程和结果协议，
+不要强套ImageFolder和SGD检查。suite仍叫training，测试块及recipe区分具体测例。
 
-每次独立输出，运行原训练脚本，检查每轮验证输出、有限loss及每轮checkpoint存在。
-在CPU安全加载本次checkpoint，严格匹配ResNet50结构、epoch、有限模型/SGD状态及初始化后权重变化；
-再以原脚本 `--evaluate --resume` 重载最后checkpoint，Top1/Top5及打印的验证loss须与存盘前一致。
-超时、取消、非零退出、缺checkpoint、重载不一致均失败；清理不明返回125并停止后续测试。
+## 结果边界
 
-报告含Top1/Top5、训练及验证最后报告的平均loss、训练进程墙钟时间（含验证和存盘，不是纯计算吞吐）。
-训练与验证出现NaN/Inf loss均失败；有限但很大的loss仍原样报告，不能据此宣称训练质量合格。
-此前8类小子集流程smoke已出现很大的验证loss，证据见[短测记录](validation/2026-11-06-resnet50-training.md)，
-不把那次进程耗时换算为新版同步窗口吞吐。
-新版10+50步同步窗口的实机证据见[吞吐短测记录](validation/2026-11-06-resnet50-throughput.md)。
-数值正确性仍为 `not_checked`，上述状态检查不是独立算子数值基准。
-训练收敛为 `not_assessed`，不将小数据分数包装成收敛通过，也无默认精度门槛。
-
-JSON和原始日志自动收集，checkpoint保留在目标case的 `checkpoints/0/`，默认不上传巨大权重。
-`checkpoint.json`记录最后权重大小和SHA256。原脚本每轮存盘并可能保留best副本，正式90轮需充分磁盘。
-源码和数据只读挂载，输出单独可写，仅操作明确分配的卡。
+模型/优化器有限、权重已变、严格state_dict和重载Top1/Top5/打印loss一致只是结构与流程检查。
+correctness=not_checked，training_convergence=not_assessed；有限但偏大loss原样报告，不判收敛合格。
+JSON、日志和哈希自动收集，大checkpoint留在目标case的checkpoints/0，默认不上传。
+历史[早期smoke](validation/2026-11-06-resnet50-training.md)和[外部吞吐](validation/2026-11-06-resnet50-throughput.md)
+不能当成新版内置入口的实测结果。

@@ -1,4 +1,4 @@
-"""Run the supplied, unchanged ImageNet training entry point on one assigned HCU."""
+"""Run a registered training recipe on one assigned HCU, using the built-in entry by default."""
 import argparse
 import json
 import math
@@ -12,6 +12,8 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from native_common import CleanupError, cancellation, cleanup_failure, emit, sha256, versions, write_json
 from fixed_common import claim_output, environment_record, execute, single_device
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from recipes import recipe
 
 EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp'}
 
@@ -34,13 +36,18 @@ def validate(args):
             raise ValueError('Throughput requires one epoch, batch_size <= 64 and 1000..32768 training images')
         if args.precision != 'fp32':
             raise ValueError('Throughput currently supports measured FP32 SGD updates only')
-    script = Path(args.train_script).resolve()
+    recipe(args.recipe)
+    builtin = args.train_script in ('auto', '')
+    if builtin and args.precision != 'fp32':
+        raise ValueError('Builtin training currently supports FP32 only; no implicit AMP conversion')
+    script = Path(__file__).with_name('train.py').resolve() if builtin else Path(args.train_script).resolve()
     if not script.is_file() or script.suffix != '.py':
-        raise ValueError('Prepared external train.py is required; no training source is downloaded')
+        raise ValueError('Training entry point is missing; no training source is downloaded')
     actual = sha256(script)
     if args.script_sha256 and (not re.fullmatch('[0-9a-f]{64}', args.script_sha256) or actual != args.script_sha256):
         raise ValueError('Training source SHA256 differs from the explicitly pinned input')
     args.train_script = str(script)
+    args.training_backend = 'builtin' if script == Path(__file__).with_name('train.py').resolve() else 'external'
     return actual
 
 
@@ -93,7 +100,7 @@ def dataset(root, mode, out, batch_size=32, warmup_steps=10, measured_steps=50):
 
 
 def command(args, data, out, checkpoint=None):
-    argv = [sys.executable, '-u', args.train_script, '--arch', 'resnet50', '--gpu', '0',
+    argv = [sys.executable, '-u', args.train_script, '--arch', recipe(args.recipe)['architecture'], '--gpu', '0',
             '--world-size', '1', '--rank', '0', '--epochs', str(args.epochs),
             '--batch-size', str(args.batch_size), '--workers', str(args.workers),
             '--seed', str(args.seed), '--print-freq', '1', '--lr', '0.1',
@@ -191,6 +198,7 @@ def run(args, stopped):
         inspect = [sys.executable, '-u', str(Path(__file__).with_name('inspect_checkpoint.py')),
                    '--checkpoint', str(latest), '--epochs', str(args.epochs),
                    '--seed', str(args.seed), '--output', str(out / 'checkpoint.json')]
+        inspect += ['--recipe', args.recipe]
         execute(inspect, 'checkpoint-inspect', out, env, stopped, executions, 120)
         checkpoint = json.loads((out / 'checkpoint.json').read_text())
         if checkpoint.get('complete') is not True or checkpoint.get('epoch') != args.epochs:
@@ -205,7 +213,7 @@ def run(args, stopped):
         if stopped.is_set():
             raise RuntimeError('Cancelled before publishing training results')
         result = dict(measurement_status='measured', correctness='not_checked',
-                      recipe='resnet50_imagenet_from_scratch', mode=args.mode, precision=args.precision,
+                      recipe=args.recipe, training_backend=args.training_backend, mode=args.mode, precision=args.precision,
                       epochs=args.epochs, pretrained=False, training_convergence='not_assessed',
                       validation_scope=data['coverage'], checkpoint_reload_matches=True,
                       validation=trained['validation'], metrics=[
@@ -235,7 +243,8 @@ def run(args, stopped):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--train-script', required=True)
+    parser.add_argument('--recipe', default='resnet50_imagenet')
+    parser.add_argument('--train-script', default='auto')
     parser.add_argument('--script-sha256', default='')
     parser.add_argument('--dataset', required=True)
     parser.add_argument('--mode', choices=('full', 'smoke', 'throughput'), default='throughput')

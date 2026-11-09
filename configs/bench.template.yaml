@@ -12,7 +12,6 @@ vars:
   hcus: [0, 1, 2, 3, 4, 5, 6, 7]         # 必核对：多卡测试允许使用的 HCU 编号。
   single_hcus: [0]                         # 必核对：单卡算子和模型使用的卡，须属于 hcus。
   iface: YOUR_ACTIVE_INTERFACE             # 必改/通信：实际socket网卡名；DeepEP和GLM引用，不在脚本写死。
-  train_script: /YOUR_RESNET50_SOURCE/train.py # 必改/training：已审核的原始ResNet50训练入口。
   imagenet: /YOUR_IMAGENET_ROOT             # 必改/training：真实ImageFolder train/val，匹配的1000类。
 
 output_dir: "${vars.workspace}/results"
@@ -244,8 +243,7 @@ tests:
     timeout_s: 900                        # 整体故障上限，不要求跑满；不启动90轮。
     params:
       bench_root: "${vars.bench_root}"
-      train_script: "${vars.train_script}"
-      script_sha256: ""                 # 推荐填写经复核原train.py的SHA256。
+      recipe: resnet50_imagenet            # 内置训练配方，无需外部train.py；默认FP32不依赖Apex。
       dataset: "${vars.imagenet}"
       mode: throughput                    # 真实图像加载/增强+前向+反向+SGD；非推理吞吐。
       epochs: 1
