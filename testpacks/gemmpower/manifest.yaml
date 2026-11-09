@@ -1,0 +1,15 @@
+version: 1
+id: operators.gemmpower-edpp
+suite: operators
+max_nodes: 1
+duration_control: native
+parameters:
+  bench_root: {type: string, required: true}
+  iterations: {type: integer, default: 4, min: 1, max: 1000}
+  native_timeout_s: {type: integer, default: 30, min: 1, max: 3600}
+command: [python3, -u, "${p_bench_root}/testpacks/gemmpower/run.py", --iterations, "${p_iterations}", --native-timeout-s, "${p_native_timeout_s}", --hcu-ids, "${hcu_ids}", --nnodes, "${nnodes}", --node-rank, "${node_rank}", --output-dir, "${case_dir}"]
+cwd: ${case_dir}
+result_protocol: bench-jsonl-v1
+requires_metrics: true
+artifacts: ["${case_dir}/*.json", "${case_dir}/*.jsonl", "${case_dir}/*.log", "${case_dir}/*.receipt"]
+artifact_limit_mb: 20

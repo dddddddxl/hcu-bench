@@ -28,6 +28,11 @@ bash bench.sh training      # ResNet50 单卡训练吞吐短测
 
 ### 独立测例
 
+**gemmpower EDPP（operators）已作为可选有限循环smoke接入，默认关闭**，主模板和
+`configs/gemmpower.template.yaml` 都使用 `enabled: false`。显式启用前须确认单卡空闲及DTK环境；
+内置工具/co仅支持gfx938，架构不匹配在启动负载前记skipped，不视为通过。
+不等同Excel原始MMAC内核或180秒长功耗验收，详见[gemmpower说明](docs/gemmpower.md)。
+
 独立配置保留原有 suite 名称，可单项复测。GLM-5.2、FA FP8、GEMM、hipDNN Conv已纳入主模板，复制新主模板后使用 `all` 即会执行；其余独立项目不自动加入主计划。已有个人YAML不会随模板更新自动增加测试块。
 
 **显存带宽（`memory`）和 MIGraphX（`migraphx`）默认禁用（disabled）**，不随主配置的 `bash bench.sh all` 执行。主模板不包含这两个测试块；独立配置中的 `enabled: true` 仅在显式选择该配置时生效。SGLang 镜像不保证具备这两项所需的工具链和原生依赖。
