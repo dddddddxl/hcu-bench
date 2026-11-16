@@ -1,5 +1,28 @@
 # HCU Bench
 
+## 项目归属与许可证
+
+HCU Bench 是 HYGON 原创的基准测试编排框架。HYGON 原创部分的版权归
+Hygon Information Technology Co., Ltd. 所有，采用 [Apache License 2.0](LICENSE)。
+
+Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+
+原创贡献包括统一 CLI、测试计划与执行编排、适配器、结果收集及报告等。
+本项目不是某一个上游仓库的整体 fork；RCCL、DeepEP、Mooncake 等测试组件
+分别按其实际来源登记，不为整个框架虚构统一上游基线。
+
+随仓分发的第三方源码、数据集、源码压缩包及其修改版本不因根许可证而改变原有许可。
+来源、固定版本、许可证及待核实事项见 [第三方清单](THIRD_PARTY_NOTICES.md)、
+[组件来源登记](vendor/sources.json) 和 [vendor 说明](vendor/README.md)。
+未附明确许可的组件不自动视为 Apache-2.0；正式发布前须完成授权核验。
+
+当前仓库仍位于个人账号下，本分支用于组织开源准备，不表示已完成 HYGON-AI
+发布审批、全仓合规/敏感字段/质量安全扫描或真实 HCU 全套验证。
+发布前事项见 [开源准备清单](docs/open-source-readiness.md)。
+
+问题反馈请使用[本仓库 Issues](../../issues)。驱动、DTK、模型权重和外部服务由使用者
+自行获取并遵守各自使用条款；本框架的许可不授予这些外部资源的分发权。
+
 HCU Bench 是 Linux 下的命令行测试工具，统一执行通信、带宽、算子、推理和训练测试。测试参数通过 YAML 配置，模型服务部署命令由各自的启动脚本管理。
 
 ```bash

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
 """Standard-library-only worker, also shipped to Linux targets over SSH."""
 import base64
 import json

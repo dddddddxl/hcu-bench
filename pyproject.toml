@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "hcu-bench"
 version = "0.1.0"
 description = "CLI orchestration for communication, operator and end-to-end benchmarks"
+license = {file = "LICENSE"}
+authors = [{name = "Hygon Information Technology Co., Ltd."}]
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6,<7"]
 
@@ -18,3 +20,6 @@ hcu-bench = "hcu_bench.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
